@@ -1,0 +1,66 @@
+* ZERI Design Discussion Record
+** Turn 1: 团长提出 ZERI 构想
+- Agent-driven defense (not static methods)
+- Evolvable against unknown attacks
+
+** Turn 2: Evolution Mechanism 讨论
+- 团长：防御应该是 skill，不是 rule
+- 团长：进化应参考 Hermes Agent 但有所不同
+- 团长：需要生物学免疫类比
+- 我提出：In-context memory + Rule generation 混合
+
+** Turn 3: Hermes Agent 调研 (DeepSurvey)
+- Hermes Agent = Nous Research 的开源 self-improving agent
+- 核心：Skill System (SKILL.md)，GEPA 循环
+- 关键区别：Hermes 单线改进 vs ZERI 种群进化
+
+** Turn 4: 确认方向，开始设计
+- 团长确认思路
+
+** Turn 5: 重大方向修正
+- 语言：Rust (非 Python) — 为成熟 library 产品
+- 部署：Daemon + MCP Server + Library
+- 进化触发：非外部标记，而是成本驱动 (cost-based vaccination)
+  - ZERI 已经在防御，但代价太大 → 触发接种 → 内化为轻量 skill
+- 团长会提供 validation dataset
+
+** Turn 6: Phase 1 实现完成
+- Rust 项目初始化 (cargo init --lib)
+- 核心数据模型：Antibody, Antigen, MemoryEntry, ScanResult, CostRecord
+- AntibodyPool：线程安全，支持 CRUD + 状态过滤 + 统计追踪
+- MemoryBank：exact + regex 快速匹配，FTS5 SQLite 持久化
+- CostMonitor：pattern 成本追踪，vaccination 触发判断
+- 配置系统：TOML + env vars，完整默认值
+- 存储层：SQLite schema (5 tables + FTS5)，YAML antibody 持久化
+- Zeri engine：初始化 + scan (memory fast-path)
+- Daemon entry point (clap CLI)
+- 3 个 builtin antibodies (injection, jailbreak, poisoning)
+- 13 个单元测试，全部通过，零 warning
+
+** Turn 7: Phase 2-4 实现完成
+- LLM provider trait + DeepSeek 实现 (structured JSON output)
+- SurveillanceScanner：Tier 0 (memory) → Tier 1 (specialized) → Tier 2 (general) → aggregation
+- VerdictAggregator：加权投票 (malicious ×2, suspicious ×1)
+- SHM Engine：LLM 语义变异，adaptive temperature (0.3–0.95)，8 种 mutation 操作
+- AffinityMaturation：precision/recall/FP-penalty 评分，must-detect 硬约束
+- VaccinationPipeline：SHM → Affinity → Clonal Selection → Memory Extraction 全流程
+- HTTP API (axum)：/v1/scan, /v1/antibodies, /v1/cost/stats, /v1/status, /v1/health
+- MCP Server (stdio)：JSON-RPC 协议，3 tools (zeri_scan, zeri_status, zeri_vaccinate)
+- 34 测试全部通过 (22 + 5 MCP + 2 valset)，4224 行 Rust
+
+** Turn 8: 实验设计讨论
+- 4 RQs：检测率、成本降低、误报率、ablation
+- 5 baselines：Regex-Guard, LLM-Judge, LLM-Judge+Fewshot, ZERI w/o Evo, ZERI Full
+- 关键 within-subject 设计：同一 pattern 接种前后 latency/token 对比
+
+** Turn 9: 验证集构建
+- 团长指正：攻击应嵌入 benign 中，不是孤立恶意文本
+- 来源：AgentDojo (NeurIPS 2024) + InjecAgent (arXiv 2024)
+- Benign：AgentDojo user task PROMPTs，去重后 68 条
+- Attacks：8 种攻击模板 × 39 个 injection goals × 68 个 benign base = 21,216
+  + 2,400 位置变体 (prepend/mid) = 23,616 总攻击样本
+- 额外：1,054 个 InjecAgent 纯注入 payload（参考用）
+- 攻击模板覆盖：direct, ignore_previous, system_message, injecagent,
+  important_instructions (及 3 个变体: no_names, wrong_user, wrong_model)
+- Rust loader：src/storage/valset.rs，ValidationDataset::load()，支持 by_source/by_category
+- 2 valset 测试通过
