@@ -1,0 +1,42 @@
+# ZERI Configuration
+# Copy this file to config.toml and customize as needed.
+
+[daemon]
+http_port = 9070
+mcp_mode = "off"
+grpc_port = 9071
+
+[llm]
+provider = "deepseek"
+model = "deepseek-chat"
+api_key_env = "DEEPSEEK_API_KEY"
+base_url = "https://api.deepseek.com"
+small_model = "deepseek-chat"
+
+[scanning]
+max_parallel_tier1 = 10
+max_parallel_tier2 = 5
+tier1_timeout_ms = 500
+tier2_timeout_ms = 3000
+tier3_timeout_ms = 15000
+
+[vaccination]
+min_samples = 5
+min_success_rate = 0.7
+latency_threshold_us = 2000000
+token_threshold = 4000
+shm_variants = 10
+shm_base_temperature = 0.8
+max_survivors = 3
+affinity_recall_weight = 0.7
+fp_tolerance = 0.05
+
+[memory]
+fts5_enabled = true
+semantic_enabled = false
+max_entries = 100000
+
+[storage]
+db_path = "./zeri.db"
+antibody_dir = "./builtin_antibodies"
+valset_dir = "./valsets"
