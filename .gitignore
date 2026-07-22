@@ -3,3 +3,4 @@ node_modules/
 dist/
 __pycache__/
 *.db
+caitlyn-agent/scan_history.json
