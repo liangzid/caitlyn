@@ -1,15 +1,15 @@
 [package]
-name = "zeri"
+name = "caitlyn"
 version = "0.1.0"
 edition = "2024"
-description = "Zero-Trust Evolution for Reinforced Immunizer — Agentic, evolvable defense against LLM agent attacks"
+description = "Continuous Agents for Injection Threats via Lifelong Yielding Nexus — Agentic, evolvable defense against LLM agent attacks"
 
 [[bin]]
-name = "zerid"
+name = "caitlynd"
 path = "src/main.rs"
 
 [lib]
-name = "zeri"
+name = "caitlyn"
 path = "src/lib.rs"
 
 [dependencies]
