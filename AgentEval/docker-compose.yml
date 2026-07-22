@@ -1,0 +1,119 @@
+# AgentEval Docker Compose — 5 agent containers for security evaluation
+# 
+# Usage:
+#   docker compose up -d                    # start all agents
+#   docker compose ps                       # check status
+#   docker compose down                     # stop all
+#
+# Pre-requisites:
+#   1. Docker Engine 20.10+
+#   2. Fake MCP Server running on host:9876
+#      python fake_mcp_standalone.py --port 9876 --host 0.0.0.0
+#   3. OpenRouter API key in ~/privacy_secret_openrouter_API_key.txt
+
+version: "3.9"
+
+services:
+  # ── Claude Code (Anthropic) ─────────────────────────────────
+  claude_code:
+    image: claude-code:latest
+    container_name: claude_code
+    build:
+      context: .
+      dockerfile: Dockerfile.claude_code
+    volumes:
+      - ~/privacy_secret_openrouter_API_key.txt:/tmp/api_key:ro
+      - ./workdir/claude_code:/workspace
+    environment:
+      - ANTHROPIC_API_KEY_FILE=/tmp/api_key
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - agent_net
+
+  # ── Codex CLI (OpenAI) ─────────────────────────────────────
+  codex:
+    image: codex:latest
+    container_name: codex
+    build:
+      context: .
+      dockerfile: Dockerfile.codex
+    volumes:
+      - ~/privacy_secret_openrouter_API_key.txt:/tmp/api_key:ro
+      - ./workdir/codex:/workspace
+    environment:
+      - OPENAI_API_KEY_FILE=/tmp/api_key
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - agent_net
+
+  # ── OpenCode ───────────────────────────────────────────────
+  opencode:
+    image: opencode:latest
+    container_name: opencode
+    build:
+      context: .
+      dockerfile: Dockerfile.opencode
+    volumes:
+      - ~/privacy_secret_openrouter_API_key.txt:/tmp/api_key:ro
+      - ./workdir/opencode:/workspace
+    environment:
+      - OPENROUTER_API_KEY_FILE=/tmp/api_key
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - agent_net
+
+  # ── OpenClaw ───────────────────────────────────────────────
+  openclaw:
+    image: openclaw:latest
+    container_name: openclaw
+    build:
+      context: .
+      dockerfile: Dockerfile.openclaw
+    volumes:
+      - ~/privacy_secret_openrouter_API_key.txt:/tmp/api_key:ro
+      - ./workdir/openclaw:/workspace
+    environment:
+      - OPENROUTER_API_KEY_FILE=/tmp/api_key
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - agent_net
+
+  # ── Hermes ─────────────────────────────────────────────────
+  hermes:
+    image: hermes:latest
+    container_name: hermes
+    build:
+      context: .
+      dockerfile: Dockerfile.hermes
+    volumes:
+      - ~/privacy_secret_openrouter_API_key.txt:/tmp/api_key:ro
+      - ./workdir/hermes:/workspace
+    environment:
+      - HERMES_API_KEY_FILE=/tmp/api_key
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - agent_net
+
+networks:
+  agent_net:
+    driver: bridge
