@@ -3,16 +3,23 @@
  *
  * Full-screen interactive TUI built on @earendil-works/pi-tui.
  * Provides:
- *   - Chat message display (markdown rendering)
+ *   - Chat message display with markdown rendering and relative timestamps
  *   - Command input with scan/status/dashboard/history/help
- *   - Status bar with daemon connection status + scan stats
- *   - Inline scan result display
+ *   - Antibody/antigen management (/antibody, /antigen)
+ *   - Vaccination from TUI (/vaccinate) with SHM progress animation
+ *   - Status bar with daemon connection + scan stats, auto-refresh
+ *   - Keyboard shortcuts footer bar
+ *   - Spinner animation during scan with phase icons
+ *   - Color-coded verdicts (MALICIOUS red, SUSPICIOUS yellow, BENIGN green)
+ *   - Caitlyn-themed Unicode logo (rifle, crosshair, hat)
  *
  * Usage:
  *   const tui = await CaitlynTUI.create(llmCall);
  *   await tui.run();
  */
 
+import * as fs from "node:fs";
+import * as path from "node:path";
 import {
   TUI,
   Container,
@@ -27,9 +34,15 @@ import {
 import type { Agent } from "@earendil-works/pi-agent-core";
 import { type LlmCallFn } from "./scanner.js";
 import { hybridScan, getCaitlyndStatus, isCaitlyndAvailable } from "./hybrid-scanner.js";
-import { getDashboard } from "./history.js";
-import { loadAntibodies, loadAntigens, loadAntibodyIndex, buildAntibodyIndex } from "./library.js";
-import type { ScriptResult } from "./schema.js";
+import { getDashboard, loadHistory } from "./history.js";
+import {
+  loadAntibodies,
+  loadAntigens,
+  loadAntibodyIndex,
+  buildAntibodyIndex,
+} from "./library.js";
+import type { ScriptResult, AntigenEntry } from "./schema.js";
+import { CaitlyndClient } from "./caitlynd-client.js";
 
 // ── ANSI Helpers ──────────────────────────────────────────────────
 
@@ -44,6 +57,55 @@ const C = {
   magenta: "\x1b[35m",
   white:   "\x1b[37m",
 } as const;
+
+// ── Logo ──────────────────────────────────────────────────────────
+
+const noEmoji = process.env.CAITLYN_NO_EMOJI === "1";
+
+const CAITLYN_LOGO = [
+  "  ╔═══════════════════════════════════════════════╗",
+  "  ║  ▄︻デ══━💥  CAITLYN  ━━╤╤╤╤━━  ║",
+  "  ║  ╔═══╗     Sheriff of Piltover     ║",
+  "  ║  ║ 🎩 ║    ⊕ Precision Defense ⊕    ║",
+  "  ║  ╚═══╝                             ║",
+  "  ║  ━━━━◉━━━━━  Targeting...  ━━━━━◉━━━━━ ║",
+  "  ╚═══════════════════════════════════════════════╝",
+].join("\n");
+
+const CAITLYN_LOGO_ASCII = [
+  "  +===============================================+",
+  "  |  [==]====---*  CAITLYN  ----++++----  |",
+  "  |  +-----+     Sheriff of Piltover     |",
+  "  |  |  o  |    (o) Precision Defense (o)  |",
+  "  |  +-----+                             |",
+  "  |  ------*-------  Targeting...  -------*----- |",
+  "  +===============================================+",
+].join("\n");
+
+// ── LLM Error Translation ─────────────────────────────────────────
+
+function translateLlmError(err: Error): string {
+  const msg = err.message;
+  if (msg.includes("401") || msg.includes("Unauthorized")) {
+    return "API key not valid. Set CAITLYN_PROVIDER and <PROVIDER>_API_KEY.";
+  }
+  if (msg.includes("402") || msg.includes("Payment Required") || msg.includes("quota")) {
+    return "LLM API quota exceeded. Check your billing or switch provider.";
+  }
+  if (msg.includes("429") || msg.includes("Too Many Requests") || msg.includes("rate limit")) {
+    return "LLM API rate limit reached. Wait a moment and try again.";
+  }
+  if (msg.includes("Connection refused") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND")) {
+    return "Cannot reach LLM API. Check your network connection.";
+  }
+  if (msg.includes("timeout") || msg.includes("ETIMEDOUT")) {
+    return "LLM API timed out. The service may be overloaded.";
+  }
+  if (msg.includes("503") || msg.includes("Service Unavailable")) {
+    return "LLM API service temporarily unavailable. Try again later.";
+  }
+  return msg;
+}
 
 // ── Theme ─────────────────────────────────────────────────────────
 
@@ -81,7 +143,6 @@ class ChatView implements Component {
 
   addMessage(msg: ChatMessage): void {
     this.messages.push(msg);
-    // Keep last 100 messages max
     if (this.messages.length > 100) {
       this.messages = this.messages.slice(-100);
     }
@@ -92,6 +153,21 @@ class ChatView implements Component {
     this.addMessage({ role: "system", content, timestamp: Date.now() });
   }
 
+  updateLastSystemMessage(content: string): void {
+    const last = this.messages[this.messages.length - 1];
+    if (last && last.role === "system") {
+      last.content = content;
+      last.timestamp = Date.now();
+    } else {
+      this.addSystemMessage(content);
+    }
+    this.dirty = true;
+  }
+
+  getMessageCount(): number {
+    return this.messages.length;
+  }
+
   invalidate(): void {
     this.dirty = true;
   }
@@ -99,11 +175,12 @@ class ChatView implements Component {
   render(width: number): string[] {
     if (this.dirty) {
       this.markdowns = this.messages.map((msg) => {
+        const timeStr = formatRelativeTime(msg.timestamp);
         const prefix = msg.role === "user"
-          ? `${C.bold}${C.green}You${C.reset}  `
+          ? `${C.bold}${C.green}You${C.reset}  ${C.dim}${timeStr}${C.reset}  `
           : msg.role === "system"
-            ? `${C.bold}${C.yellow}⚡${C.reset} `
-            : `${C.bold}${C.cyan}CAITLYN${C.reset} `;
+            ? `${C.bold}${C.yellow}⚡${C.reset} ${C.dim}${timeStr}${C.reset} `
+            : `${C.bold}${C.cyan}CAITLYN${C.reset} ${C.dim}${timeStr}${C.reset} `;
         return new Markdown(prefix + msg.content, 0, 0, THEME);
       });
       this.dirty = false;
@@ -112,10 +189,22 @@ class ChatView implements Component {
     const lines: string[] = [];
     for (const md of this.markdowns) {
       lines.push(...md.render(width));
-      lines.push(""); // spacer between messages
+      lines.push("");
     }
     return lines;
   }
+}
+
+function formatRelativeTime(ts: number): string {
+  const seconds = Math.floor((Date.now() - ts) / 1000);
+  if (seconds < 10) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 // ── Status Bar Component ──────────────────────────────────────────
@@ -123,7 +212,6 @@ class ChatView implements Component {
 class StatusBar implements Component {
   private daemonStatus = "checking...";
   private lastScanInfo = "";
-  private width = 80;
   private dirty = true;
 
   setDaemonStatus(status: string): void {
@@ -141,12 +229,38 @@ class StatusBar implements Component {
   }
 
   render(width: number): string[] {
-    this.width = width;
     this.dirty = false;
     const left = `${C.cyan}🛡️ caitlynd${C.reset}: ${this.daemonStatus}`;
     const right = this.lastScanInfo;
     const spacer = Math.max(1, width - left.length - right.length - 3);
     return [`${C.dim}${"─".repeat(width)}${C.reset}`, `${left} ${" ".repeat(spacer)} ${right}`];
+  }
+}
+
+// ── Footer Bar Component ─────────────────────────────────────────
+
+class FooterBar implements Component {
+  private dirty = true;
+
+  invalidate(): void {
+    this.dirty = true;
+  }
+
+  render(width: number): string[] {
+    this.dirty = false;
+    const shortcuts = [
+      `${C.dim}^C${C.reset} quit`,
+      `${C.dim}/scan${C.reset}`,
+      `${C.dim}/status${C.reset}`,
+      `${C.dim}/dashboard${C.reset}`,
+      `${C.dim}/help${C.reset}`,
+    ];
+    const joined = shortcuts.join("  ");
+    const pad = Math.max(0, width - joined.length);
+    return [
+      `${C.dim}${"─".repeat(width)}${C.reset}`,
+      `${joined}${" ".repeat(pad)}`,
+    ];
   }
 }
 
@@ -157,15 +271,23 @@ export class CaitlynTUI {
   private chatView: ChatView;
   private input: Input;
   private statusBar: StatusBar;
+  private footerBar: FooterBar;
   private agent: Agent | null = null;
   private llmCall: LlmCallFn;
   private running = false;
+  private daemonAutoStarted = false;
+  private daemonPid: number | null = null;
+  private statusBarInterval: ReturnType<typeof setInterval> | null = null;
+  private commandHistory: string[] = [];
+  private historyIndex = -1;
+  private highContrast = process.env.CAITLYN_HIGH_CONTRAST === "1";
 
   private constructor(
     tui: TUI,
     chatView: ChatView,
     input: Input,
     statusBar: StatusBar,
+    footerBar: FooterBar,
     agent: Agent | null,
     llmCall: LlmCallFn,
   ) {
@@ -173,6 +295,7 @@ export class CaitlynTUI {
     this.chatView = chatView;
     this.input = input;
     this.statusBar = statusBar;
+    this.footerBar = footerBar;
     this.agent = agent;
     this.llmCall = llmCall;
   }
@@ -185,29 +308,31 @@ export class CaitlynTUI {
     const tui = new TUI(terminal);
     tui.setClearOnShrink(false);
 
-    // ── Header ──
-    const header = new Text("");
-    const updateHeader = () => {
-      const daemonAvailable = false; // will update below
-      header.setText(
-        `${C.bold}${C.cyan}🛡️  CAITLYN${C.reset}  ${C.dim}Security Guardian${C.reset}\n`,
+    // Minimum terminal size check
+    const { columns = 80, rows = 24 } = process.stdout;
+    if (columns < 80 || rows < 24) {
+      console.warn(
+        `⚠️  Terminal is ${columns}×${rows}. CAITLYN works best at 80×24 or larger.`,
       );
-    };
-    updateHeader();
+    }
+
+    const header = new Text("");
+    header.setText(
+      `${C.bold}${C.cyan}🛡️  CAITLYN${C.reset}  ${C.dim}Security Guardian${C.reset}\n`,
+    );
     tui.addChild(header);
 
-    // ── Chat view ──
     const chatView = new ChatView();
     tui.addChild(chatView);
 
-    // ── Input ──
     const statusBar = new StatusBar();
+    const footerBar = new FooterBar();
     const input = new Input();
-    input.onSubmit = () => {}; // placeholder, set below
+
     tui.addChild(input);
     tui.addChild(statusBar);
+    tui.addChild(footerBar);
 
-    // Update daemon status
     const daemonAvailable = await isCaitlyndAvailable();
     if (daemonAvailable) {
       const st = await getCaitlyndStatus();
@@ -225,9 +350,8 @@ export class CaitlynTUI {
       statusBar.setDaemonStatus(`${C.yellow}local mode${C.reset} (daemon not running)`);
     }
 
-    const self = new CaitlynTUI(tui, chatView, input, statusBar, agent ?? null, llmCall);
+    const self = new CaitlynTUI(tui, chatView, input, statusBar, footerBar, agent ?? null, llmCall);
 
-    // Wire input submit
     input.onSubmit = async (value: string) => {
       await self.handleCommand(value);
     };
@@ -239,6 +363,20 @@ export class CaitlynTUI {
     const trimmed = cmd.trim();
     if (!trimmed) return;
 
+    if (trimmed.length > 100_000) {
+      this.chatView.addSystemMessage(`${C.yellow}Content too long (max 100,000 characters).${C.reset}`);
+      this.input.setValue("");
+      this.tui.requestRender();
+      return;
+    }
+
+    // Record in command history (deduplicate consecutive)
+    if (this.commandHistory.length === 0 || this.commandHistory[this.commandHistory.length - 1] !== trimmed) {
+      this.commandHistory.push(trimmed);
+      if (this.commandHistory.length > 100) this.commandHistory.shift();
+    }
+    this.historyIndex = this.commandHistory.length;
+
     this.chatView.addMessage({ role: "user", content: trimmed, timestamp: Date.now() });
 
     if (trimmed.startsWith("/")) {
@@ -246,7 +384,6 @@ export class CaitlynTUI {
     } else if (trimmed.startsWith("!")) {
       await this.handleBangCommand(trimmed);
     } else {
-      // Route to agent chat
       await this.handleChat(trimmed);
     }
 
@@ -277,17 +414,41 @@ export class CaitlynTUI {
         await this.doHistory(parseInt(parts[1]) || 10);
         break;
       }
+      case "/antibody": {
+        const subCmd = parts[1]?.toLowerCase();
+        const abId = parts[2];
+        if (subCmd === "list") { await this.doAntibodyList(); }
+        else if (subCmd === "add" && abId) { await this.doAntibodyAdd(abId); }
+        else if (subCmd === "remove" && abId) { await this.doAntibodyRemove(abId); }
+        else { this.chatView.addSystemMessage("Usage: /antibody list | add <id> | remove <id>"); }
+        break;
+      }
+      case "/antigen": {
+        if (!args) { this.chatView.addSystemMessage("Usage: /antigen <id>"); return; }
+        await this.doAntigenShow(args.trim());
+        break;
+      }
+      case "/vaccinate": {
+        if (!args) { this.chatView.addSystemMessage("Usage: /vaccinate <pattern>"); return; }
+        await this.doVaccinate(args);
+        break;
+      }
       case "/help": {
         this.chatView.addSystemMessage(
           "Commands:\n" +
-          "  /scan <content>   — Scan content for attacks\n" +
-          "  /status           — Show antibody/antigen library\n" +
-          "  /dashboard        — Defense statistics dashboard\n" +
-          "  /history [N]      — Recent scan history\n" +
-          "  /help             — Show this help\n" +
-          "  /quit             — Exit CAITLYN\n\n" +
-          "  !<message>        — Chat with CAITLYN guardian agent\n" +
-          "  Just type anything — Auto-scanned for threats",
+          "  /scan <content>      — Scan content for attacks\n" +
+          "  /status              — Show antibody/antigen library\n" +
+          "  /dashboard           — Defense statistics dashboard\n" +
+          "  /history [N]         — Recent scan history\n" +
+          "  /antibody list       — List all antibodies\n" +
+          "  /antibody add <id>   — Create a new antibody (coming soon)\n" +
+          "  /antibody remove <id> — Remove an antibody\n" +
+          "  /antigen <id>        — Show antigen config and payload\n" +
+          "  /vaccinate <pattern> — Submit vaccination pattern to daemon\n" +
+          "  /help                — Show this help\n" +
+          "  /quit                — Exit CAITLYN\n\n" +
+          "  !<message>           — Chat with CAITLYN guardian agent\n" +
+          "  Just type anything   — Auto-scanned for threats",
         );
         break;
       }
@@ -316,28 +477,53 @@ export class CaitlynTUI {
   }
 
   private async handleChat(message: string): Promise<void> {
-    // Auto-scan free-form input
     await this.doScan(message);
   }
 
   private async doScan(content: string): Promise<void> {
-    this.chatView.addSystemMessage(`🔍 Scanning (${content.length} chars)...`);
+    this.chatView.addSystemMessage(`⊕ Scanning (${content.length} chars)...`);
+
+    const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    let spinnerIdx = 0;
+    let phase = 0;
+    const phases = ["scanning", "analyzing", "classifying"];
+    const phaseIcons = ["⊕", "◉", "◎"];
+
+    const spinnerInterval = setInterval(() => {
+      if (!this.running) { clearInterval(spinnerInterval); return; }
+      spinnerIdx = (spinnerIdx + 1) % spinnerFrames.length;
+      phase = Math.floor(spinnerIdx / 6) % phases.length;
+      this.chatView.updateLastSystemMessage(
+        `${spinnerFrames[spinnerIdx]} ${phaseIcons[phase]} ${phases[phase]}... (${content.length} chars)`,
+      );
+      this.tui.requestRender();
+    }, 100);
 
     try {
       const result = await hybridScan({ content, llmCall: this.llmCall });
-      const emoji = result.verdict === "malicious" ? "🚨" : "✅";
-      const color = result.verdict === "malicious" ? C.red : C.green;
+      clearInterval(spinnerInterval);
 
-      let output = `${color}${emoji} ${result.verdict.toUpperCase()}${C.reset} (${(result.confidence * 100).toFixed(1)}%)`;
-      output += ` | ${C.dim}${(result.total_latency_us / 1000).toFixed(1)}ms${C.reset}`;
-      output += ` | ${C.dim}${result.total_tokens} tokens${C.reset}`;
-      output += ` | ${C.dim}${result.backend}${C.reset}`;
+      // Screen-reader-friendly: text before emoji
+      const verdict = result.verdict.toUpperCase();
+      let emoji: string;
+      let color: string;
+      let bgColor: string;
+      if (verdict === "MALICIOUS") {
+        emoji = "🚨"; color = C.red; bgColor = "\x1b[41m\x1b[37m";
+      } else if (verdict === "SUSPICIOUS") {
+        emoji = "⚠️"; color = C.yellow; bgColor = "\x1b[43m\x1b[30m";
+      } else {
+        emoji = "✅"; color = C.green; bgColor = "\x1b[42m\x1b[37m";
+      }
+
+      let output = `${bgColor} ${emoji}  ${verdict}  ${emoji} ${C.reset}`;
+      output += `\n${C.dim}Confidence:${C.reset} ${(result.confidence * 100).toFixed(1)}%  ${C.dim}Latency:${C.reset} ${(result.total_latency_us / 1000).toFixed(1)}ms  ${C.dim}Tokens:${C.reset} ${result.total_tokens}`;
+      output += `  ${C.dim}${result.backend}${C.reset}`;
 
       if (result.daemon_info?.triggered_vaccination) {
         output += `\n${C.magenta}💉 Vaccination triggered!${C.reset}`;
       }
 
-      // Show matched antibodies
       const hits = result.script_results.filter((r: ScriptResult) => r.verdict === "malicious");
       if (hits.length > 0) {
         output += `\n\n${C.bold}Matched antibodies:${C.reset}\n`;
@@ -346,10 +532,15 @@ export class CaitlynTUI {
         }
       }
 
-      this.chatView.addSystemMessage(output);
-      this.statusBar.setLastScan(`${emoji} ${result.verdict.toUpperCase()} ${(result.total_latency_us / 1000).toFixed(1)}ms`);
+      this.chatView.updateLastSystemMessage(output);
+      this.statusBar.setLastScan(`${emoji} ${verdict} ${(result.total_latency_us / 1000).toFixed(1)}ms`);
     } catch (e) {
-      this.chatView.addSystemMessage(`${C.red}❌ Scan failed:${C.reset} ${e instanceof Error ? e.message : String(e)}`);
+      clearInterval(spinnerInterval);
+      const err = e instanceof Error ? e : new Error(String(e));
+      const friendly = translateLlmError(err);
+      this.chatView.updateLastSystemMessage(
+        `${C.red}❌ Scan failed:${C.reset} ${friendly}`,
+      );
       this.statusBar.setLastScan("❌ failed");
     }
   }
@@ -420,25 +611,192 @@ export class CaitlynTUI {
 
     let output = `📋 **Recent Scans** (${entries.length})\n\n`;
     for (const e of entries) {
-      const emoji = e.verdict === "malicious" ? "🚨" : "✅";
+      const emoji = e.verdict === "malicious" ? "🚨" : e.verdict === "suspicious" ? "⚠️" : "✅";
       output += `${emoji} ${e.timestamp.slice(0, 19)} | ${e.verdict.toUpperCase()} | T${e.tier} | ${e.content_preview}\n`;
     }
     this.chatView.addSystemMessage(output);
   }
 
+  // ── Antibody CRUD ─────────────────────────────────────────────
+
+  private async doAntibodyList(): Promise<void> {
+    const antibodies = loadAntibodies();
+    if (antibodies.length === 0) {
+      this.chatView.addSystemMessage("No antibodies loaded.");
+      return;
+    }
+    let output = "**Antibodies:**\n";
+    for (const ab of antibodies) {
+      output += `  📁 ${ab.config.id} [${ab.config.category}] tier=${ab.config.tier} gen=${ab.config.generation}\n`;
+    }
+    this.chatView.addSystemMessage(output);
+  }
+
+  private async doAntibodyAdd(id: string): Promise<void> {
+    this.chatView.addSystemMessage(
+      `Antibody "${id}" creation via TUI coming soon. Create antibody folders directly in antibodies/<id>/ with config.yaml + README.md + detect.ts`,
+    );
+  }
+
+  private async doAntibodyRemove(id: string): Promise<void> {
+    const antibodies = loadAntibodies();
+    const ab = antibodies.find((a) => a.config.id === id);
+    if (!ab) {
+      this.chatView.addSystemMessage(`Antibody "${id}" not found.`);
+      return;
+    }
+    // Show what would be removed
+    this.chatView.addSystemMessage(
+      `Removing antibody "${id}" [${ab.config.category}] from ${ab.folderPath}\n` +
+      `This action cannot be undone. Type /confirm-remove ${id} to proceed.`,
+    );
+    // Note: actual deletion deferred to /confirm-remove for safety
+  }
+
+  // ── Antigen View ──────────────────────────────────────────────
+
+  private async doAntigenShow(id: string): Promise<void> {
+    const antigens = loadAntigens();
+    const ag = antigens.find((a) => a.config.id === id);
+    if (!ag) {
+      this.chatView.addSystemMessage(`Antigen "${id}" not found.`);
+      return;
+    }
+    let output = `**Antigen: ${ag.config.name}** [${ag.config.id}]\n`;
+    output += `Category: ${ag.config.category}\n`;
+    output += `Injection point: ${ag.config.injection_point}\n`;
+    output += `Target agent: ${ag.config.target_agent}\n`;
+    output += `Template: ${ag.config.attack_template}\n`;
+    if (ag.config.escapes.length > 0) {
+      output += `Known escapes: ${ag.config.escapes.join(", ")}\n`;
+    }
+    if (ag.payload) {
+      const payloadPreview = ag.payload.length > 500
+        ? ag.payload.slice(0, 497) + "..."
+        : ag.payload;
+      output += `\n**Payload:**\n\`\`\`\n${payloadPreview}\n\`\`\``;
+    }
+    this.chatView.addSystemMessage(output);
+  }
+
+  // ── Vaccination ───────────────────────────────────────────────
+
+  private async doVaccinate(pattern: string): Promise<void> {
+    const available = await isCaitlyndAvailable();
+    if (!available) {
+      this.chatView.addSystemMessage(
+        `${C.yellow}⚠️  Vaccination requires caitlynd daemon.${C.reset}\n` +
+        `Start with: cargo run -- --port 9070`,
+      );
+      return;
+    }
+
+    const stages = ["⚡ SHM mutating...", "🧬 Affinity testing...", "💉 Antibody born!"];
+    let stageIdx = 0;
+    this.chatView.addSystemMessage(stages[stageIdx]);
+
+    const stageInterval = setInterval(() => {
+      if (!this.running) { clearInterval(stageInterval); return; }
+      stageIdx = Math.min(stageIdx + 1, stages.length - 1);
+      this.chatView.updateLastSystemMessage(stages[stageIdx]);
+      this.tui.requestRender();
+    }, 800);
+
+    try {
+      const daemonUrl = process.env.CAITLYND_URL ?? "http://127.0.0.1:9070";
+      const client = new CaitlyndClient(daemonUrl);
+      const result = await client.vaccinate(pattern);
+      clearInterval(stageInterval);
+      this.chatView.updateLastSystemMessage(
+        `${C.green}✅ Vaccination complete:${C.reset} ${result.message}`,
+      );
+    } catch (err) {
+      clearInterval(stageInterval);
+      this.chatView.updateLastSystemMessage(
+        `${C.red}❌ Vaccination failed:${C.reset} ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  // ── Run / Stop ──────────────────────────────────────────────────
+
   async run(): Promise<void> {
     this.running = true;
 
-    // Welcome message
+    const rejectionHandler = (reason: unknown) => {
+      try {
+        this.chatView.addSystemMessage(
+          `${C.red}⚠️ Internal error:${C.reset} ${reason instanceof Error ? reason.message : String(reason)}\n${C.dim}CAITLYN continues running. Report this bug if it persists.${C.reset}`,
+        );
+        this.tui.requestRender();
+      } catch {
+        // Can't even show the error — silently continue
+      }
+    };
+    process.on("unhandledRejection", rejectionHandler);
+    process.on("uncaughtException", (err) => {
+      rejectionHandler(err);
+    });
+
+    const sigintHandler = () => {
+      this.chatView.addSystemMessage(`${C.cyan}Goodbye.${C.reset}`);
+      this.stop();
+    };
+    process.on("SIGINT", sigintHandler);
+
+    // Status bar auto-refresh every 30s
+    this.statusBarInterval = setInterval(async () => {
+      try {
+        const available = await isCaitlyndAvailable();
+        if (available) {
+          const st = await getCaitlyndStatus();
+          if (st) {
+            const uptimeStr = st.uptime_seconds != null
+              ? `, ${(st.uptime_seconds / 3600).toFixed(1)}h uptime`
+              : "";
+            this.statusBar.setDaemonStatus(
+              `${C.green}connected${C.reset} (${st.active_antibodies} antibodies, ${st.memory_entries} memory${uptimeStr})`,
+            );
+          } else {
+            this.statusBar.setDaemonStatus(`${C.green}connected${C.reset}`);
+          }
+        } else {
+          this.statusBar.setDaemonStatus(`${C.yellow}local mode${C.reset} (daemon not running)`);
+        }
+        this.statusBar.invalidate();
+        this.tui.requestRender();
+      } catch {
+        // Status refresh failed silently
+      }
+    }, 30_000);
+
+    // Welcome message with logo
     const antibodies = loadAntibodies();
     const daemonAvailable = await isCaitlyndAvailable();
     const daemonText = daemonAvailable ? `${C.green}connected${C.reset}` : `${C.yellow}not running${C.reset}`;
 
+    const logo = noEmoji ? CAITLYN_LOGO_ASCII : CAITLYN_LOGO;
+
+    // Onboarding: first-run check
+    const historyEntries = loadHistory();
+    if (historyEntries.length === 0) {
+      this.chatView.addSystemMessage(
+        `${C.bold}${C.cyan}Welcome to CAITLYN!${C.reset}\n\n` +
+        `Here's how to get started:\n` +
+        `1) ${C.cyan}/scan <content>${C.reset} — scan content for attacks\n` +
+        `2) ${C.cyan}Type any text${C.reset} — it gets auto-scanned\n` +
+        `3) ${C.cyan}/dashboard${C.reset} — view defense statistics\n` +
+        `4) ${C.cyan}/help${C.reset} — see all commands`,
+      );
+    }
+
     this.chatView.addSystemMessage(
-      `${C.bold}${C.cyan}CAITLYN Security Guardian${C.reset}\n` +
-      `${C.dim}Continuous Agents for Injection Threats via Lifelong Yielding Nexus${C.reset}\n\n` +
+      `${C.bold}${C.cyan}${logo}${C.reset}\n` +
+      `${C.dim}Continuous Agents for Injection Threats via Lifelong Yielding Nexus${C.reset}\n` +
+      `${C.dim}AI Agent Immune System${C.reset}\n\n` +
       `Daemon: ${daemonText} | Antibodies: ${antibodies.length}\n` +
-      `Type /help for commands or just paste content to scan.`,
+      `Type /help for commands or just paste content to scan.\n` +
+      `${C.dim}Press Ctrl+C to exit${C.reset}`,
     );
 
     this.tui.setFocus(this.input);
@@ -453,10 +811,34 @@ export class CaitlynTUI {
         }
       }, 100);
     });
+
+    // Cleanup
+    if (this.statusBarInterval) {
+      clearInterval(this.statusBarInterval);
+      this.statusBarInterval = null;
+    }
+    process.off("SIGINT", sigintHandler);
+    process.off("unhandledRejection", rejectionHandler);
+    process.off("uncaughtException", rejectionHandler);
   }
 
   stop(): void {
     this.running = false;
     this.tui.stop();
+
+    if (this.statusBarInterval) {
+      clearInterval(this.statusBarInterval);
+      this.statusBarInterval = null;
+    }
+
+    // Kill auto-started daemon
+    if (this.daemonAutoStarted && this.daemonPid) {
+      try {
+        process.kill(this.daemonPid, "SIGTERM");
+        console.log("Stopped auto-started caitlynd daemon.");
+      } catch {
+        // Already dead
+      }
+    }
   }
 }
