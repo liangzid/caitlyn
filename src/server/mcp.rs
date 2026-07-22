@@ -21,6 +21,7 @@ use crate::Caitlyn;
 
 #[derive(Debug, Deserialize)]
 struct JsonRpcRequest {
+    #[allow(dead_code)] // Verified on deserialization
     jsonrpc: String,
     #[serde(default)]
     id: Option<Value>,
@@ -48,6 +49,7 @@ struct JsonRpcError {
     data: Option<Value>,
 }
 
+#[allow(dead_code)] // Reserved for future MCP notifications
 #[derive(Debug, Serialize, Deserialize)]
 struct JsonRpcNotification {
     jsonrpc: String,
@@ -369,7 +371,7 @@ async fn handle_caitlyn_scan(args: &Value, caitlyn: &Arc<Caitlyn>) -> Result<Str
         .and_then(|v| v.as_str())
         .unwrap_or("fast");
 
-    let context = crate::core::ScanContext {
+    let _context = crate::core::ScanContext {
         source: source.to_string(),
         agent_task,
         history_snippet: None,
@@ -410,7 +412,7 @@ async fn handle_caitlyn_status(caitlyn: &Arc<Caitlyn>) -> Result<String, String>
     Ok(serde_json::to_string_pretty(&json).unwrap_or_default())
 }
 
-async fn handle_caitlyn_vaccinate(args: &Value, caitlyn: &Arc<Caitlyn>) -> Result<String, String> {
+async fn handle_caitlyn_vaccinate(args: &Value, _caitlyn: &Arc<Caitlyn>) -> Result<String, String> {
     let _description = args.get("pattern_description")
         .and_then(|v| v.as_str())
         .unwrap_or("unknown");
