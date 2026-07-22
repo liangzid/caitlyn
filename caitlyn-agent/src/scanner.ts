@@ -229,26 +229,52 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     options.content,
   );
 
-  const t1Start = performance.now();
-  const llmOutput = await options.llmCall(systemPrompt, userPrompt);
-  const t1End = performance.now();
-  totalTokens += 1; // single-token output
+  try {
+    const llmOutput = await options.llmCall(systemPrompt, userPrompt);
+    const t1End = performance.now();
+    totalTokens += 1; // single-token output
 
-  const verdict: "benign" | "malicious" =
-    llmOutput.trim() === "1" ? "malicious" : "benign";
-  const latency = Math.round(performance.now() - scanStart) * 1000;
+    const verdict: "benign" | "malicious" =
+      llmOutput.trim() === "1" ? "malicious" : "benign";
+    const latency = Math.round(performance.now() - scanStart) * 1000;
 
-  const result: ScanResult = {
-    verdict,
-    confidence: verdict === "malicious" ? 0.8 : 0.95,
-    tier: 1,
-    script_results: t0.results,
-    total_latency_us: latency,
-    total_tokens: totalTokens,
-  };
+    const result: ScanResult = {
+      verdict,
+      confidence: verdict === "malicious" ? 0.8 : 0.95,
+      tier: 1,
+      script_results: t0.results,
+      total_latency_us: latency,
+      total_tokens: totalTokens,
+    };
 
-  // Persist to scan history
-  logScan(result, options.content);
+    // Persist to scan history
+    logScan(result, options.content);
 
-  return result;
+    return result;
+  } catch (err) {
+    // LLM failed — fall back to Tier 0 results only
+    const latency = Math.round(performance.now() - scanStart) * 1000;
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    const result: ScanResult = {
+      verdict: "benign",
+      confidence: 0,
+      tier: 1,
+      script_results: [
+        ...t0.results,
+        {
+          antibody_id: "llm-fallback",
+          verdict: "benign" as const,
+          confidence: 0,
+          reason: `LLM unavailable, Tier 1 skipped. Error: ${errorMsg}`,
+          latency_us: 0,
+          error: errorMsg,
+        },
+      ],
+      total_latency_us: latency,
+      total_tokens: totalTokens,
+    };
+
+    logScan(result, options.content);
+    return result;
+  }
 }
