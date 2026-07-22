@@ -78,9 +78,14 @@ function caitlyndResultToScanResult(
   r: CaitlyndScanResult,
   latencyUs: number,
 ): ScanResult {
+  const mapVerdict = (v: string): Verdict => {
+    if (v === "malicious") return "malicious";
+    if (v === "suspicious") return "suspicious";
+    return "benign";
+  };
   const scriptResults: ScriptResult[] = r.antibody_results.map((ab) => ({
     antibody_id: ab.antibody_id,
-    verdict: (ab.verdict === "malicious" ? "malicious" : "benign") as Verdict,
+    verdict: mapVerdict(ab.verdict),
     confidence: ab.confidence,
     reason: ab.reasoning,
     latency_us: 0, // individual timings not available from daemon
@@ -88,7 +93,7 @@ function caitlyndResultToScanResult(
   }));
 
   return {
-    verdict: r.verdict === "malicious" ? "malicious" : "benign",
+    verdict: mapVerdict(r.verdict),
     confidence: r.confidence,
     tier: 1, // daemon results are Tier 1+
     script_results: scriptResults,
@@ -120,13 +125,18 @@ export async function hybridScan(options: HybridScanOptions): Promise<HybridScan
 
       const latency = Math.round((performance.now() - scanStart) * 1000);
 
+      const mapV = (v: string): Verdict => {
+        if (v === "malicious") return "malicious";
+        if (v === "suspicious") return "suspicious";
+        return "benign";
+      };
       return {
-        verdict: result.verdict === "malicious" ? "malicious" : "benign",
+        verdict: mapV(result.verdict),
         confidence: result.confidence,
         tier: 1,
         script_results: result.antibody_results.map((ab) => ({
           antibody_id: ab.antibody_id,
-          verdict: (ab.verdict === "malicious" ? "malicious" : "benign") as Verdict,
+          verdict: mapV(ab.verdict),
           confidence: ab.confidence,
           reason: ab.reasoning,
           latency_us: 0,

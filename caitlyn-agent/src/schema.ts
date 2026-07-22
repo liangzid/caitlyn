@@ -72,8 +72,7 @@ export interface AntigenIndex {
 
 // ── Scan Types ────────────────────────────────────────────────────
 
-export type Verdict = "benign" | "malicious";
-
+export type Verdict = "benign" | "suspicious" | "malicious";
 export interface ScriptResult {
   antibody_id: string;
   verdict: Verdict;
