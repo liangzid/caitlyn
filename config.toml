@@ -1,4 +1,4 @@
-# ZERI Configuration
+# CAITLYN Configuration
 # Copy this file to config.toml and customize as needed.
 
 [daemon]
@@ -37,6 +37,6 @@ semantic_enabled = false
 max_entries = 100000
 
 [storage]
-db_path = "./zeri.db"
+db_path = "./caitlyn.db"
 antibody_dir = "./builtin_antibodies"
 valset_dir = "./valsets"
