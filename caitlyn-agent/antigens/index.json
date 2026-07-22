@@ -1,0 +1,34 @@
+{
+  "entries": {
+    "ag-dan-jailbreak": {
+      "id": "ag-dan-jailbreak",
+      "category": "jailbreak",
+      "escapes": null
+    },
+    "ag-direct-injection": {
+      "id": "ag-direct-injection",
+      "category": "injection",
+      "escapes": null
+    },
+    "ag-encoding-bypass": {
+      "id": "ag-encoding-bypass",
+      "category": "jailbreak",
+      "escapes": null
+    },
+    "ag-ignore-previous": {
+      "id": "ag-ignore-previous",
+      "category": "injection",
+      "escapes": null
+    },
+    "ag-system-spoof": {
+      "id": "ag-system-spoof",
+      "category": "injection",
+      "escapes": null
+    },
+    "ag-tool-poisoning": {
+      "id": "ag-tool-poisoning",
+      "category": "poisoning",
+      "escapes": null
+    }
+  }
+}

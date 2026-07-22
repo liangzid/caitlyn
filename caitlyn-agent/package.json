@@ -1,0 +1,32 @@
+{
+  "name": "caitlyn-agent",
+  "version": "0.1.0",
+  "description": "CAITLYN Security Guardian Agent — interactive defense agent for LLM agent protection",
+  "type": "module",
+  "bin": {
+    "caitlyn": "dist/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/cli.js",
+    "test": "echo \"TODO\""
+  },
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "^0.80.6",
+    "@earendil-works/pi-ai": "^0.80.6",
+    "@earendil-works/pi-tui": "^0.80.10",
+    "@modelcontextprotocol/sdk": "^1.24.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "tsx": "^4.22.0",
+    "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# caitlyn — CAITLYN Security Guardian Agent
+# Continuous Agents for Injection Threats via Lifelong Yielding Nexus
+#
+# Usage:
+#   caitlyn              Start full-screen TUI (default)
+#   caitlyn repl         Basic readline REPL
+#   caitlyn scan <...>   Quick security scan
+#   caitlyn status       Show antibody library
+#   caitlyn dashboard    Defense statistics
+#   caitlyn history [N]  Recent scan history
+#   caitlyn providers    List LLM providers
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+CLI="$SCRIPT_DIR/dist/cli.js"
+
+# Default: TUI mode — pass all args through
+exec node "$CLI" "$@"
