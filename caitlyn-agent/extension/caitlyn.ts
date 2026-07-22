@@ -54,17 +54,15 @@ function bar(label: string, value: number, max: number, color: string, w = 20): 
 
 const CAITLYN_LOGO = `
 ${C.cyan}${C.bold}
-  ╔══════════════════════════════════════════════════╗
-  ║  ███████╗ ███████╗ ██████╗  ██╗                  ║
-  ║  ╚══███╔╝ ██╔════╝ ██╔══██╗ ██║                  ║
-  ║    ███╔╝  █████╗   ██████╔╝ ██║                  ║
-  ║   ███╔╝   ██╔══╝   ██╔══██╗ ██║                  ║
-  ║  ███████╗ ███████╗ ██║  ██║ ██║                  ║
-  ║  ╚══════╝ ╚══════╝ ╚═╝  ╚═╝ ╚═╝                  ║
-  ║                                                  ║
-  ║  Continuous Agents for Injection Threats via Lifelong Yielding Nexus    ║
-  ║  AI Agent Immune System                           ║
-  ╚══════════════════════════════════════════════════╝
+  ╔═══════════════════════════════════════════════╗
+  ║  ▄︻デ══━💥  CAITLYN  ━━╤╤╤╤━━  ║
+  ║  ╔═══╗     Sheriff of Piltover     ║
+  ║  ║ 🎩 ║    ⊕ Precision Defense ⊕    ║
+  ║  ╚═══╝                             ║
+  ║  ━━━━◉━━━━━  Targeting...  ━━━━━◉━━━━━ ║
+  ╚═══════════════════════════════════════════════╝
+  Continuous Agents for Injection Threats via Lifelong Yielding Nexus
+  AI Agent Immune System
 ${C.reset}`;
 
 // ── Types ───────────────────────────────────────────────────────
