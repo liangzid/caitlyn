@@ -1,4 +1,4 @@
-# ZERI: Zero-Trust Evolution for Reinforced Immunizer
+# CAITLYN: Continuous Agents for Injection Threats via Lifelong Yielding Nexus
 
 ## Research Question
 
@@ -55,9 +55,9 @@ Cannot evolve new defenses             →  Learns from defending previous attac
 Manual layer/rule auditing             →  Autonomous defense generation
 ```
 
-## Proposed Approach: ZERI
+## Proposed Approach: CAITLYN
 
-**ZERI** (Zero-Trust Evolution for Reinforced Immunizer) proposes an **agentic, evolvable defense sub-agent** that:
+**CAITLYN** (Continuous Agents for Injection Threats via Lifelong Yielding Nexus) proposes an **agentic, evolvable defense sub-agent** that:
 
 1. **Flexible Integration**: Deploys as a defense agent/sub-agent that can be integrated into existing agent frameworks without requiring framework-specific modifications.
 
@@ -86,7 +86,7 @@ Manual layer/rule auditing             →  Autonomous defense generation
 
 ## Target Outcomes
 
-1. A prototype defense sub-agent (ZERI) integrated with at least one major agent framework.
+1. A prototype defense sub-agent (CAITLYN) integrated with at least one major agent framework.
 2. An evolvable defense memory mechanism that generalizes from observed attacks.
 3. Empirical evaluation showing defense success rate improvement over static baselines on both known and novel attacks, without significant utility degradation.
 4. A benchmark or test harness for evaluating adaptive agent defenses under attack evolution.

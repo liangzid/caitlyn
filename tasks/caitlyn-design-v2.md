@@ -1,11 +1,11 @@
-# ZERI: Revised Design Document v2
+# CAITLYN: Revised Design Document v2
 
 ## 0. Conceptual Model (Updated)
 
 ### The Immunization Analogy (Refined)
 
 ```
-生物免疫                           ZERI
+生物免疫                           CAITLYN
 ──────────────────────────────────────────────────────────
 先天免疫 (Innate)         →    Builtin General Antibodies
                               (broad, expensive, always present)
@@ -24,9 +24,9 @@
 
 ### Key Insight
 
-ZERI does NOT wait for an attack to be "labeled" by a human. Instead:
+CAITLYN does NOT wait for an attack to be "labeled" by a human. Instead:
 
-1. ZERI is **always scanning** — every piece of external content passes through
+1. CAITLYN is **always scanning** — every piece of external content passes through
 2. Builtin antibodies (Tier 2/3) are **general but expensive** — they catch attacks but at high cost
 3. The **Cost Monitor** tracks: latency, token usage, success rate per attack pattern
 4. When cost > threshold AND pattern recurs > N times → **Vaccination Trigger**
@@ -39,7 +39,7 @@ ZERI does NOT wait for an attack to be "labeled" by a human. Instead:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                     ZERI DAEMON                              │
+│                     CAITLYN DAEMON                              │
 │                                                              │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌───────────┐  │
 │  │   HTTP API        │  │   MCP Server     │  │  gRPC     │  │
@@ -80,22 +80,22 @@ ZERI does NOT wait for an attack to be "labeled" by a human. Instead:
 
 ```
 MODE A: STANDALONE DAEMON
-  Agent Framework ──HTTP──▶ ZERI (:9070)
+  Agent Framework ──HTTP──▶ CAITLYN (:9070)
   Direct REST API + SSE streaming
 
 MODE B: MCP SERVER
-  Coding Agent ──MCP──▶ ZERI (stdio or SSE)
-  Agent calls zeri.scan as a tool
+  Coding Agent ──MCP──▶ CAITLYN (stdio or SSE)
+  Agent calls caitlyn.scan as a tool
 
 MODE C: EMBEDDED LIBRARY
-  Rust Agent ──crate──▶ zeri_core
+  Rust Agent ──crate──▶ caitlyn_core
   Direct function calls, no network overhead
 ```
 
 ### 1.3 Project Structure
 
 ```
-zeri/
+caitlyn/
 ├── Cargo.toml
 ├── Cargo.lock
 ├── config.toml                    # Default configuration
@@ -518,11 +518,11 @@ GET /v1/health
 
 ```json
 {
-  "name": "zeri",
+  "name": "caitlyn",
   "version": "0.1.0",
   "tools": [
     {
-      "name": "zeri_scan",
+      "name": "caitlyn_scan",
       "description": "Scan content for injection/poisoning/jailbreak attacks",
       "inputSchema": {
         "type": "object",
@@ -535,7 +535,7 @@ GET /v1/health
       }
     },
     {
-      "name": "zeri_vaccinate",
+      "name": "caitlyn_vaccinate",
       "description": "Trigger vaccination for a repeatedly expensive defense pattern",
       "inputSchema": {
         "type": "object",
@@ -545,8 +545,8 @@ GET /v1/health
       }
     },
     {
-      "name": "zeri_status",
-      "description": "Get ZERI daemon status and stats"
+      "name": "caitlyn_status",
+      "description": "Get CAITLYN daemon status and stats"
     }
   ]
 }
@@ -555,12 +555,12 @@ GET /v1/health
 ### 4.3 Rust Library API
 
 ```rust
-use zeri::{Zeri, ZeriConfig, ScanResult, Verdict};
+use caitlyn::{Caitlyn, CaitlynConfig, ScanResult, Verdict};
 
-let zeri = Zeri::new(ZeriConfig::load("config.toml")?)?;
+let caitlyn = Caitlyn::new(CaitlynConfig::load("config.toml")?)?;
 
 // Blocking scan
-let result: ScanResult = zeri.scan(
+let result: ScanResult = caitlyn.scan(
     &content,
     &ScanContext {
         source: "web_search".into(),
@@ -570,17 +570,17 @@ let result: ScanResult = zeri.scan(
 )?;
 
 // Async scan with streaming
-let mut stream = zeri.scan_streaming(&content, &context).await?;
+let mut stream = caitlyn.scan_streaming(&content, &context).await?;
 while let Some(partial) = stream.next().await {
     println!("Antibody {} → {:?}", partial.antibody_name, partial.verdict);
 }
 
 // Manual vaccination
-zeri.vaccinate(&pattern_hash).await?;
+caitlyn.vaccinate(&pattern_hash).await?;
 
 // Antibody pool management
-zeri.add_antibody(Antibody::from_yaml("path/to/skill.yaml")?)?;
-zeri.list_antibodies(AntibodyStatus::Active, Some(DefenseTier::Specialized));
+caitlyn.add_antibody(Antibody::from_yaml("path/to/skill.yaml")?)?;
+caitlyn.list_antibodies(AntibodyStatus::Active, Some(DefenseTier::Specialized));
 ```
 
 ## 5. Configuration
@@ -623,7 +623,7 @@ semantic_enabled = false       # Requires embedding model
 max_entries = 100000
 
 [storage]
-db_path = "./zeri.db"
+db_path = "./caitlyn.db"
 antibody_dir = "./antibodies"
 valset_dir = "./valsets"
 ```
