@@ -64,21 +64,21 @@ const noEmoji = process.env.CAITLYN_NO_EMOJI === "1";
 
 const CAITLYN_LOGO = [
   "  ╔═══════════════════════════════════════════════╗",
-  "  ║  ▄︻デ══━💥  CAITLYN  ━━╤╤╤╤━━  ║",
-  "  ║  ╔═══╗     Sheriff of Piltover     ║",
-  "  ║  ║ 🎩 ║    ⊕ Precision Defense ⊕    ║",
-  "  ║  ╚═══╝                             ║",
-  "  ║  ━━━━◉━━━━━  Targeting...  ━━━━━◉━━━━━ ║",
+  "  ║   ▄▄▄══━★  CAITLYN  ━━╤╤╤╤━━  ║",
+  "  ║   ╔═══╗     Sheriff of Piltover     ║",
+  "  ║   ║ o ║    ⊕ Precision Defense ⊕    ║",
+  "  ║   ╚═══╝                             ║",
+  "  ║   ━━━━◉━━━━━  Targeting...  ━━━━━◉━━━━━ ║",
   "  ╚═══════════════════════════════════════════════╝",
 ].join("\n");
 
 const CAITLYN_LOGO_ASCII = [
   "  +===============================================+",
-  "  |  [==]====---*  CAITLYN  ----++++----  |",
-  "  |  +-----+     Sheriff of Piltover     |",
-  "  |  |  o  |    (o) Precision Defense (o)  |",
-  "  |  +-----+                             |",
-  "  |  ------*-------  Targeting...  -------*----- |",
+  "  |   ___===---*  CAITLYN  ----++++----  |",
+  "  |   +-----+     Sheriff of Piltover     |",
+  "  |   |  o  |    (o) Precision Defense (o)  |",
+  "  |   +-----+                             |",
+  "  |   ------*-------  Targeting...  -------*----- |",
   "  +===============================================+",
 ].join("\n");
 
@@ -317,9 +317,8 @@ export class CaitlynTUI {
     }
 
     const header = new Text("");
-    header.setText(
-      `${C.bold}${C.cyan}🛡️  CAITLYN${C.reset}  ${C.dim}Security Guardian${C.reset}\n`,
-    );
+    const logo = noEmoji ? CAITLYN_LOGO_ASCII : CAITLYN_LOGO;
+    header.setText(`${C.bold}${C.cyan}${logo}${C.reset}\n`);
     tui.addChild(header);
 
     const chatView = new ChatView();
@@ -436,7 +435,7 @@ export class CaitlynTUI {
       case "/help": {
         this.chatView.addSystemMessage(
           "Commands:\n" +
-          "  /scan <content>      — Scan content for attacks\n" +
+          "  /scan <content>      — Security scan for injection attacks\n" +
           "  /status              — Show antibody/antigen library\n" +
           "  /dashboard           — Defense statistics dashboard\n" +
           "  /history [N]         — Recent scan history\n" +
@@ -447,8 +446,8 @@ export class CaitlynTUI {
           "  /vaccinate <pattern> — Submit vaccination pattern to daemon\n" +
           "  /help                — Show this help\n" +
           "  /quit                — Exit CAITLYN\n\n" +
-          "  !<message>           — Chat with CAITLYN guardian agent\n" +
-          "  Just type anything   — Auto-scanned for threats",
+          "  !<content>           — Quick security scan (same as /scan)\n" +
+          "  Anything else        — Chat with CAITLYN guardian agent",
         );
         break;
       }
@@ -464,20 +463,54 @@ export class CaitlynTUI {
   }
 
   private async handleBangCommand(cmd: string): Promise<void> {
-    const message = cmd.slice(1).trim();
+    // ! prefix = quick scan (alternative to /scan)
+    const content = cmd.slice(1).trim();
+    if (!content) { this.chatView.addSystemMessage("Usage: !<content> — quick security scan"); return; }
+    await this.doScan(content);
+  }
+
+  private async handleChat(message: string): Promise<void> {
+    // Route plain text to agent conversation
     if (!this.agent) {
-      this.chatView.addSystemMessage("Agent not initialized. Start without --no-agent flag.");
+      this.chatView.addSystemMessage(
+        `${C.yellow}Agent not available.${C.reset} Use ${C.cyan}/scan <content>${C.reset} for security scanning, or start with LLM configured.`,
+      );
       return;
     }
     try {
       await this.agent.prompt(message);
+      // After prompt, capture the agent's latest response
+      this.displayAgentResponse();
     } catch (e) {
-      this.chatView.addSystemMessage(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      this.chatView.addSystemMessage(
+        `${C.red}Agent error:${C.reset} ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
 
-  private async handleChat(message: string): Promise<void> {
-    await this.doScan(message);
+  /** Extract and display the latest assistant messages from the agent's transcript. */
+  private displayAgentResponse(): void {
+    if (!this.agent) return;
+    const messages = this.agent.state.messages;
+    // Find new assistant messages since last display
+    let found = false;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role === "assistant") {
+        const text = msg.content
+          .filter((c): c is { type: "text"; text: string } => c.type === "text")
+          .map((c) => c.text)
+          .join("\n");
+        if (text) {
+          this.chatView.addMessage({ role: "assistant", content: text, timestamp: Date.now() });
+          found = true;
+          break; // Just show the latest
+        }
+      }
+    }
+    if (!found) {
+      this.chatView.addSystemMessage(`${C.dim}(no response)${C.reset}`);
+    }
   }
 
   private async doScan(content: string): Promise<void> {
@@ -770,12 +803,11 @@ export class CaitlynTUI {
       }
     }, 30_000);
 
-    // Welcome message with logo
+    // Welcome message
     const antibodies = loadAntibodies();
     const daemonAvailable = await isCaitlyndAvailable();
     const daemonText = daemonAvailable ? `${C.green}connected${C.reset}` : `${C.yellow}not running${C.reset}`;
-
-    const logo = noEmoji ? CAITLYN_LOGO_ASCII : CAITLYN_LOGO;
+    const agentText = this.agent ? `${C.green}ready${C.reset}` : `${C.yellow}not loaded${C.reset}`;
 
     // Onboarding: first-run check
     const historyEntries = loadHistory();
@@ -783,20 +815,18 @@ export class CaitlynTUI {
       this.chatView.addSystemMessage(
         `${C.bold}${C.cyan}Welcome to CAITLYN!${C.reset}\n\n` +
         `Here's how to get started:\n` +
-        `1) ${C.cyan}/scan <content>${C.reset} — scan content for attacks\n` +
-        `2) ${C.cyan}Type any text${C.reset} — it gets auto-scanned\n` +
+        `1) ${C.cyan}Type anything${C.reset} — chat with the CAITLYN security agent\n` +
+        `2) ${C.cyan}/scan <content>${C.reset} — scan content for injection attacks\n` +
         `3) ${C.cyan}/dashboard${C.reset} — view defense statistics\n` +
         `4) ${C.cyan}/help${C.reset} — see all commands`,
       );
     }
 
     this.chatView.addSystemMessage(
-      `${C.bold}${C.cyan}${logo}${C.reset}\n` +
       `${C.dim}Continuous Agents for Injection Threats via Lifelong Yielding Nexus${C.reset}\n` +
       `${C.dim}AI Agent Immune System${C.reset}\n\n` +
-      `Daemon: ${daemonText} | Antibodies: ${antibodies.length}\n` +
-      `Type /help for commands or just paste content to scan.\n` +
-      `${C.dim}Press Ctrl+C to exit${C.reset}`,
+      `Daemon: ${daemonText} | Agent: ${agentText} | Antibodies: ${antibodies.length}\n` +
+      `${C.dim}Type to chat, /scan to inspect, /help for commands.  Ctrl+C to exit.${C.reset}`,
     );
 
     this.tui.setFocus(this.input);

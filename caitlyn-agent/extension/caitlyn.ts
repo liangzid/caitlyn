@@ -55,11 +55,11 @@ function bar(label: string, value: number, max: number, color: string, w = 20): 
 const CAITLYN_LOGO = `
 ${C.cyan}${C.bold}
   ╔═══════════════════════════════════════════════╗
-  ║  ▄︻デ══━💥  CAITLYN  ━━╤╤╤╤━━  ║
-  ║  ╔═══╗     Sheriff of Piltover     ║
-  ║  ║ 🎩 ║    ⊕ Precision Defense ⊕    ║
-  ║  ╚═══╝                             ║
-  ║  ━━━━◉━━━━━  Targeting...  ━━━━━◉━━━━━ ║
+  ║   ▄▄▄══━★  CAITLYN  ━━╤╤╤╤━━  ║
+  ║   ╔═══╗     Sheriff of Piltover     ║
+  ║   ║ o ║    ⊕ Precision Defense ⊕    ║
+  ║   ╚═══╝                             ║
+  ║   ━━━━◉━━━━━  Targeting...  ━━━━━◉━━━━━ ║
   ╚═══════════════════════════════════════════════╝
   Continuous Agents for Injection Threats via Lifelong Yielding Nexus
   AI Agent Immune System

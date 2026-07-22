@@ -22,6 +22,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { createInterface } from "node:readline";
 import { createCaitlynAgent } from "./agent.js";
+import type { Agent } from "@earendil-works/pi-agent-core";
 import { startRepl } from "./repl.js";
 import { CaitlynTUI } from "./caitlyn-tui.js";
 import { loadConfig } from "./config.js";
@@ -96,13 +97,19 @@ async function main() {
   if (missing.length > 0) {
     console.warn(`⚠️  Missing dependencies: ${missing.join(", ")}`);
   }
-
-  // Default: TUI mode
-
-  // REPL mode
-  if (command === "repl") {
-    const { agent } = await createCaitlynAgent();
-    startRepl(agent);
+  // Default: TUI mode — create agent for conversation, fall back to scan-only
+  if (!command || command === "tui") {
+    let agent: Agent | null = null;
+    try {
+      const ctx = await createCaitlynAgent();
+      agent = ctx.agent;
+    } catch (err) {
+      console.warn(`⚠️  Agent initialization failed: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn("   Running in scan-only mode. Chat and agent tools disabled.");
+    }
+    const llmCall = await makeLlmCallSafe();
+    const tui = await CaitlynTUI.create(llmCall, agent);
+    await tui.run();
     return;
   }
 
