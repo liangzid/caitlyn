@@ -58,7 +58,6 @@ export class CaitlyndClient {
     }
     return response.json();
   }
-
   async health(): Promise<boolean> {
     try {
       const response = await fetch(`${this.baseUrl}/v1/health`);
@@ -66,5 +65,20 @@ export class CaitlyndClient {
     } catch {
       return false;
     }
+  }
+
+  async vaccinate(pattern: string): Promise<{ vaccinated: boolean; message: string }> {
+    const response = await fetch(`${this.baseUrl}/v1/vaccinate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pattern }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`caitlynd vaccinate failed (${response.status}): ${text}`);
+    }
+
+    return response.json();
   }
 }

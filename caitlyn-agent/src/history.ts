@@ -62,7 +62,7 @@ function hashContent(content: string): string {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-function loadHistory(): ScanLogEntry[] {
+export function loadHistory(): ScanLogEntry[] {
   try {
     if (!fs.existsSync(HISTORY_PATH)) return [];
     const raw = fs.readFileSync(HISTORY_PATH, "utf-8");
@@ -167,4 +167,16 @@ export function getDashboard(): DashboardStats {
     last_scan_at: entries[entries.length - 1].timestamp,
     top_antibodies: topAntibodies,
   };
+}
+
+/** Clear all scan history entries. */
+export function clearHistory(): void {
+  fs.writeFileSync(HISTORY_PATH, JSON.stringify([], null, 2), "utf-8");
+}
+
+/** Export scan history to a JSON file at the given path. */
+export function exportHistory(filePath: string): number {
+  const entries = loadHistory();
+  fs.writeFileSync(filePath, JSON.stringify(entries, null, 2), "utf-8");
+  return entries.length;
 }
