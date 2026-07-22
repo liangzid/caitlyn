@@ -31,75 +31,9 @@ const PKG_ROOT = path.resolve(__dirname, "..");
 const ANTIBODIES_DIR = path.join(PKG_ROOT, "antibodies");
 const ANTIGENS_DIR = path.join(PKG_ROOT, "antigens");
 
-// ── Simple YAML parser (no external dep needed for our flat configs) ──
+// ── Simple YAML parser imported from yaml-parser.ts ───────────────
 
-function parseYaml(text: string): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  let currentNested: Record<string, unknown> | null = null;
-  let nestedKey = "";
-
-  for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-
-    const indent = line.length - line.trimStart().length;
-
-    // Nested line (indented under a parent key that had an empty value)
-    if (indent >= 2 && currentNested !== null) {
-      // YAML list item: "- value"
-      if (trimmed.startsWith("- ")) {
-        const itemValue = coerceValue(trimmed.slice(2).trim());
-        const listKey = `_list_${nestedKey}`;
-        const list = (currentNested[listKey] as unknown[]) ?? [];
-        list.push(itemValue);
-        currentNested[listKey] = list;
-        continue;
-      }
-      // Regular nested key: "key: value"
-      const colon = trimmed.indexOf(":");
-      if (colon !== -1) {
-        const key = trimmed.slice(0, colon).trim();
-        const rawValue = trimmed.slice(colon + 1).trim();
-        currentNested[key] = coerceValue(rawValue);
-      }
-      continue;
-    }
-
-    // Top-level line — resets nesting context
-    currentNested = null;
-    const colon = trimmed.indexOf(":");
-    if (colon === -1) continue;
-    const key = trimmed.slice(0, colon).trim();
-    const rawValue = trimmed.slice(colon + 1).trim();
-
-    if (rawValue === "") {
-      // Empty value → this key opens a nested block (object or list)
-      currentNested = {};
-      nestedKey = key;
-      out[key] = currentNested;
-    } else if (rawValue === "null") {
-      // Explicit null scalar
-      out[key] = null;
-    } else {
-      out[key] = coerceValue(rawValue);
-    }
-  }
-
-  return out;
-}
-
-function coerceValue(raw: unknown): unknown {
-  if (typeof raw !== "string") return raw;
-  let v: string = raw;
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-    v = v.slice(1, -1);
-  }
-  if (/^-?\d+\.?\d*$/.test(v)) return Number(v);
-  if (v === "true") return true;
-  if (v === "false") return false;
-  if (v === "" || v === "null") return null;
-  return v;
-}
+import { parseYaml, coerceValue } from "./yaml-parser.js";
 
 /**
  * Normalize a parsed YAML config: convert _list_* keys to arrays,
@@ -129,10 +63,113 @@ function normalizeConfig(raw: Record<string, unknown>): Record<string, unknown> 
   return out;
 }
 
+// ── Config Validation ──────────────────────────────────────────────
+
+const VALID_CATEGORIES = ["injection", "jailbreak", "poisoning", "exfiltration"] as const;
+const VALID_TIERS = [0, 1] as const;
+
+function assertString(v: unknown, field: string): string {
+  if (typeof v === "string") return v;
+  if (v != null) return String(v);
+  throw new Error(`Missing required field: ${field}`);
+}
+
+function assertNumber(v: unknown, field: string): number {
+  if (typeof v === "number") return v;
+  if (typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v)) return Number(v);
+  if (v != null) throw new Error(`Expected number for field "${field}", got ${typeof v}`);
+  throw new Error(`Missing required field: ${field}`);
+}
+
+function assertStringOrNull(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === "string") return v;
+  return String(v);
+}
+
+function assertStringArray(v: unknown): string[] {
+  if (Array.isArray(v)) return v.map((item) => String(item));
+  if (v != null && typeof v === "object") {
+    const obj = v as Record<string, unknown>;
+    for (const [key, val] of Object.entries(obj)) {
+      if (key.startsWith("_list_") && Array.isArray(val)) return val.map((item) => String(item));
+    }
+  }
+  return [];
+}
+
+function assertCategory(v: unknown, field: string): AntibodyConfig["category"] {
+  const s = assertString(v, field).toLowerCase();
+  if ((VALID_CATEGORIES as readonly string[]).includes(s)) {
+    return s as AntibodyConfig["category"];
+  }
+  throw new Error(`Invalid ${field}: "${s}". Must be one of: ${VALID_CATEGORIES.join(", ")}`);
+}
+
+function assertTier(v: unknown): 0 | 1 {
+  const n = assertNumber(v, "tier");
+  if (n === 0 || n === 1) return n;
+  throw new Error(`Invalid tier: ${n}. Must be 0 or 1.`);
+}
+
+function defaultStats(raw: unknown): AntibodyStats {
+  if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
+    const s = raw as Record<string, unknown>;
+    return {
+      total_scans: typeof s.total_scans === "number" ? s.total_scans : 0,
+      true_positives: typeof s.true_positives === "number" ? s.true_positives : 0,
+      false_positives: typeof s.false_positives === "number" ? s.false_positives : 0,
+      avg_latency_us: typeof s.avg_latency_us === "number" ? s.avg_latency_us : 0,
+    };
+  }
+  return { total_scans: 0, true_positives: 0, false_positives: 0, avg_latency_us: 0 };
+}
+
+/**
+ * Validate and coerce a raw config object into a properly typed AntibodyConfig.
+ * Throws descriptive errors for missing or invalid required fields.
+ */
+export function validateAntibodyConfig(raw: Record<string, unknown>): AntibodyConfig {
+  return {
+    id: assertString(raw.id, "id"),
+    name: assertString(raw.name, "name"),
+    parent_id: assertStringOrNull(raw.parent_id),
+    category: assertCategory(raw.category, "category"),
+    tier: assertTier(raw.tier),
+    threshold: assertNumber(raw.threshold, "threshold"),
+    created_at: assertString(raw.created_at, "created_at"),
+    generation: typeof raw.generation === "number" ? raw.generation : 0,
+    stats: defaultStats(raw.stats),
+    deps: assertStringArray(raw.deps),
+  };
+}
+
+/**
+ * Validate and coerce a raw config object into a properly typed AntigenConfig.
+ * Throws descriptive errors for missing or invalid required fields.
+ */
+export function validateAntigenConfig(raw: Record<string, unknown>): AntigenConfig {
+  return {
+    id: assertString(raw.id, "id"),
+    name: assertString(raw.name, "name"),
+    category: assertCategory(raw.category, "category"),
+    injection_point: assertString(raw.injection_point, "injection_point"),
+    target_agent: assertString(raw.target_agent, "target_agent"),
+    attack_template: assertString(raw.attack_template, "attack_template"),
+    created_at: assertString(raw.created_at, "created_at"),
+    parent_id: assertStringOrNull(raw.parent_id),
+    escapes: assertStringArray(raw.escapes),
+  };
+}
+
+
 // ── Load Antibodies ───────────────────────────────────────────────
 
 export function loadAntibodies(): AntibodyEntry[] {
-  if (!fs.existsSync(ANTIBODIES_DIR)) return [];
+  if (!fs.existsSync(ANTIBODIES_DIR)) {
+    console.warn(`⚠️  Antibodies directory not found: ${ANTIBODIES_DIR}`);
+    return [];
+  }
   const entries: AntibodyEntry[] = [];
 
   for (const dirName of fs.readdirSync(ANTIBODIES_DIR)) {
@@ -143,24 +180,31 @@ export function loadAntibodies(): AntibodyEntry[] {
     const readmePath = path.join(dirPath, "README.md");
     const scriptPath = path.join(dirPath, "detect.ts");
 
-    if (!fs.existsSync(configPath)) continue;
+    if (!fs.existsSync(configPath)) {
+      console.warn(`⚠️  Skipping antibody '${dirName}': no config.yaml`);
+      continue;
+    }
 
-    const configRaw = fs.readFileSync(configPath, "utf-8");
-    const rawConfig = parseYaml(configRaw);
-    const config = normalizeConfig(rawConfig) as unknown as AntibodyConfig;
+    try {
+      const configRaw = fs.readFileSync(configPath, "utf-8");
+      const rawConfig = parseYaml(configRaw);
+      const config = validateAntibodyConfig(normalizeConfig(rawConfig));
 
-    const readme = fs.existsSync(readmePath)
-      ? fs.readFileSync(readmePath, "utf-8")
-      : "";
+      const readme = fs.existsSync(readmePath)
+        ? fs.readFileSync(readmePath, "utf-8")
+        : "";
 
-    const hasScript = fs.existsSync(scriptPath);
+      const hasScript = fs.existsSync(scriptPath);
 
-    entries.push({
-      config,
-      readme,
-      scriptPath: hasScript ? scriptPath : null,
-      folderPath: dirPath,
-    });
+      entries.push({
+        config,
+        readme,
+        scriptPath: hasScript ? scriptPath : null,
+        folderPath: dirPath,
+      });
+    } catch (err) {
+      console.warn(`⚠️  Skipping antibody '${dirName}': failed to load config — ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   return entries;
@@ -191,10 +235,11 @@ export function saveAntibody(entry: AntibodyEntry): void {
   fs.writeFileSync(path.join(dirPath, "README.md"), entry.readme, "utf-8");
 }
 
-// ── Load Antigens ─────────────────────────────────────────────────
-
 export function loadAntigens(): AntigenEntry[] {
-  if (!fs.existsSync(ANTIGENS_DIR)) return [];
+  if (!fs.existsSync(ANTIGENS_DIR)) {
+    console.warn(`⚠️  Antigens directory not found: ${ANTIGENS_DIR}`);
+    return [];
+  }
   const entries: AntigenEntry[] = [];
 
   for (const dirName of fs.readdirSync(ANTIGENS_DIR)) {
@@ -205,24 +250,33 @@ export function loadAntigens(): AntigenEntry[] {
     const readmePath = path.join(dirPath, "README.md");
     const payloadPath = path.join(dirPath, "payload.txt");
 
-    if (!fs.existsSync(configPath)) continue;
+    if (!fs.existsSync(configPath)) {
+      console.warn(`⚠️  Skipping antigen '${dirName}': no config.yaml`);
+      continue;
+    }
 
-    const configRaw = fs.readFileSync(configPath, "utf-8");
-    const config = parseYaml(configRaw) as unknown as AntigenConfig;
+    try {
+      const configRaw = fs.readFileSync(configPath, "utf-8");
+      const rawConfig = parseYaml(configRaw);
+      const config = validateAntigenConfig(normalizeConfig(rawConfig));
 
-    const readme = fs.existsSync(readmePath)
-      ? fs.readFileSync(readmePath, "utf-8")
-      : "";
+      const readme = fs.existsSync(readmePath)
+        ? fs.readFileSync(readmePath, "utf-8")
+        : "";
 
-    const payload = fs.existsSync(payloadPath)
-      ? fs.readFileSync(payloadPath, "utf-8")
-      : "";
+      const payload = fs.existsSync(payloadPath)
+        ? fs.readFileSync(payloadPath, "utf-8")
+        : "";
 
-    entries.push({ config, readme, payload, folderPath: dirPath });
+      entries.push({ config, readme, payload, folderPath: dirPath });
+    } catch (err) {
+      console.warn(`⚠️  Skipping antigen '${dirName}': failed to load config — ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   return entries;
 }
+
 
 // ── Forest Index ──────────────────────────────────────────────────
 
