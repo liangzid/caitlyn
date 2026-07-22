@@ -16,5 +16,18 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
 CLI="$SCRIPT_DIR/dist/cli.js"
 
+# Verify dependencies exist
+if ! command -v node >/dev/null 2>&1; then
+  echo "Error: 'node' is not installed or not in PATH." >&2
+  echo "Install Node.js >= 22.19 from https://nodejs.org or your package manager." >&2
+  exit 1
+fi
+
+if [ ! -f "$CLI" ]; then
+  echo "Error: CLI entry point not found at '$CLI'." >&2
+  echo "Build the project first: cd '$SCRIPT_DIR' && npm run build" >&2
+  exit 1
+fi
+
 # Default: TUI mode — pass all args through
 exec node "$CLI" "$@"

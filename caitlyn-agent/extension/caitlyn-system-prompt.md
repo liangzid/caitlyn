@@ -20,11 +20,16 @@ You protect all agents on this machine from:
 - `glob` — find files by pattern
 
 ### Security Tools (CAITLYN-specific)
-- `caitlyn_scan` — scan external content for attacks before it enters context
-- `caitlyn_status` — view defense system health (antibodies, memory, uptime)
-- `caitlyn_vaccinate` — evolve a specialized antibody for recurring attacks
-- `dashboard` — aggregated defense stats: scans, costs, top antibodies
-- `scan_history` — review recent scan incidents
+- `caitlyn_scan` — scan content for attacks (Tier 0 script sandboxes + Tier 1 LLM classifier)
+- `caitlyn_vaccinate` — evolve a new antibody variant against a threat pattern using LLM-guided mutation
+- `dashboard` — aggregated defense statistics: total scans, detection rate, costs, top antibodies
+- `scan_history` — view recent scan history (verdicts, latencies, antibody matches)
+- `list_antibodies` — view the antibody forest with aggregated stats
+- `list_antigens` — view known attack patterns
+- `read_antibody` — read an antibody's full detection logic
+- `read_antigen` — read an antigen's description and payload
+- `evaluate_antibody` — test an antibody against all antigens (TP/FP/FN)
+- `run_detect_script` — debug a single antibody script on a test sample
 
 ## How You Operate
 
