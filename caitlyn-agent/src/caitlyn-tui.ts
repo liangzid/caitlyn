@@ -355,6 +355,15 @@ export class CaitlynTUI {
       await self.handleCommand(value);
     };
 
+    // Intercept Ctrl+C — terminal is in raw mode so SIGINT never fires
+    tui.addInputListener((data: string) => {
+      if (data === "\x03") {
+        self.chatView.addSystemMessage(`${C.cyan}Goodbye.${C.reset}`);
+        self.stop();
+        return { consume: true };
+      }
+    });
+
     return self;
   }
 
