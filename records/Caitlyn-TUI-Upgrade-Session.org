@@ -1,0 +1,60 @@
+* CAITLYN TUI Upgrade — Implementation Session — 2026-07-22
+
+** Goal
+Rewrite caitlyn-agent's TUI from a custom component-based approach to the pi
+coding agent architecture: Editor + streaming + overlays + session management.
+
+** What Changed
+
+*** New Files Created
+- src/session/session-types.ts   — JSONL entry type union (message, model_change, compaction, etc.)
+- src/session/session-manager.ts — Full SessionManager port with factory, tree, navigation, flush
+- src/components/footer.ts       — 2-line FooterComponent (tokens, cost, model, cwd, git, daemon)
+- src/commands/slash-commands.ts — CAITLYN_COMMANDS array + CombinedAutocompleteProvider factory
+- src/config/models.ts           — Model registry with context windows
+- src/config/credentials.ts      — 4-tier API key resolution (runtime > auth.json > config.toml > env)
+
+*** Rewritten Files
+- src/caitlyn-tui.ts (884 → ~1280 lines):
+  - Input → Editor with autocomplete
+  - ChatView → direct tui.children splicing (pi coding agent pattern)
+  - agent.prompt() → agent.subscribe() with real-time streaming
+  - Custom spinner → CancellableLoader with Escape-to-abort
+  - StatusBar → FooterComponent (2-line: cwd/git/session + tokens/model)
+  - Hardcoded switch → /slash commands with overlay panels
+  - Inline text → showOverlay() for dashboard/status/history/model/sessions
+
+*** Architecture
+tui.children layout (top → bottom):
+  [0]     Text(logo)
+  [1..n-3] Message Markdowns + Loader
+  [n-2]   FooterComponent
+  [n-1]   Editor
+
+On submit: splice user Markdown → insert CancellableLoader → agent.prompt()
+On agent event: replace Loader with streaming Markdown
+On agent_end: remove Loader, finalize, enable input
+
+** Commands Implemented
+/scan, /status, /dashboard, /history
+/antibody list|add|remove, /antigen <id>, /vaccinate
+/new, /resume, /session, /name, /export, /compact, /tree, /fork, /clone, /delete
+/model, /thinking, /login, /settings
+/help, /quit, /clear
+
+** Keybindings
+Ctrl+C quit | Ctrl+L clear | Ctrl+D dashboard | Ctrl+S status
+Ctrl+H history | Ctrl+P model selector | Tab focus editor / dismiss overlay
+Escape → CancellableLoader abort + overlay dismiss (auto)
+
+** Build Status
+TypeScript: clean (tsc --noEmit passes)
+CLI: help, status, providers commands verified
+
+** Remaining (for future)
+- pi coding agent's keybindings manager integration (uses setKeybindings)
+- /import command (JSONL import)
+- OAuth login flow (currently env vars + auth.json only)
+- Background colors for message roles (phase 9)
+- Session resource cleanup hooks
+- Compaction with LLM summarization (basic version works, needs proper API)

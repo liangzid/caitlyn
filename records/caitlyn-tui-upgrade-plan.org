@@ -1,0 +1,432 @@
+* CAITLYN TUI Upgrade Plan v2 — 2026-07-22
+** Scope
+Absorb the pi coding agent's architecture — not just TUI components, but its
+session management, status bar, provider config, compaction, command
+infrastructure, extension patterns, and agent lifecycle. CAITLYN should feel
+like a sibling of the pi coding agent.
+
+** Current State vs Target
+
+| Dimension        | Current CAITLYN               | pi Coding Agent (target)                        |
+|------------------|-------------------------------|-------------------------------------------------|
+| Input            | Single-line `Input`           | Multi-line `Editor` + autocomplete              |
+| Messages         | Custom ChatView re-render     | Dynamic `tui.children` splice + streaming       |
+| Agent chat       | `agent.prompt()` blocks       | `agent.addListener()` real-time events          |
+| Thinking         | None                          | `CancellableLoader` + Escape to abort           |
+| Session          | None                          | JSONL tree: new/resume/fork/clone/export/import |
+| Session storage  | None                          | ~/.caitlyn/sessions/<cwd>/*.jsonl               |
+| Status bar       | Daemon status only            | Tokens, cost, model, cwd, git, context window % |
+| Provider config  | Env vars only                 | 4-tier auth, model registry, OAuth              |
+| Commands         | Hardcoded switch              | CombinedAutocompleteProvider + extension hooks   |
+| Compaction       | None                          | LLM-summarized context compression              |
+| Overlays         | Inline chat text              | Modal panels (dashboard, picker, settings)      |
+| Keybindings      | Input listener only           | KeybindingsManager global registry              |
+| Extensions       | None                          | Event-driven plugin system                      |
+| Fork/Branch      | None                          | Session tree with parent/child navigation        |
+| Model switching  | Restart required              | Runtime `/model` with selector UI               |
+| Thinking control | None                          | off/minimal/low/medium/high levels              |
+| System prompt    | Static string                 | Dynamic assembly from tool snippets             |
+| Tool approval    | None                          | Extension `tool_call` hook can block execution   |
+
+───
+
+* Phase 1: Session Management
+
+** 1.1 Session storage
+- Directory: ~/.caitlyn/sessions/<cwd-encoded>/<timestamp>_<uuid>.jsonl
+- Format: JSONL (append-only, one JSON object per line)
+- Tree: every entry has id/parentId → fork creates branch without data loss
+
+** 1.2 Session entry types (every state change is persisted)
+- message              — LLM turns (role, content, usage: input/output/cache/cost)
+- model_change         — when user switches model (/model)
+- thinking_level_change — when user toggles thinking
+- compaction           — LLM-generated summary + firstKeptEntryId + tokensBefore
+- branch_summary       — summary when navigating tree branches
+- label                — user bookmarks on entries
+- session_info         — display name (/name)
+- custom               — extension data (NOT sent to LLM context)
+- custom_message       — extension-injected context
+
+** 1.3 SessionManager API (port from pi coding agent)
+```
+class SessionManager {
+  // Factory
+  static create(cwd, sessionDir?): SessionManager
+  static continueRecent(cwd, sessionDir?): SessionManager    // latest or new
+  static open(path, cwdOverride?): SessionManager
+  static inMemory(cwd?): SessionManager
+  static forkFrom(sourcePath, targetCwd): SessionManager
+  static list(cwd, onProgress?): Promise<SessionInfo[]>
+  static listAll(onProgress?): Promise<SessionInfo[]>
+
+  // Append (advance leaf)
+  appendMessage(msg): string
+  appendModelChange(provider, modelId): string
+  appendThinkingLevelChange(level): string
+  appendCompaction(summary, firstKeptId, tokensBefore): string
+  appendBranchSummary(fromId, summary): string
+  appendLabel(targetId, label?): string
+  appendSessionInfo(name): string
+
+  // Tree
+  getLeafId(): string | null
+  getLeafEntry(): SessionEntry | undefined
+  getChildren(parentId): SessionEntry[]
+  getBranch(fromId?): SessionEntry[]     // leaf → root
+  getTree(): SessionTreeNode[]           // full branch tree
+  getEntries(): SessionEntry[]           // all entries
+  getSessionName(): string | undefined
+  buildSessionContext(): SessionContext  // compaction-aware LLM messages
+
+  // Navigation
+  branch(branchFromId): void             // move leaf pointer
+  resetLeaf(): void                      // move to root
+  createBranchedSession(leafId): string  // extract branch to new file
+
+  // Accessors
+  getCwd(), getSessionDir(), getSessionId(), getSessionFile()
+}
+```
+
+** 1.4 Session commands
+- /new           — start fresh session (old one stays on disk)
+- /resume        — open session picker overlay, switch
+- /session       — show info: id, file, message count, total tokens
+- /fork          — branch from a previous user message
+- /clone         — duplicate at current position (safe before risky ops)
+- /name <title>  — set display name
+- /export [path] — export to .jsonl or .html
+- /import <path> — import from .jsonl
+- /compact       — manually trigger compaction
+- /tree          — navigate session branch tree
+- /delete        — delete session file (with confirmation)
+
+** 1.5 Session lifecycle
+On startup: check --resume <id> | --session <file> → pick latest for cwd
+On each turn: append user msg → agent runs → append assistant msg → flush
+On exit: final flush, auto-compact if budget exceeded
+
+───
+
+* Phase 2: Editor + Autocomplete
+
+** 2.1 Replace Input with Editor
+```
+const editor = new Editor(tui, { borderColor, selectList }, { paddingX: 1 });
+editor.onSubmit = (text) => handleSubmit(text);
+tui.addChild(editor);
+tui.setFocus(editor);
+```
+Benefits: multi-line (Shift+Enter), Emacs keys (C-a, C-e, C-k, M-f, M-b),
+paste markers, undo, Up/Down history, built-in Tab completion.
+
+** 2.2 CombinedAutocompleteProvider with slash commands + argument hints
+```
+const provider = new CombinedAutocompleteProvider([
+  // Scan & defense
+  { name: "scan",      description: "Scan content for attacks", argumentHint: "<content>" },
+  { name: "status",    description: "Show antibody/antigen library" },
+  { name: "dashboard", description: "Defense dashboard overlay" },
+  { name: "history",   description: "Recent scan history", argumentHint: "[N]" },
+
+  // Antibody management
+  { name: "antibody",  description: "Manage antibodies", argumentHint: "list|add|remove <id>",
+    getArgumentCompletions: async (prefix) => {
+      const abs = loadAntibodies();
+      if (prefix.startsWith("add ")) return null;
+      if (prefix.startsWith("remove "))
+        return abs.map(a => ({ value: a.config.id, label: a.config.name }));
+      return [
+        { value: "list", label: "list" },
+        { value: "add", label: "add <id>" },
+        { value: "remove", label: "remove <id>" },
+      ];
+    }
+  },
+  { name: "antigen",   description: "Show antigen details", argumentHint: "<id>",
+    getArgumentCompletions: () =>
+      loadAntigens().map(a => ({ value: a.config.id, label: a.config.name }))
+  },
+  { name: "vaccinate", description: "Evolve antibody", argumentHint: "<pattern>" },
+
+  // Session
+  { name: "new",       description: "Start a new session" },
+  { name: "resume",    description: "Resume a different session" },
+  { name: "session",   description: "Show session info" },
+  { name: "name",      description: "Set session name", argumentHint: "<title>" },
+  { name: "export",    description: "Export session" },
+  { name: "compact",   description: "Compact session context" },
+  { name: "tree",      description: "Navigate session tree" },
+  { name: "fork",      description: "Branch from previous message" },
+  { name: "clone",     description: "Duplicate session" },
+
+  // Config
+  { name: "model",     description: "Select LLM model", argumentHint: "<provider/model>" },
+  { name: "login",     description: "Configure auth", argumentHint: "<provider>" },
+  { name: "settings",  description: "Open settings" },
+
+  // Meta
+  { name: "help",      description: "Show commands" },
+  { name: "quit",      description: "Exit CAITLYN" },
+], process.cwd());
+editor.setAutocompleteProvider(provider);
+```
+
+───
+
+* Phase 3: Streaming Agent Responses
+
+** 3.1 Event-driven display (not blocking prompt())
+```
+agent.addListener((event, signal) => {
+  switch (event.type) {
+    case "agent_start":
+      showLoader("Thinking...");
+      break;
+    case "message_update":
+      // event.message.content accumulates text + tool calls
+      streamingMarkdown.setText(extractText(event.message.content));
+      break;
+    case "message_end":
+      finalizeMessage(event.message);
+      break;
+    case "tool_execution_start":
+      insertToolComponent(event.toolName, event.args);
+      break;
+    case "tool_execution_end":
+      updateToolComponent(event.result);
+      break;
+    case "agent_end":
+      removeLoader();
+      enableInput();
+      break;
+  }
+});
+```
+
+** 3.2 Message tree layout (from chat-simple.ts + interactive-mode.ts)
+```
+tui.children (top → bottom):
+  [0] Text(logo)
+  [1] Spacer
+  [2] user Markdown 1
+  [3] assistant Markdown 1
+  [4] tool Execution (if tool called)
+  [5] user Markdown 2
+  [6] Loader/CancellableLoader (during thinking)
+  [7] Editor (ALWAYS last child)
+
+On submit: splice user Markdown + Loader before Editor
+On agent event: replace Loader with streaming Markdown
+On tool call: splice ToolExecution before Editor
+On agent_end: remove Loader, finalize
+```
+
+** 3.3 CancellableLoader
+```
+const loader = new CancellableLoader(tui, cyan, dim, "Thinking...");
+loader.onAbort = () => agent.abort();
+// User presses Escape → loader fires onAbort → agent.abort()
+```
+
+───
+
+* Phase 4: Status Bar (port from FooterComponent)
+
+** 4.1 Data sources
+```
+class CaitlynFooterData {
+  // From session entries (iterating all entries for cumulative stats)
+  totalInput: number;        // ↑ input tokens
+  totalOutput: number;       // ↓ output tokens
+  totalCacheRead: number;    // R cache read
+  totalCacheWrite: number;   // W cache write
+  cacheHitRate?: number;     // CH hit rate %
+  totalCost: number;         // $X.XXX
+  contextPercent?: number;   // X%/Yk tokens (red >90%, yellow >70%)
+  isAutoCompact: boolean;    // (auto) indicator
+
+  // From agent state
+  currentModel: string;      // "deepseek-chat"
+  providerName: string;      // "(openrouter)" when multi-provider
+  thinkingLevel?: string;    // "off" | "low" | "medium" | "high"
+
+  // From filesystem watcher
+  gitBranch?: string;        // from .git/HEAD
+
+  // CAITLYN-specific
+  daemonStatus: "connected" | "disconnected";
+  antibodyCount: number;
+  sessionName?: string;      // from session_info entry
+  cwd: string;               // with ~ substitution
+}
+```
+
+** 4.2 Footer rendering (2-line)
+```
+────────────────────────────────────────────────────────────────────
+📁 ~/project  main  •  session-name
+↑12.3k ↓4.5k  $0.042  45%/128k (auto)                openrouter deepseek-chat
+────────────────────────────────────────────────────────────────────
+```
+
+───
+
+* Phase 5: Provider & Model Configuration
+
+** 5.1 Config locations
+| File                          | Purpose                                    |
+|-------------------------------|--------------------------------------------|
+| ~/.caitlyn/config.toml        | Main config (provider, model, defaults)     |
+| ~/.caitlyn/auth.json          | Persisted credentials (chmod 600)          |
+| ~/.caitlyn/settings.json      | User preferences (theme, compaction, etc.) |
+| ~/.caitlyn/keybindings.json   | Custom keybindings                          |
+| ~/.caitlyn/sessions/          | Session files                               |
+
+** 5.2 API key resolution (4-tier fallback from pi)
+1. Runtime override: --api-key provider:KEY (not persisted)
+2. ~/.caitlyn/auth.json: persisted credential (API key or OAuth token)
+3. ~/.caitlyn/config.toml: api_key field (supports $ENV_VAR, ${ENV_VAR}, !command)
+4. Environment: provider-specific env vars (OPENAI_API_KEY, etc.)
+
+** 5.3 Config value syntax
+- Plain text: "sk-ant-..." — literal
+- Env template: "$MY_VAR", "${MY_VAR}" — resolved at runtime
+- Shell command: "!gcloud auth print-access-token" — cached for process lifetime
+
+** 5.4 Model registry
+```
+const MODELS = [
+  { provider: "openrouter", model: "deepseek/deepseek-chat",
+    display: "DeepSeek V3", contextWindow: 128000, input: ["text"] },
+  { provider: "openrouter", model: "anthropic/claude-sonnet-4",
+    display: "Claude Sonnet 4", contextWindow: 200000, reasoning: true },
+  { provider: "openai", model: "gpt-4o",
+    display: "GPT-4o", contextWindow: 128000, input: ["text", "image"] },
+];
+```
+
+** 5.5 Runtime model switching
+- /model <provider/id> → direct set, validates auth, persists to session
+- /model (no args) → opens model-selector overlay with fuzzy search
+- Ctrl+P / Ctrl+Shift+P → cycle through scoped models
+- --models flag: limit cycling to specific models
+
+───
+
+* Phase 6: Compaction
+
+** 6.1 Trigger conditions (from pi coding agent)
+1. Threshold: tokens > contextWindow * 0.7 (checked on agent_end)
+2. Overflow: LLM returns context_length_exceeded error → auto-compact + retry
+3. Manual: /compact command
+
+** 6.2 Process
+1. Find cut point: keep ~30% of context window (most recent)
+2. LLM summarization: summarize removed entries
+3. Persist: append CompactionEntry to session
+4. Rebuild: sessionContext only includes compaction entry + kept entries
+
+** 6.3 Settings
+```
+compaction:
+  enabled: true
+  threshold: 0.7          # trigger at 70% context window
+  keep_recent_ratio: 0.3  # keep 30% of window as recent messages
+```
+
+───
+
+* Phase 7: Overlay Panels
+
+Replace inline chat text for dashboard/status/history with modal overlays:
+
+| /command  | Overlay component      | Dismiss  |
+|-----------|------------------------|----------|
+| /dashboard | Box with Text stats   | Escape   |
+| /status   | SelectList of antibodies | Escape |
+| /history  | SelectList of recent scans | Escape |
+| /resume   | Session picker (SelectList) | Escape |
+| /model    | Model selector (SelectList) | Escape |
+| /settings | SettingsList         | Escape   |
+| /tree     | Tree navigator       | Escape   |
+
+Implementation pattern:
+```
+const panel = buildDashboardPanel();
+const handle = tui.showOverlay(panel, {
+  anchor: "center", width: "60%", maxHeight: "70%"
+});
+// Escape dismisses automatically (built into overlay system)
+```
+
+───
+
+* Phase 8: Keybindings
+
+** 8.1 Default keybindings
+```
+const CAITLYN_KEYBINDINGS = {
+  "caitlyn.submit":      ["Enter"],
+  "caitlyn.newline":     ["Shift+Enter"],
+  "caitlyn.quit":        ["ctrl+c"],
+  "caitlyn.clear":       ["ctrl+l"],
+  "caitlyn.dashboard":   ["ctrl+d"],
+  "caitlyn.status":      ["ctrl+s"],
+  "caitlyn.history":     ["ctrl+h"],
+  "caitlyn.focusInput":  ["ctrl+i"],
+  "caitlyn.abort":       ["Escape"],
+  "caitlyn.scrollUp":    ["PageUp"],
+  "caitlyn.scrollDown":  ["PageDown"],
+  "caitlyn.cycleModel":  ["ctrl+p"],
+  "caitlyn.toggleThinking": ["ctrl+t"],
+  "caitlyn.cycleThinking":  ["ctrl+shift+t"],
+};
+```
+
+───
+
+* Phase 9: File Structure After Upgrade
+
+```
+caitlyn-agent/src/
+├── cli.ts                      # Entry point, session resolution
+├── caitlyn-tui.ts              # Main TUI (rewritten — ~300 lines)
+├── session/
+│   ├── session-manager.ts      # Port from pi coding agent
+│   ├── session-types.ts        # Entry types, tree types
+│   └── compaction.ts           # Compaction detection + LLM summarization
+├── components/
+│   ├── footer.ts               # 2-line status bar (ports pi FooterComponent)
+│   ├── footer-data.ts          # Token counting, git watcher, daemon status
+│   ├── assistant-message.ts    # Streaming Markdown wrapper
+│   ├── tool-execution.ts       # Tool call display component
+│   └── message-list.ts         # Container managing message children
+├── config/
+│   ├── models.ts               # Model registry with context windows
+│   ├── credentials.ts          # API key / OAuth store (4-tier resolution)
+│   └── settings.ts             # User preferences (compaction, theme, etc.)
+├── commands/
+│   ├── slash-commands.ts       # All command definitions + autocomplete
+│   ├── session-commands.ts     # /new, /resume, /fork, /compact, /export, etc.
+│   └── config-commands.ts      # /model, /login, /settings, /thinking
+├── scanner.ts                  # (existing, unchanged)
+├── hybrid-scanner.ts           # (existing, unchanged)
+├── library.ts                  # (existing, unchanged)
+└── ...
+```
+
+───
+
+* Implementation Order (each phase is a working commit)
+
+1. **SessionManager** — JSONL persistence, new/resume/list, /new /resume /session
+2. **Editor + Autocomplete** — Replace Input, wire CombinedAutocompleteProvider
+3. **Streaming** — agent.addListener(), real-time Markdown, CancellableLoader
+4. **Status bar** — FooterComponent with tokens/model/cwd/git/daemon
+5. **Overlays** — Dashboard/status/history/session-picker as modals
+6. **Provider config** — Model registry, /model, /login, 4-tier auth
+7. **Compaction** — Auto-detect, LLM summarization, /compact
+8. **Keybindings** — Global shortcuts, keybinding hints bar
+9. **Polish** — Message backgrounds, role badges, extension hooks
