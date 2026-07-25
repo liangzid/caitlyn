@@ -9,10 +9,12 @@
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static } from "@earendil-works/pi-ai";
-import { loadAntibodies, loadAntigens, loadAntibodyIndex, buildAntibodyIndex } from "./library.js";
+import { loadAntibodies, loadAntigens, loadAntibodyIndex, buildAntibodyIndex, saveAntibody } from "./library.js";
 import { scan, runTier0, type LlmCallFn } from "./scanner.js";
 import { getDashboard, getHistory } from "./history.js";
-import type { AntibodyEntry } from "./schema.js";
+import type { AntibodyEntry, AntibodyConfig } from "./schema.js";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -63,7 +65,15 @@ function formatTree(
   filter: string | undefined,
   lines: string[],
   depth: number,
+  visited: Set<string> = new Set<string>(),
 ): void {
+  if (visited.has(nodeId)) {
+    const indent = "  ".repeat(depth);
+    lines.push(`${indent}${depth === 0 ? "📁 " : "├─ "}${nodeId} (cycle)`);
+    return;
+  }
+  visited.add(nodeId);
+
   const node = index.trees[nodeId];
   if (!node) return;
   const ab = antibodies.find((a) => a.config.id === nodeId);
@@ -76,7 +86,7 @@ function formatTree(
 
   if (filter && !id.includes(filter) && !cat.includes(filter)) {
     for (const childId of node.children) {
-      formatTree(childId, index, antibodies, filter, lines, depth + 1);
+      formatTree(childId, index, antibodies, filter, lines, depth + 1, visited);
     }
     return;
   }
@@ -89,7 +99,7 @@ function formatTree(
   );
 
   for (const childId of node.children) {
-    formatTree(childId, index, antibodies, filter, lines, depth + 1);
+    formatTree(childId, index, antibodies, filter, lines, depth + 1, visited);
   }
 }
 
@@ -400,17 +410,39 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
         }
 
         const newId = (variant.id as string) ?? `ab-${parent.config.category}-v${Date.now()}`;
+
+        // Build and persist the new antibody
+        const AB_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "antibodies");
+        const abDir = path.join(AB_DIR, newId);
+        const entry = {
+          config: {
+            id: newId,
+            name: (variant.name as string) ?? newId,
+            parent_id: parent.config.id,
+            category: (variant.category as AntibodyConfig["category"]) ?? parent.config.category,
+            tier: (variant.tier as 0 | 1) ?? 0,
+            threshold: (variant.threshold as number) ?? 0.7,
+            created_at: new Date().toISOString(),
+            generation: parent.config.generation + 1,
+            stats: { true_positives: 0, false_positives: 0, total_scans: 0, avg_latency_us: 0 },
+            deps: [parent.config.id],
+          } satisfies AntibodyConfig,
+          readme: `# ${variant.name ?? newId}\n\nVaccinated from ${parent.config.id}.\nTarget pattern: ${params.pattern.slice(0, 200)}`,
+          scriptPath: null,
+          folderPath: abDir,
+        } satisfies AntibodyEntry;
+        saveAntibody(entry);
+
         const info = [
-          `💉 Vaccination candidate generated:`,
+          `💉 Vaccination candidate generated and saved:`,
           `  ID: ${newId}`,
           `  Name: ${variant.name ?? "unnamed"}`,
           `  Category: ${variant.category ?? parent.config.category}`,
           `  Tier: ${variant.tier ?? 0}`,
           `  Threshold: ${variant.threshold ?? 0.7}`,
+          `  Location: ${abDir}`,
           "",
-          `Detect logic: ${(variant.detect_logic as string)?.slice(0, 300) ?? "N/A"}`,
-          "",
-          "To finalize, create the antibody folder and run evaluation.",
+          `${(variant.detect_logic as string)?.slice(0, 300) ?? "N/A"}`,
         ];
         return textResult(info.join("\n"));
       },
