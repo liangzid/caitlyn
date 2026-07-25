@@ -16,10 +16,10 @@ export function coerceValue(raw: unknown): unknown {
   if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
     v = v.slice(1, -1);
   }
-  if (/^-?\d+\.?\d*$/.test(v)) return Number(v);
+  if (/^-?\d+(?:\.\d+)?$/.test(v)) return Number(v);
   if (v === "true") return true;
   if (v === "false") return false;
-  if (v === "" || v === "null") return null;
+  if (v === "null") return null;
   return v;
 }
 

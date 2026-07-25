@@ -163,9 +163,21 @@ export function validateAntigenConfig(raw: Record<string, unknown>): AntigenConf
 }
 
 
+// ── Caching (avoid redundant disk I/O on every tool call) ──────────
+
+let _cachedAntibodies: AntibodyEntry[] | null = null;
+let _cachedAntigens: AntigenEntry[] | null = null;
+let _cacheTime = 0;
+const CACHE_TTL_MS = 5_000;
+
+function cacheExpired(): boolean {
+  return Date.now() - _cacheTime > CACHE_TTL_MS;
+}
+
 // ── Load Antibodies ───────────────────────────────────────────────
 
 export function loadAntibodies(): AntibodyEntry[] {
+  if (!cacheExpired() && _cachedAntibodies) return _cachedAntibodies;
   if (!fs.existsSync(ANTIBODIES_DIR)) {
     console.warn(`⚠️  Antibodies directory not found: ${ANTIBODIES_DIR}`);
     return [];
@@ -207,7 +219,19 @@ export function loadAntibodies(): AntibodyEntry[] {
     }
   }
 
+  _cachedAntibodies = entries;
+  _cacheTime = Date.now();
   return entries;
+}
+
+function yamlEscape(value: unknown): string {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "boolean") return String(value);
+  if (typeof value === "number") return String(value);
+  if (Array.isArray(value)) return JSON.stringify(value);
+  const s = String(value);
+  // Use double-quoted string with proper escaping
+  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r")}"`;
 }
 
 export function saveAntibody(entry: AntibodyEntry): void {
@@ -224,20 +248,22 @@ export function saveAntibody(entry: AntibodyEntry): void {
     } else if (key === "deps") {
       configLines.push("deps:");
       for (const d of entry.config.deps) {
-        configLines.push(`  - ${d}`);
+        configLines.push(`  - ${yamlEscape(d)}`);
       }
     } else {
-      const v = value === null ? "null" : typeof value === "string" ? `"${value}"` : String(value);
-      configLines.push(`${key}: ${v}`);
+      configLines.push(`${key}: ${yamlEscape(value)}`);
     }
   }
   fs.writeFileSync(path.join(dirPath, "config.yaml"), configLines.join("\n"), "utf-8");
-  fs.writeFileSync(path.join(dirPath, "README.md"), entry.readme, "utf-8");
+  _cachedAntibodies = null; // invalidate cache
 }
 
 export function loadAntigens(): AntigenEntry[] {
+  if (!cacheExpired() && _cachedAntigens) return _cachedAntigens;
   if (!fs.existsSync(ANTIGENS_DIR)) {
     console.warn(`⚠️  Antigens directory not found: ${ANTIGENS_DIR}`);
+    _cachedAntigens = [];
+    _cacheTime = Date.now();
     return [];
   }
   const entries: AntigenEntry[] = [];
@@ -274,6 +300,8 @@ export function loadAntigens(): AntigenEntry[] {
     }
   }
 
+  _cachedAntigens = entries;
+  _cacheTime = Date.now();
   return entries;
 }
 
@@ -308,13 +336,15 @@ function aggregateStats(index: AntibodyIndex): void {
     const node = index.trees[id];
     if (!node) return { total_scans: 0, true_positives: 0, false_positives: 0, avg_latency_us: 0 };
     const merged: AntibodyStats = { ...node.stats_aggregated };
+    let weightedLatencySum = merged.avg_latency_us * merged.total_scans;
     for (const childId of node.children) {
       const childStats = aggregate(childId);
       merged.total_scans += childStats.total_scans;
       merged.true_positives += childStats.true_positives;
       merged.false_positives += childStats.false_positives;
-      merged.avg_latency_us = Math.max(merged.avg_latency_us, childStats.avg_latency_us);
+      weightedLatencySum += childStats.avg_latency_us * childStats.total_scans;
     }
+    merged.avg_latency_us = merged.total_scans > 0 ? weightedLatencySum / merged.total_scans : 0;
     node.stats_aggregated = merged;
     return merged;
   }
