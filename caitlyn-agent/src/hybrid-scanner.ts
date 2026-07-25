@@ -115,15 +115,14 @@ export async function hybridScan(options: HybridScanOptions): Promise<HybridScan
   if (healthy) {
     try {
       const result = await getClient().scan(options.content);
+      const latency = Math.round((performance.now() - scanStart) * 1000);
 
-      // Log to history
-      logScan(
-        caitlyndResultToScanResult(result, 0),
+      // Log to history with real latency
+      await logScan(
+        caitlyndResultToScanResult(result, latency),
         options.content,
         "caitlynd-daemon",
       );
-
-      const latency = Math.round((performance.now() - scanStart) * 1000);
 
       const mapV = (v: string): Verdict => {
         if (v === "malicious") return "malicious";

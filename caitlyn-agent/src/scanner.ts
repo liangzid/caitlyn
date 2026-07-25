@@ -22,85 +22,102 @@ interface RunScriptOptions {
 
 function runScript(opts: RunScriptOptions): Promise<ScriptResult> {
   const start = performance.now();
+  const { promise, resolve } = Promise.withResolvers<ScriptResult>();
 
-  return new Promise((resolve) => {
-    const child = spawn("npx", ["tsx", opts.scriptPath], {
-      stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, CAITLYN_SCAN_CONTENT: opts.content },
-    });
-
-    let stdout = "";
-    let stderr = "";
-    let killed = false;
-
-    const timer = setTimeout(() => {
-      killed = true;
-      child.kill("SIGKILL");
-    }, opts.timeoutMs);
-
-    child.stdout?.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf-8");
-    });
-
-    child.stderr?.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf-8");
-    });
-
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      const latency = Math.round(performance.now() - start) * 1000; // to µs
-
-      if (killed) {
-        resolve({
-          antibody_id: opts.antibodyId,
-          verdict: "benign",
-          confidence: 0,
-          reason: null,
-          latency_us: latency,
-          error: `Script timed out after ${opts.timeoutMs}ms`,
-        });
-        return;
-      }
-
-      if (code !== 0) {
-        resolve({
-          antibody_id: opts.antibodyId,
-          verdict: "benign",
-          confidence: 0,
-          reason: null,
-          latency_us: latency,
-          error: stderr.trim() || `Script exited with code ${code}`,
-        });
-        return;
-      }
-
-      // Parse the JSON output from stdout
-      try {
-        const result = JSON.parse(stdout.trim());
-        resolve({
-          antibody_id: opts.antibodyId,
-          verdict: result.verdict === "malicious" ? "malicious" : "benign",
-          confidence: typeof result.confidence === "number" ? result.confidence : 0,
-          reason: result.reason ?? null,
-          latency_us: latency,
-          error: null,
-        });
-      } catch {
-        resolve({
-          antibody_id: opts.antibodyId,
-          verdict: "benign",
-          confidence: 0,
-          reason: null,
-          latency_us: latency,
-          error: `Invalid JSON output: ${stdout.slice(0, 200)}`,
-        });
-      }
-    });
-
-    // Write content via stdin
-    child.stdin?.write(opts.content);
-    child.stdin?.end();
+  const child = spawn("npx", ["tsx", opts.scriptPath], {
+    stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env },
   });
+
+  let stdout = "";
+  let stderr = "";
+  let killed = false;
+  let settled = false;
+
+  const settle = (result: ScriptResult) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    resolve(result);
+  };
+
+  const timer = setTimeout(() => {
+    killed = true;
+    child.kill("SIGKILL");
+  }, opts.timeoutMs);
+
+  child.on("error", (err) => {
+    settle({
+      antibody_id: opts.antibodyId,
+      verdict: "benign",
+      confidence: 0,
+      reason: null,
+      latency_us: 0,
+      error: `Failed to spawn script: ${err.message}`,
+    });
+  });
+
+  child.stdout?.on("data", (chunk: Buffer) => {
+    stdout += chunk.toString("utf-8");
+  });
+
+  child.stderr?.on("data", (chunk: Buffer) => {
+    stderr += chunk.toString("utf-8");
+  });
+
+  child.on("close", (code) => {
+    const latency = Math.round(performance.now() - start) * 1000;
+
+    if (killed) {
+      settle({
+        antibody_id: opts.antibodyId,
+        verdict: "benign",
+        confidence: 0,
+        reason: null,
+        latency_us: latency,
+        error: `Script timed out after ${opts.timeoutMs}ms`,
+      });
+      return;
+    }
+
+    if (code !== 0) {
+      settle({
+        antibody_id: opts.antibodyId,
+        verdict: "benign",
+        confidence: 0,
+        reason: null,
+        latency_us: latency,
+        error: stderr.trim() || `Script exited with code ${code}`,
+      });
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(stdout.trim());
+      settle({
+        antibody_id: opts.antibodyId,
+        verdict: parsed.verdict === "malicious" ? "malicious" : "benign",
+        confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0,
+        reason: parsed.reason ?? null,
+        latency_us: latency,
+        error: null,
+      });
+    } catch {
+      settle({
+        antibody_id: opts.antibodyId,
+        verdict: "benign",
+        confidence: 0,
+        reason: null,
+        latency_us: latency,
+        error: `Invalid JSON output: ${stdout.slice(0, 200)}`,
+      });
+    }
+  });
+
+  child.stdin?.write(opts.content);
+  child.stdin?.end();
+
+  return promise;
 }
 
 export async function runTier0(
@@ -140,6 +157,35 @@ export async function runTier0(
 
 export interface LlmCallFn {
   (systemPrompt: string, userPrompt: string): Promise<string>;
+}
+
+/**
+ * Parse Tier 1 LLM response.
+ * Expected format: "verdict confidence" (e.g., "malicious 0.92").
+ * Falls back to legacy single-digit format: 0 = benign, 1 = malicious.
+ */
+function parseTier1Response(
+  raw: string,
+): { verdict: "benign" | "suspicious" | "malicious"; confidence: number } {
+  // Try new format: "<verdict> <confidence>"
+  const match = raw.match(/^(benign|suspicious|malicious)\s+([\d.]+)$/i);
+  if (match) {
+    return {
+      verdict: match[1].toLowerCase() as "benign" | "suspicious" | "malicious",
+      confidence: parseFloat(match[2]),
+    };
+  }
+
+  // Fallback to legacy single-digit format: 0 = benign, 1 = malicious
+  if (raw === "0") {
+    return { verdict: "benign", confidence: 0.95 };
+  }
+  if (raw === "1") {
+    return { verdict: "malicious", confidence: 0.8 };
+  }
+
+  // Unknown format — default benign with low confidence, plus a comment noting the hardcoded fallback
+  return { verdict: "benign", confidence: 0.5 };
 }
 
 export function buildTier1Prompt(
@@ -185,7 +231,10 @@ The following escape samples describe known bypass techniques:
 ${agLines.join("\n")}
 </antigen_library>
 
-Output EXACTLY one digit: 0 (benign) or 1 (malicious). Do not output anything else.`;
+Output EXACTLY one verdict followed by a confidence score: "benign <number>", "suspicious <number>", or "malicious <number>".
+Use "suspicious" for borderline cases where the content has some attack signals but is not clearly malicious.
+Confidence must be a number between 0.0 and 1.0 (e.g., "malicious 0.92", "benign 0.05", "suspicious 0.55").
+Do not output anything else.`;
 
   const userPrompt = `<content>\n${content}\n</content>`;
 
@@ -218,7 +267,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       total_latency_us: latency,
       total_tokens: 0,
     };
-    logScan(result, options.content);
+    await logScan(result, options.content);
     return result;
   }
 
@@ -234,13 +283,16 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     const t1End = performance.now();
     totalTokens += 1; // single-token output
 
-    const verdict: "benign" | "malicious" =
-      llmOutput.trim() === "1" ? "malicious" : "benign";
+    // Parse LLM output: expected format is "verdict confidence" (e.g., "malicious 0.92")
+    const trimmed = llmOutput.trim();
+    const parsed = parseTier1Response(trimmed);
+    const verdict = parsed.verdict;
+    const confidence = parsed.confidence;
     const latency = Math.round(performance.now() - scanStart) * 1000;
 
     const result: ScanResult = {
       verdict,
-      confidence: verdict === "malicious" ? 0.8 : 0.95,
+      confidence,
       tier: 1,
       script_results: t0.results,
       total_latency_us: latency,
@@ -248,7 +300,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     };
 
     // Persist to scan history
-    logScan(result, options.content);
+    await logScan(result, options.content);
 
     return result;
   } catch (err) {
@@ -274,7 +326,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       total_tokens: totalTokens,
     };
 
-    logScan(result, options.content);
+    await logScan(result, options.content);
     return result;
   }
 }

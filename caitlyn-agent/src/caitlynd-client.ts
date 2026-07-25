@@ -31,9 +31,11 @@ export interface CaitlyndStatus {
 
 export class CaitlyndClient {
   readonly baseUrl: string;
+  private timeoutMs: number;
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string, timeoutMs: number = 10_000) {
     this.baseUrl = baseUrl.replace(/\/$/, "");
+    this.timeoutMs = timeoutMs;
   }
 
   async scan(content: string, source: string = "caitlyn-agent"): Promise<CaitlyndScanResult> {
@@ -41,6 +43,7 @@ export class CaitlyndClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content, context: { source } }),
+      signal: AbortSignal.timeout(this.timeoutMs),
     });
 
     if (!response.ok) {
@@ -52,15 +55,20 @@ export class CaitlyndClient {
   }
 
   async status(): Promise<CaitlyndStatus> {
-    const response = await fetch(`${this.baseUrl}/v1/status`);
+    const response = await fetch(`${this.baseUrl}/v1/status`, {
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
     if (!response.ok) {
       throw new Error(`caitlynd status failed (${response.status})`);
     }
     return response.json();
   }
+
   async health(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/v1/health`);
+      const response = await fetch(`${this.baseUrl}/v1/health`, {
+        signal: AbortSignal.timeout(3_000),
+      });
       return response.ok;
     } catch {
       return false;
@@ -72,6 +80,7 @@ export class CaitlyndClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pattern }),
+      signal: AbortSignal.timeout(this.timeoutMs),
     });
 
     if (!response.ok) {
