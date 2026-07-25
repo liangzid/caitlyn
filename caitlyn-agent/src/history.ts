@@ -15,12 +15,15 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ScanResult, Verdict } from "./schema.js";
 
+import * as os from "node:os";
+
 // ── Paths ─────────────────────────────────────────────────────────
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const PKG_ROOT = path.resolve(__dirname, "..");
-const HISTORY_PATH = path.join(PKG_ROOT, "scan_history.json");
+const HISTORY_DIR = path.join(os.homedir(), ".caitlyn");
+const HISTORY_PATH = path.join(HISTORY_DIR, "scan_history.json");
+
+// Ensure directory exists at module load
+try { fs.mkdirSync(HISTORY_DIR, { recursive: true }); } catch { /* ignore */ }
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -62,49 +65,77 @@ function hashContent(content: string): string {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
+// ── Write lock (prevents concurrent read-modify-write races) ─────
+
+let writeLock: Promise<void> = Promise.resolve();
+
+function withLock<T>(fn: () => T): Promise<T> {
+  const prev = writeLock;
+  let release!: () => void;
+  writeLock = new Promise<void>((resolve) => { release = resolve; });
+  return prev.then(() => {
+    try {
+      const result = fn();
+      return result;
+    } finally {
+      release();
+    }
+  });
+}
+
 export function loadHistory(): ScanLogEntry[] {
+  if (!fs.existsSync(HISTORY_PATH)) return [];
   try {
-    if (!fs.existsSync(HISTORY_PATH)) return [];
     const raw = fs.readFileSync(HISTORY_PATH, "utf-8");
-    return JSON.parse(raw) as ScanLogEntry[];
-  } catch {
+    if (!raw.trim()) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      console.warn(`⚠️  scan_history.json is not an array — resetting`);
+      return [];
+    }
+    return parsed as ScanLogEntry[];
+  } catch (err) {
+    console.warn(`⚠️  Failed to load scan history: ${err instanceof Error ? err.message : String(err)}`);
     return [];
   }
 }
 
 function saveHistory(entries: ScanLogEntry[]): void {
-  // Keep last 10,000 entries
   const trimmed = entries.slice(-10000);
-  fs.writeFileSync(HISTORY_PATH, JSON.stringify(trimmed, null, 2), "utf-8");
+  const tmpPath = HISTORY_PATH + ".tmp";
+  fs.writeFileSync(tmpPath, JSON.stringify(trimmed, null, 2), "utf-8");
+  fs.renameSync(tmpPath, HISTORY_PATH);
 }
 
 // ── Public API ────────────────────────────────────────────────────
 
-/** Log a scan result to persistent history. */
-export function logScan(
+/** Log a scan result to persistent history (serialized via write lock). */
+export async function logScan(
   result: ScanResult,
   content: string,
   source: string = "caitlyn-agent",
-): void {
-  const entries = loadHistory();
-  const antibodyHits = result.script_results
-    .filter((r) => r.verdict === "malicious")
-    .map((r) => r.antibody_id);
+): Promise<void> {
+  await withLock(() => {
+    const entries = loadHistory();
+    const antibodyHits = result.script_results
+      .filter((r) => r.verdict === "malicious")
+      .map((r) => r.antibody_id);
 
-  entries.push({
-    timestamp: new Date().toISOString(),
-    content_hash: hashContent(content),
-    content_preview: content.slice(0, 120),
-    verdict: result.verdict,
-    confidence: result.confidence,
-    tier: result.tier,
-    total_latency_us: result.total_latency_us,
-    total_tokens: result.total_tokens,
-    antibody_hits: antibodyHits,
-    source,
+    entries.push({
+      timestamp: new Date().toISOString(),
+      content_hash: hashContent(content),
+      content_preview: content.slice(0, 120),
+      verdict: result.verdict,
+      confidence: result.confidence,
+      tier: result.tier,
+      total_latency_us: result.total_latency_us,
+      total_tokens: result.total_tokens,
+      antibody_hits: antibodyHits,
+      source,
+    });
+
+    saveHistory(entries);
   });
-
-  saveHistory(entries);
 }
 
 /** Get recent scan history entries. */
@@ -169,9 +200,13 @@ export function getDashboard(): DashboardStats {
   };
 }
 
-/** Clear all scan history entries. */
-export function clearHistory(): void {
-  fs.writeFileSync(HISTORY_PATH, JSON.stringify([], null, 2), "utf-8");
+/** Clear all scan history entries (serialized via write lock). */
+export async function clearHistory(): Promise<void> {
+  await withLock(() => {
+    const tmpPath = HISTORY_PATH + ".tmp";
+    fs.writeFileSync(tmpPath, JSON.stringify([], null, 2), "utf-8");
+    fs.renameSync(tmpPath, HISTORY_PATH);
+  });
 }
 
 /** Export scan history to a JSON file at the given path. */
