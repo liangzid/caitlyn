@@ -38,5 +38,5 @@ max_entries = 100000
 
 [storage]
 db_path = "./caitlyn.db"
-antibody_dir = "./builtin_antibodies"
+antibody_dir = "./antibodies/skills"
 valset_dir = "./valsets"
