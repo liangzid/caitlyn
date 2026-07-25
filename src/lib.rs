@@ -19,14 +19,17 @@ pub mod storage;
 pub mod surveillance;
 
 use std::sync::Arc;
+use tokio::sync::Mutex;
 use sqlx::SqlitePool;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::config::CaitlynConfig;
 use crate::core::{AntibodyPool, MemoryBank};
 use crate::error::CaitlynResult;
 use crate::surveillance::cost_monitor::CostMonitor;
 use crate::surveillance::scanner::SurveillanceScanner;
+use crate::evolution::{VaccinationPipeline, ValidationSet};
+
 /// The main CAITLYN engine.
 pub struct Caitlyn {
     pub config: CaitlynConfig,
@@ -35,6 +38,8 @@ pub struct Caitlyn {
     pub cost_monitor: Arc<CostMonitor>,
     pub scanner: SurveillanceScanner,
     pub db: Option<SqlitePool>,
+    vaccination_pipeline: Mutex<VaccinationPipeline>,
+    validation_set: ValidationSet,
 }
 
 impl Caitlyn {
@@ -67,6 +72,26 @@ impl Caitlyn {
 
         // Initialize cost monitor
         let cost_monitor = Arc::new(CostMonitor::new(config.vaccination.clone()));
+
+        // Initialize vaccination pipeline
+        let vaccination_pipeline = Mutex::new(VaccinationPipeline::new(config.vaccination.clone()));
+
+        // Load validation set (non-fatal if unavailable)
+        let attacks_path = format!("{}/attacks.jsonl", config.storage.valset_dir);
+        let benign_path = format!("{}/benign.jsonl", config.storage.valset_dir);
+        let validation_set = match ValidationSet::load(&attacks_path, &benign_path) {
+            Ok(vs) => vs,
+            Err(e) => {
+                warn!("Failed to load validation set: {e}, using empty set");
+                ValidationSet::default()
+            }
+        };
+        info!(
+            "Validation set: {} attacks, {} benign",
+            validation_set.attacks.len(),
+            validation_set.benign.len()
+        );
+
         // Initialize surveillance scanner
         let scanner = SurveillanceScanner::new(config.scanning.clone());
 
@@ -77,6 +102,8 @@ impl Caitlyn {
             cost_monitor,
             scanner,
             db: Some(db),
+            vaccination_pipeline,
+            validation_set,
         })
     }
 
@@ -104,9 +131,40 @@ impl Caitlyn {
     }
 
     /// Manually trigger vaccination for a specific pattern.
-    pub async fn vaccinate(&self, _pattern_hash: &str) -> CaitlynResult<()> {
-        // TODO: Phase 3 implementation
-        Ok(())
+    ///
+    /// Runs SHM → Affinity Maturation → Clonal Selection.
+    /// Returns Ok if vaccination was attempted (pipeline may skip if pattern not found).
+    pub async fn vaccinate(
+        &self,
+        pattern_hash: &str,
+        llm: Arc<dyn crate::llm::LlmProvider>,
+    ) -> CaitlynResult<()> {
+        let mut pipeline = self.vaccination_pipeline.lock().await;
+        match pipeline
+            .vaccinate(
+                pattern_hash,
+                &self.antibody_pool,
+                &self.memory_bank,
+                &self.cost_monitor,
+                &*llm,
+                &self.validation_set,
+            )
+            .await
+        {
+            Ok(Some(antibody)) => {
+                info!(
+                    "Vaccination produced antibody '{}' (precision={:.2})",
+                    antibody.id,
+                    antibody.stats.precision()
+                );
+                Ok(())
+            }
+            Ok(None) => {
+                info!("Vaccination skipped for pattern '{}'", pattern_hash);
+                Ok(())
+            }
+            Err(e) => Err(e),
+        }
     }
 
     /// Run immune tolerance pruning.

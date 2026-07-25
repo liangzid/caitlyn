@@ -122,14 +122,14 @@ impl AntibodyPool {
 
         // Exponential moving average for latency and tokens
         if ab.stats.total_scans == 1 {
-            ab.stats.avg_latency_us = latency_us;
-            ab.stats.avg_tokens = tokens;
+            ab.stats.avg_latency_us = latency_us as f64;
+            ab.stats.avg_tokens = tokens as f64;
         } else {
             let alpha = 0.1;
             ab.stats.avg_latency_us =
-                ((1.0 - alpha) * ab.stats.avg_latency_us as f64 + alpha * latency_us as f64) as u64;
+                (1.0 - alpha) * ab.stats.avg_latency_us + alpha * latency_us as f64;
             ab.stats.avg_tokens =
-                ((1.0 - alpha) * ab.stats.avg_tokens as f64 + alpha * tokens as f64) as u64;
+                (1.0 - alpha) * ab.stats.avg_tokens + alpha * tokens as f64;
         }
 
         Ok(())
@@ -176,6 +176,7 @@ mod tests {
             generation: 0,
             parent_id: None,
             affinity_score: 0.0,
+            deps: vec![],
             stats: Default::default(),
             status: AntibodyStatus::Active,
             created_at: Utc::now(),

@@ -198,6 +198,7 @@ mod tests {
             generation: 1,
             parent_id: Some("parent".into()),
             affinity_score: 0.0,
+            deps: vec![],
             stats: Default::default(),
             status: AntibodyStatus::Candidate,
             created_at: chrono::Utc::now(),

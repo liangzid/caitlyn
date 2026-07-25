@@ -25,93 +25,128 @@ pub async fn init_db(config: &StorageConfig) -> CaitlynResult<SqlitePool> {
 }
 
 async fn run_migrations(pool: &SqlitePool) -> CaitlynResult<()> {
+    // Schema versioning
     sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS memory_entries (
-            id TEXT PRIMARY KEY,
-            signature TEXT NOT NULL,
-            signature_type TEXT NOT NULL CHECK(signature_type IN ('exact','regex','semantic')),
-            antibody_id TEXT NOT NULL,
-            antigen_id TEXT,
-            category TEXT NOT NULL,
-            hit_count INTEGER DEFAULT 0,
-            last_hit TEXT,
-            embedding BLOB,
-            created_at TEXT DEFAULT (datetime('now'))
-        );
+        "CREATE TABLE IF NOT EXISTS schema_version (
+            version INTEGER PRIMARY KEY,
+            applied_at TEXT DEFAULT (datetime('now'))
+        )"
+    ).execute(pool).await?;
 
-        CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
-            signature,
-            content='memory_entries',
-            content_rowid='rowid'
-        );
-        "#,
-    )
-    .execute(pool)
-    .await?;
+    let current: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(MAX(version), 0) FROM schema_version"
+    ).fetch_one(pool).await?;
 
-    sqlx::query(
-        r#"
-        CREATE TABLE IF NOT EXISTS antibody_stats (
-            antibody_id TEXT PRIMARY KEY,
-            true_positives INTEGER DEFAULT 0,
-            false_positives INTEGER DEFAULT 0,
-            true_negatives INTEGER DEFAULT 0,
-            false_negatives INTEGER DEFAULT 0,
-            total_scans INTEGER DEFAULT 0,
-            avg_latency_us INTEGER DEFAULT 0,
-            avg_tokens INTEGER DEFAULT 0,
-            affinity_score REAL DEFAULT 0.0,
-            updated_at TEXT DEFAULT (datetime('now'))
-        );
+    if current < 1 {
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS memory_entries (
+                id TEXT PRIMARY KEY,
+                signature TEXT NOT NULL,
+                signature_type TEXT NOT NULL CHECK(signature_type IN ('exact','regex','semantic')),
+                antibody_id TEXT NOT NULL,
+                antigen_id TEXT,
+                category TEXT NOT NULL,
+                hit_count INTEGER DEFAULT 0,
+                last_hit TEXT,
+                embedding BLOB,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
 
-        CREATE TABLE IF NOT EXISTS cost_records (
-            pattern_hash TEXT PRIMARY KEY,
-            sample TEXT NOT NULL,
-            category TEXT NOT NULL,
-            resolved_by TEXT NOT NULL,  -- JSON array
-            call_count INTEGER DEFAULT 0,
-            total_latency_us INTEGER DEFAULT 0,
-            total_tokens INTEGER DEFAULT 0,
-            success_count INTEGER DEFAULT 0,
-            failure_count INTEGER DEFAULT 0,
-            first_seen TEXT,
-            last_seen TEXT,
-            vaccinated INTEGER DEFAULT 0,
-            vaccine_antibody_id TEXT,
-            created_at TEXT DEFAULT (datetime('now'))
-        );
+            CREATE INDEX IF NOT EXISTS idx_memory_antibody ON memory_entries(antibody_id);
+            CREATE INDEX IF NOT EXISTS idx_memory_category ON memory_entries(category);
 
-        CREATE TABLE IF NOT EXISTS evolution_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            pattern_hash TEXT NOT NULL,
-            parent_antibody_id TEXT,
-            child_antibody_ids TEXT,  -- JSON array
-            shm_temperature REAL,
-            survivors_count INTEGER,
-            best_affinity REAL,
-            total_latency_ms INTEGER,
-            created_at TEXT DEFAULT (datetime('now'))
-        );
+            CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
+                signature,
+                content='memory_entries',
+                content_rowid='rowid'
+            );
 
-        CREATE TABLE IF NOT EXISTS antigens (
-            id TEXT PRIMARY KEY,
-            content TEXT NOT NULL,
-            source_type TEXT NOT NULL,
-            category TEXT NOT NULL,
-            escaped_antibodies TEXT,  -- JSON array
-            resolved_by TEXT,
-            created_at TEXT DEFAULT (datetime('now'))
-        );
-        "#,
-    )
-    .execute(pool)
-    .await?;
+            -- FTS sync triggers
+            CREATE TRIGGER IF NOT EXISTS memory_fts_insert AFTER INSERT ON memory_entries BEGIN
+                INSERT INTO memory_fts(rowid, signature) VALUES (new.rowid, new.signature);
+            END;
 
-    info!("Database migrations complete");
+            CREATE TRIGGER IF NOT EXISTS memory_fts_delete AFTER DELETE ON memory_entries BEGIN
+                INSERT INTO memory_fts(memory_fts, rowid, signature) VALUES ('delete', old.rowid, old.signature);
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS memory_fts_update AFTER UPDATE ON memory_entries BEGIN
+                INSERT INTO memory_fts(memory_fts, rowid, signature) VALUES ('delete', old.rowid, old.signature);
+                INSERT INTO memory_fts(rowid, signature) VALUES (new.rowid, new.signature);
+            END;
+            "#
+        ).execute(pool).await?;
+
+        sqlx::query("INSERT INTO schema_version (version) VALUES (1)").execute(pool).await?;
+    }
+
+    if current < 2 {
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS antibody_stats (
+                antibody_id TEXT PRIMARY KEY,
+                true_positives INTEGER DEFAULT 0,
+                false_positives INTEGER DEFAULT 0,
+                true_negatives INTEGER DEFAULT 0,
+                false_negatives INTEGER DEFAULT 0,
+                total_scans INTEGER DEFAULT 0,
+                avg_latency_us INTEGER DEFAULT 0,
+                avg_tokens INTEGER DEFAULT 0,
+                affinity_score REAL DEFAULT 0.0,
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS cost_records (
+                pattern_hash TEXT PRIMARY KEY,
+                sample TEXT NOT NULL,
+                category TEXT NOT NULL,
+                resolved_by TEXT NOT NULL,
+                call_count INTEGER DEFAULT 0,
+                total_latency_us INTEGER DEFAULT 0,
+                total_tokens INTEGER DEFAULT 0,
+                success_count INTEGER DEFAULT 0,
+                failure_count INTEGER DEFAULT 0,
+                first_seen TEXT,
+                last_seen TEXT,
+                vaccinated INTEGER DEFAULT 0,
+                vaccine_antibody_id TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS evolution_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pattern_hash TEXT NOT NULL,
+                parent_antibody_id TEXT,
+                child_antibody_ids TEXT,
+                shm_temperature REAL,
+                survivors_count INTEGER,
+                best_affinity REAL,
+                total_latency_ms INTEGER,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS antigens (
+                id TEXT PRIMARY KEY,
+                content TEXT NOT NULL,
+                source_type TEXT NOT NULL,
+                category TEXT NOT NULL,
+                escaped_antibodies TEXT,
+                resolved_by TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_cost_category ON cost_records(category);
+            CREATE INDEX IF NOT EXISTS idx_antigen_category ON antigens(category);
+            "#
+        ).execute(pool).await?;
+
+        sqlx::query("INSERT INTO schema_version (version) VALUES (2)").execute(pool).await?;
+    }
+
+    info!("Database migrations complete (v{})", current.max(2));
     Ok(())
 }
-
 /// Persist a memory entry to the database.
 pub async fn insert_memory_entry(pool: &SqlitePool, entry: &crate::core::MemoryEntry) -> CaitlynResult<()> {
     sqlx::query(

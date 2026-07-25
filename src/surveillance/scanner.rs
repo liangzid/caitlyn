@@ -38,8 +38,8 @@ impl SurveillanceScanner {
         // === TIER 0: Memory Fast-Path ===
         let memory_start = Instant::now();
         let memory_match = memory_bank.check(content).await;
-        let _memory_latency = memory_start.elapsed().as_micros() as u64;
-
+        let memory_latency = memory_start.elapsed().as_micros() as u64;
+        debug!("Tier 0 memory check: {}μs", memory_latency);
         if let crate::core::memory::MemoryMatch::Exact(ref entry) = memory_match {
             return Ok(ScanResult {
                 verdict: Verdict::Malicious,
@@ -67,6 +67,7 @@ impl SurveillanceScanner {
                     Arc::clone(&llm),
                     0.3, // Low temperature for specialized antibodies
                     self.config.tier1_timeout_ms,
+                    self.config.max_parallel_tier1,
                 )
                 .await;
 
@@ -105,6 +106,7 @@ impl SurveillanceScanner {
                     Arc::clone(&llm),
                     0.5, // Moderate temperature for general antibodies
                     self.config.tier2_timeout_ms,
+                    self.config.max_parallel_tier2,
                 )
                 .await;
 
@@ -163,7 +165,7 @@ impl SurveillanceScanner {
         })
     }
 
-    /// Run a batch of antibodies in parallel with timeout.
+    /// Run a batch of antibodies in parallel with a concurrency limit.
     async fn run_antibody_batch(
         &self,
         antibodies: &[crate::core::Antibody],
@@ -172,15 +174,19 @@ impl SurveillanceScanner {
         llm: Arc<dyn LlmProvider>,
         temperature: f64,
         _timeout_ms: u64,
+        max_parallel: usize,
     ) -> Vec<AntibodyResult> {
-        let mut handles = Vec::new();
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(max_parallel.max(1)));
+        let mut handles = Vec::with_capacity(antibodies.len());
 
         for antibody in antibodies {
             let content = content.to_string();
             let antibody = antibody.clone();
             let llm = Arc::clone(&llm);
+            let permit = Arc::clone(&semaphore);
 
             let handle = tokio::spawn(async move {
+                let _permit = permit.acquire().await;
                 let start = Instant::now();
                 let result = llm
                     .scan(&antibody.prompt, &content, temperature)
@@ -200,7 +206,7 @@ impl SurveillanceScanner {
                         matched_signatures: output.matched_patterns,
                         tier: antibody.tier,
                         latency_us: start.elapsed().as_micros() as u64,
-                        tokens_used: 0, // TODO: track actual token usage
+                        tokens_used: output.tokens_used,
                     },
                     Err(e) => {
                         warn!(
@@ -210,7 +216,7 @@ impl SurveillanceScanner {
                         AntibodyResult {
                             antibody_id: antibody.id.clone(),
                             antibody_name: antibody.name.clone(),
-                            verdict: Verdict::Safe, // Fail open
+                            verdict: Verdict::Suspicious,
                             confidence: 0.0,
                             reasoning: format!("Scan error: {e}"),
                             matched_signatures: vec![],
@@ -225,7 +231,6 @@ impl SurveillanceScanner {
             handles.push(handle);
         }
 
-        // Wait for all with timeout
         let results = futures::future::join_all(handles).await;
         results
             .into_iter()

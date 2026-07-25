@@ -15,13 +15,13 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info};
 
+use crate::llm::LlmProvider;
 use crate::Caitlyn;
 
 // ── JSON-RPC Types ────────────────────────────────────────────
 
 #[derive(Debug, Deserialize)]
 struct JsonRpcRequest {
-    #[allow(dead_code)] // Verified on deserialization
     jsonrpc: String,
     #[serde(default)]
     id: Option<Value>,
@@ -184,8 +184,7 @@ fn caitlyn_vaccinate_tool() -> ToolDef {
 ///
 /// Reads JSON-RPC requests from stdin, processes them,
 /// and writes responses to stdout. Stderr is reserved for logging.
-pub async fn serve_stdio(caitlyn: Arc<Caitlyn>) -> anyhow::Result<()> {
-    info!("CAITLYN MCP server starting (stdio mode)");
+pub async fn serve_stdio(caitlyn: Arc<Caitlyn>, llm: Arc<dyn LlmProvider>) -> anyhow::Result<()> {
 
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
@@ -220,7 +219,7 @@ pub async fn serve_stdio(caitlyn: Arc<Caitlyn>) -> anyhow::Result<()> {
             }
         };
 
-        let response = handle_request(&request, &caitlyn).await;
+        let response = handle_request(&request, &caitlyn, &llm).await;
         write_response(&stdout, &response).await?;
     }
 
@@ -228,7 +227,20 @@ pub async fn serve_stdio(caitlyn: Arc<Caitlyn>) -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn handle_request(req: &JsonRpcRequest, caitlyn: &Arc<Caitlyn>) -> JsonRpcResponse {
+async fn handle_request(req: &JsonRpcRequest, caitlyn: &Arc<Caitlyn>, llm: &Arc<dyn LlmProvider>) -> JsonRpcResponse {
+    if req.jsonrpc != "2.0" {
+        return JsonRpcResponse {
+            jsonrpc: "2.0".into(),
+            id: req.id.clone(),
+            result: None,
+            error: Some(JsonRpcError {
+                code: -32600,
+                message: "Invalid Request: jsonrpc must be \"2.0\"".into(),
+                data: None,
+            }),
+        };
+    }
+
     match req.method.as_str() {
         "initialize" => handle_initialize(req),
         "notifications/initialized" => {
@@ -241,7 +253,7 @@ async fn handle_request(req: &JsonRpcRequest, caitlyn: &Arc<Caitlyn>) -> JsonRpc
             }
         }
         "tools/list" => handle_tools_list(req),
-        "tools/call" => handle_tools_call(req, caitlyn).await,
+        "tools/call" => handle_tools_call(req, caitlyn, llm).await,
         "ping" => JsonRpcResponse {
             jsonrpc: "2.0".into(),
             id: req.id.clone(),
@@ -300,7 +312,7 @@ fn handle_tools_list(req: &JsonRpcRequest) -> JsonRpcResponse {
     }
 }
 
-async fn handle_tools_call(req: &JsonRpcRequest, caitlyn: &Arc<Caitlyn>) -> JsonRpcResponse {
+async fn handle_tools_call(req: &JsonRpcRequest, caitlyn: &Arc<Caitlyn>, llm: &Arc<dyn LlmProvider>) -> JsonRpcResponse {
     let params: CallToolParams = match req.params.as_ref().and_then(|p| {
         serde_json::from_value(p.clone()).ok()
     }) {
@@ -320,9 +332,9 @@ async fn handle_tools_call(req: &JsonRpcRequest, caitlyn: &Arc<Caitlyn>) -> Json
     };
 
     let result = match params.name.as_str() {
-        "caitlyn_scan" => handle_caitlyn_scan(&params.arguments, caitlyn).await,
+        "caitlyn_scan" => handle_caitlyn_scan(&params.arguments, caitlyn, llm).await,
         "caitlyn_status" => handle_caitlyn_status(caitlyn).await,
-        "caitlyn_vaccinate" => handle_caitlyn_vaccinate(&params.arguments, caitlyn).await,
+        "caitlyn_vaccinate" => handle_caitlyn_vaccinate(&params.arguments, caitlyn, llm).await,
         _ => Err(format!("Unknown tool: {}", params.name)),
     };
 
@@ -354,7 +366,7 @@ async fn handle_tools_call(req: &JsonRpcRequest, caitlyn: &Arc<Caitlyn>) -> Json
     }
 }
 
-async fn handle_caitlyn_scan(args: &Value, caitlyn: &Arc<Caitlyn>) -> Result<String, String> {
+async fn handle_caitlyn_scan(args: &Value, caitlyn: &Arc<Caitlyn>, llm: &Arc<dyn LlmProvider>) -> Result<String, String> {
     let content = args.get("content")
         .and_then(|v| v.as_str())
         .ok_or("Missing required field: content")?;
@@ -367,36 +379,23 @@ async fn handle_caitlyn_scan(args: &Value, caitlyn: &Arc<Caitlyn>) -> Result<Str
         .and_then(|v| v.as_str())
         .map(String::from);
 
+    let history_snippet = args.get("history_snippet")
+        .and_then(|v| v.as_str())
+        .map(String::from);
+
     let mode = args.get("mode")
         .and_then(|v| v.as_str())
         .unwrap_or("fast");
 
-    let _context = crate::core::ScanContext {
+    let context = crate::core::ScanContext {
         source: source.to_string(),
         agent_task,
-        history_snippet: None,
+        history_snippet,
         metadata: serde_json::json!({"mode": mode}),
     };
 
-    // For MCP fast mode, do memory-only scan
-    let memory_match = caitlyn.memory_bank.check(content).await;
-    if let crate::core::memory::MemoryMatch::Exact(ref entry) = memory_match {
-        let result = serde_json::json!({
-            "verdict": "malicious",
-            "confidence": 1.0,
-            "matched_signature": entry.signature,
-            "source_antibody": entry.antibody_id,
-            "method": "memory_fast_path",
-        });
-        return Ok(serde_json::to_string_pretty(&result).unwrap_or_default());
-    }
-
-    let result = serde_json::json!({
-        "verdict": "safe",
-        "confidence": 0.5,
-        "method": "memory_fast_path",
-        "note": "No known signatures matched. For full LLM scan, use mode=full with LLM provider configured."
-    });
+    let result = caitlyn.scan(content, &context, Arc::clone(llm)).await
+        .map_err(|e| format!("Scan failed: {e}"))?;
 
     Ok(serde_json::to_string_pretty(&result).unwrap_or_default())
 }
@@ -412,15 +411,17 @@ async fn handle_caitlyn_status(caitlyn: &Arc<Caitlyn>) -> Result<String, String>
     Ok(serde_json::to_string_pretty(&json).unwrap_or_default())
 }
 
-async fn handle_caitlyn_vaccinate(args: &Value, _caitlyn: &Arc<Caitlyn>) -> Result<String, String> {
-    let _description = args.get("pattern_description")
+async fn handle_caitlyn_vaccinate(args: &Value, caitlyn: &Arc<Caitlyn>, llm: &Arc<dyn LlmProvider>) -> Result<String, String> {
+    let pattern_description = args.get("pattern_description")
         .and_then(|v| v.as_str())
-        .unwrap_or("unknown");
+        .ok_or("Missing required field: pattern_description")?;
 
-    // In MCP mode, vaccination is manual
+    caitlyn.vaccinate(pattern_description, Arc::clone(llm)).await
+        .map_err(|e| format!("Vaccination failed: {e}"))?;
+
     let json = serde_json::json!({
-        "status": "acknowledged",
-        "message": "Vaccination request received. The pattern will be analyzed and a specialized antibody will be generated if cost thresholds are met.",
+        "status": "completed",
+        "message": format!("Vaccination initiated for pattern: {pattern_description}"),
     });
     Ok(serde_json::to_string_pretty(&json).unwrap_or_default())
 }

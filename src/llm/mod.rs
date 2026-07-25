@@ -10,6 +10,7 @@ pub struct LlmScanOutput {
     pub confidence: f64,     // 0.0 - 1.0
     pub reasoning: String,
     pub matched_patterns: Vec<String>,
+    pub tokens_used: u64,
 }
 
 /// Generic LLM provider trait.

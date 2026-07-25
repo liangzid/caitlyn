@@ -46,4 +46,10 @@ impl From<serde_yaml::Error> for CaitlynError {
     }
 }
 
+impl From<anyhow::Error> for CaitlynError {
+    fn from(e: anyhow::Error) -> Self {
+        CaitlynError::Scan(e.to_string())
+    }
+}
+
 pub type CaitlynResult<T> = Result<T, CaitlynError>;

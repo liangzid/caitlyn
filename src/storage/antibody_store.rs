@@ -4,7 +4,7 @@ use tracing::info;
 use crate::core::{Antibody, AttackCategory, DefenseTier};
 use crate::error::{CaitlynError, CaitlynResult};
 
-/// Load antibodies from YAML files in a directory.
+/// Load antibodies from directory-based and flat YAML files.
 pub async fn load_antibodies(antibody_dir: &str) -> CaitlynResult<Vec<Antibody>> {
     let dir = PathBuf::from(antibody_dir);
     if !dir.exists() {
@@ -14,33 +14,59 @@ pub async fn load_antibodies(antibody_dir: &str) -> CaitlynResult<Vec<Antibody>>
     let mut antibodies = Vec::new();
 
     // Walk the directory recursively
-    load_from_dir(&dir, &mut antibodies)?;
+    let (skill_count, flat_count) = load_from_dir(&dir, &mut antibodies)?;
 
     info!(
-        "Loaded {} antibodies from {}",
+        "Loaded {} antibodies from {} ({} skill dirs, {} flat YAMLs)",
         antibodies.len(),
-        antibody_dir
+        antibody_dir,
+        skill_count,
+        flat_count
     );
     Ok(antibodies)
 }
 
-fn load_from_dir(dir: &PathBuf, antibodies: &mut Vec<Antibody>) -> CaitlynResult<()> {
+fn load_from_dir(dir: &PathBuf, antibodies: &mut Vec<Antibody>) -> CaitlynResult<(usize, usize)> {
+    let mut skill_count = 0;
+    let mut flat_count = 0;
+
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
 
         if path.is_dir() {
-            load_from_dir(&path, antibodies)?;
+            // Check if directory contains skill.yaml (new format)
+            let skill_yaml = path.join("skill.yaml");
+            if skill_yaml.exists() {
+                match load_single_antibody(&skill_yaml) {
+                    Ok(ab) => {
+                        antibodies.push(ab);
+                        skill_count += 1;
+                    }
+                    Err(e) => {
+                        tracing::warn!("Failed to load antibody from {:?}: {e}", skill_yaml);
+                    }
+                }
+            } else {
+                // Recurse into subdirectories that don't have skill.yaml
+                let (sub_skill, sub_flat) = load_from_dir(&path, antibodies)?;
+                skill_count += sub_skill;
+                flat_count += sub_flat;
+            }
         } else if path.extension().map_or(false, |e| e == "yaml" || e == "yml") {
+            // Old format: flat YAML file (backward compat)
             match load_single_antibody(&path) {
-                Ok(ab) => antibodies.push(ab),
+                Ok(ab) => {
+                    antibodies.push(ab);
+                    flat_count += 1;
+                }
                 Err(e) => {
                     tracing::warn!("Failed to load antibody from {:?}: {e}", path);
                 }
             }
         }
     }
-    Ok(())
+    Ok((skill_count, flat_count))
 }
 
 fn load_single_antibody(path: &PathBuf) -> CaitlynResult<Antibody> {
@@ -83,7 +109,8 @@ struct AntibodyFile {
     #[serde(default)]
     tools: Vec<String>,
     #[serde(default)]
-    memory_signatures: Vec<SignatureFile>,
+    #[serde(alias = "memory_signatures")]
+    signatures: Vec<SignatureFile>,
     threshold: f64,
     #[serde(default)]
     generation: u32,
@@ -91,13 +118,16 @@ struct AntibodyFile {
     parent_id: Option<String>,
     #[serde(default)]
     affinity_score: f64,
+    #[serde(default)]
+    deps: Vec<String>,
 }
-
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct SignatureFile {
     pattern: String,
     #[serde(rename = "type")]
     sig_type: String,
+    #[serde(default)]
+    label: Option<String>,
 }
 
 impl From<&Antibody> for AntibodyFile {
@@ -118,7 +148,7 @@ impl From<&Antibody> for AntibodyFile {
             .to_string(),
             tier: ab.tier as u8,
             tools: ab.tools.clone(),
-            memory_signatures: ab
+            signatures: ab
                 .memory_signatures
                 .iter()
                 .map(|s| SignatureFile {
@@ -129,12 +159,14 @@ impl From<&Antibody> for AntibodyFile {
                         crate::core::SignatureType::Semantic => "semantic",
                     }
                     .to_string(),
+                    label: s.label.clone(),
                 })
                 .collect(),
             threshold: ab.threshold,
             generation: ab.generation,
             parent_id: ab.parent_id.clone(),
             affinity_score: ab.affinity_score,
+            deps: ab.deps.clone(),
         }
     }
 }
@@ -162,7 +194,7 @@ impl From<AntibodyFile> for Antibody {
             },
             tools: f.tools,
             memory_signatures: f
-                .memory_signatures
+                .signatures
                 .into_iter()
                 .map(|s| crate::core::Signature {
                     pattern: s.pattern,
@@ -171,12 +203,14 @@ impl From<AntibodyFile> for Antibody {
                         "semantic" => crate::core::SignatureType::Semantic,
                         _ => crate::core::SignatureType::Exact,
                     },
+                    label: s.label,
                 })
                 .collect(),
             threshold: f.threshold,
             generation: f.generation,
             parent_id: f.parent_id,
             affinity_score: f.affinity_score,
+            deps: f.deps,
             stats: Default::default(),
             status: crate::core::AntibodyStatus::Active,
             created_at: chrono::Utc::now(),

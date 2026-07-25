@@ -74,6 +74,9 @@ pub struct Signature {
     pub pattern: String,
     #[serde(rename = "type")]
     pub sig_type: SignatureType,
+    /// Optional human-readable label for tracing/logging
+    #[serde(default)]
+    pub label: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -94,10 +97,10 @@ pub struct AntibodyStats {
     pub true_negatives: u64,
     pub false_negatives: u64,
     pub total_scans: u64,
-    /// Average latency in microseconds
-    pub avg_latency_us: u64,
-    /// Average token cost per scan
-    pub avg_tokens: u64,
+    /// Average latency in microseconds (internally f64 for EMA precision)
+    pub avg_latency_us: f64,
+    /// Average token cost per scan (internally f64 for EMA precision)
+    pub avg_tokens: f64,
 }
 
 impl AntibodyStats {
@@ -136,7 +139,9 @@ pub struct Antibody {
     /// Fast-path signatures extracted from this antibody's detections
     #[serde(default)]
     pub memory_signatures: Vec<Signature>,
-    /// Confidence threshold for MALICIOUS verdict (0.0-1.0)
+    /// Runtime dependencies needed by this antibody (e.g. node, tsx)
+    #[serde(default)]
+    pub deps: Vec<String>,
     pub threshold: f64,
     /// SHM generation number (0 = original/builtin)
     #[serde(default)]

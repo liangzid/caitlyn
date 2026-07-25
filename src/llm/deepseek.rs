@@ -60,7 +60,7 @@ impl DeepSeekProvider {
         user_prompt: &str,
         temperature: f64,
         response_format: Option<Value>,
-    ) -> CaitlynResult<String> {
+    ) -> CaitlynResult<(String, u64)> {
         let url = format!("{}/v1/chat/completions", self.base_url.trim_end_matches('/'));
 
         let messages = vec![
@@ -78,8 +78,11 @@ impl DeepSeekProvider {
             "model": self.model,
             "messages": messages,
             "temperature": temperature,
-            "max_tokens": 2000,
         });
+        let max_tokens = std::env::var("CAITLYN_MAX_TOKENS")
+            .ok().and_then(|v| v.parse::<u32>().ok())
+            .unwrap_or(4096);
+        body["max_tokens"] = serde_json::json!(max_tokens);
 
         if let Some(format) = response_format {
             body["response_format"] = format;
@@ -115,10 +118,17 @@ impl DeepSeekProvider {
 
         let content = json["choices"][0]["message"]["content"]
             .as_str()
-            .unwrap_or("")
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| CaitlynError::LlmProvider(
+                "LLM returned empty response".into()
+            ))?
             .to_string();
 
-        Ok(content)
+        let tokens_used = json["usage"]["total_tokens"]
+            .as_u64()
+            .unwrap_or(0);
+
+        Ok((content, tokens_used))
     }
 }
 
@@ -143,12 +153,12 @@ impl LlmProvider for DeepSeekProvider {
             "type": "json_object"
         });
 
-        let raw_output = self
+        let (raw_output, tokens_used) = self
             .chat_completion(system_prompt, &full_user_prompt, temperature, Some(response_format))
             .await?;
 
         // Parse structured JSON output
-        let parsed: LlmScanOutput = serde_json::from_str(&raw_output).unwrap_or_else(|e| {
+        let mut parsed: LlmScanOutput = serde_json::from_str(&raw_output).unwrap_or_else(|e| {
             // Fallback: try to extract JSON from the response
             debug!("Failed to parse structured output, attempting extraction: {e}");
             LlmScanOutput {
@@ -156,8 +166,11 @@ impl LlmProvider for DeepSeekProvider {
                 confidence: 0.5,
                 reasoning: raw_output,
                 matched_patterns: vec![],
+                tokens_used,
             }
         });
+
+        parsed.tokens_used = tokens_used;
 
         Ok(parsed)
     }
@@ -168,8 +181,10 @@ impl LlmProvider for DeepSeekProvider {
         user_prompt: &str,
         temperature: f64,
     ) -> CaitlynResult<String> {
-        self.chat_completion(system_prompt, user_prompt, temperature, None)
-            .await
+        let (content, _tokens) =
+            self.chat_completion(system_prompt, user_prompt, temperature, None)
+                .await?;
+        Ok(content)
     }
 
     fn name(&self) -> &str {

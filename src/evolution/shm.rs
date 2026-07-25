@@ -204,6 +204,7 @@ fn parse_variants(raw: &str, parent: &Antibody) -> CaitlynResult<Vec<Antibody>> 
                 .map(|p| crate::core::Signature {
                     pattern: p,
                     sig_type: crate::core::SignatureType::Exact,
+                    label: None,
                 })
                 .collect(),
             threshold: v.threshold.clamp(0.3, 0.95),
@@ -211,6 +212,7 @@ fn parse_variants(raw: &str, parent: &Antibody) -> CaitlynResult<Vec<Antibody>> 
             parent_id: Some(parent.id.clone()),
             affinity_score: 0.0,
             stats: Default::default(),
+            deps: parent.deps.clone(),
             status: AntibodyStatus::Candidate,
             created_at: now,
             last_used_at: now,
@@ -320,6 +322,7 @@ mod tests {
             generation: 0,
             parent_id: None,
             affinity_score: 0.0,
+            deps: vec![],
             stats: Default::default(),
             status: AntibodyStatus::Active,
             created_at: chrono::Utc::now(),

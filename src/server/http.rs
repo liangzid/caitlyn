@@ -1,10 +1,12 @@
 use std::sync::Arc;
+use std::time::Duration;
 use axum::{
     extract::State,
     http::StatusCode,
     routing::{get, post},
     Json, Router,
 };
+use tower_http::cors::CorsLayer;
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -17,7 +19,6 @@ pub struct AppState {
     pub llm: Arc<dyn LlmProvider>,
 }
 
-/// Build the HTTP router.
 pub fn build_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/v1/health", get(health))
@@ -25,6 +26,7 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/v1/antibodies", get(list_antibodies))
         .route("/v1/cost/stats", get(cost_stats))
         .route("/v1/status", get(status))
+        .layer(CorsLayer::permissive())
         .with_state(state)
 }
 
@@ -84,11 +86,15 @@ async fn scan(
         metadata: serde_json::json!({"mode": req.mode}),
     };
 
-    let result = state
-        .caitlyn
-        .scan(&req.content, &context, Arc::clone(&state.llm))
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let result = tokio::time::timeout(
+        Duration::from_secs(30),
+        state
+            .caitlyn
+            .scan(&req.content, &context, Arc::clone(&state.llm)),
+    )
+    .await
+    .map_err(|_| (StatusCode::GATEWAY_TIMEOUT, "scan timed out after 30s".into()))?
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok(Json(ScanResponse {
         verdict: match result.verdict {
