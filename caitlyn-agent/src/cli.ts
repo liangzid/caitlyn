@@ -85,9 +85,6 @@ async function makeLlmCallSafe(): Promise<LlmCallFn> {
 
 function checkDependencies(): string[] {
   const missing: string[] = [];
-  try {
-    require.resolve("node:child_process");
-  } catch { missing.push("node (built-in modules)"); }
   return missing;
 }
 
@@ -208,7 +205,7 @@ async function main() {
           rl.question("Confirm? [y/N]: ", (a) => { rl.close(); resolve(a.trim().toLowerCase()); });
         });
         if (answer === "y" || answer === "yes") {
-          clearHistory();
+          await clearHistory();
           console.log("✅ Scan history cleared.");
         } else {
           console.log("Cancelled.");
