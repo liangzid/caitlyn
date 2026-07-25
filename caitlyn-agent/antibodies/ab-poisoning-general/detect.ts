@@ -2,11 +2,12 @@
  * detect.ts — General Poisoning Detector (Tier 0)
  *
  * Fast heuristic/regex-based detection of tool output/MCP response poisoning.
- * Reads content from env var CAITLYN_SCAN_CONTENT.
+ * Reads content from stdin.
  * Outputs a single JSON line to stdout: {"verdict":"malicious"|"benign","confidence":0.0-1.0,"reason":"..."}
  */
 
-const content = process.env.CAITLYN_SCAN_CONTENT ?? "";
+import { readFileSync } from "node:fs";
+const content = readFileSync(0, "utf-8");
 
 // ── Signature patterns ──────────────────────────────────────────
 const signatures: Array<{ pattern: RegExp; weight: number; label: string }> = [
