@@ -35,20 +35,22 @@ fn load_from_dir(dir: &PathBuf, antibodies: &mut Vec<Antibody>) -> CaitlynResult
         let path = entry.path();
 
         if path.is_dir() {
-            // Check if directory contains skill.yaml (new format)
+            // Check if directory contains config.yaml or skill.yaml (new format)
+            let config_yaml = path.join("config.yaml");
             let skill_yaml = path.join("skill.yaml");
-            if skill_yaml.exists() {
-                match load_single_antibody(&skill_yaml) {
+            if config_yaml.exists() || skill_yaml.exists() {
+                let yaml_path = if config_yaml.exists() { config_yaml } else { skill_yaml };
+                match load_single_antibody(&yaml_path) {
                     Ok(ab) => {
                         antibodies.push(ab);
                         skill_count += 1;
                     }
                     Err(e) => {
-                        tracing::warn!("Failed to load antibody from {:?}: {e}", skill_yaml);
+                        tracing::warn!("Failed to load antibody from {:?}: {e}", yaml_path);
                     }
                 }
             } else {
-                // Recurse into subdirectories that don't have skill.yaml
+                // Recurse into subdirectories that don't have config/skill.yaml
                 let (sub_skill, sub_flat) = load_from_dir(&path, antibodies)?;
                 skill_count += sub_skill;
                 flat_count += sub_flat;

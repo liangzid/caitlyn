@@ -17,12 +17,15 @@ export interface AntibodyConfig {
   name: string;
   parent_id: string | null;
   category: "injection" | "jailbreak" | "poisoning" | "exfiltration";
-  tier: 0 | 1;
+  tier: 0 | 1 | 2;
   threshold: number;
+  description: string;
+  affinity_score: number;
   created_at: string;
   generation: number;
   stats: AntibodyStats;
   deps: string[];
+  signatures: Array<{ pattern: string; type: string; label: string }>;
 }
 
 export interface AntibodyEntry {

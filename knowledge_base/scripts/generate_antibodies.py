@@ -36,7 +36,7 @@ from typing import Any, Optional
 SCRIPT_DIR = Path(__file__).resolve().parent
 KB_DIR = SCRIPT_DIR.parent
 DEFAULT_ANNOTATIONS = KB_DIR / "annotations.jsonl"
-DEFAULT_OUTPUT_DIR = SCRIPT_DIR.parent.parent / "builtin_antibodies"
+DEFAULT_OUTPUT_DIR = SCRIPT_DIR.parent.parent / "antibodies"
 
 # Mapping: defense_category -> (antibody_category, tier, prompt_pattern_label)
 # From the collection plan section "Antibody Template Mapping"

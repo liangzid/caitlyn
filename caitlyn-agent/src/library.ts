@@ -28,8 +28,9 @@ import type {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PKG_ROOT = path.resolve(__dirname, "..");
-const ANTIBODIES_DIR = path.join(PKG_ROOT, "antibodies");
-const ANTIGENS_DIR = path.join(PKG_ROOT, "antigens");
+const PROJECT_ROOT = path.resolve(__dirname, "../..");
+const ANTIBODIES_DIR = path.join(PROJECT_ROOT, "antibodies");
+const ANTIGENS_DIR = path.join(PROJECT_ROOT, "antigens");
 
 // ── Simple YAML parser imported from yaml-parser.ts ───────────────
 
@@ -66,7 +67,7 @@ function normalizeConfig(raw: Record<string, unknown>): Record<string, unknown> 
 // ── Config Validation ──────────────────────────────────────────────
 
 const VALID_CATEGORIES = ["injection", "jailbreak", "poisoning", "exfiltration"] as const;
-const VALID_TIERS = [0, 1] as const;
+const VALID_TIERS = [0, 1, 2] as const;
 
 function assertString(v: unknown, field: string): string {
   if (typeof v === "string") return v;
@@ -106,10 +107,10 @@ function assertCategory(v: unknown, field: string): AntibodyConfig["category"] {
   throw new Error(`Invalid ${field}: "${s}". Must be one of: ${VALID_CATEGORIES.join(", ")}`);
 }
 
-function assertTier(v: unknown): 0 | 1 {
+function assertTier(v: unknown): 0 | 1 | 2 {
   const n = assertNumber(v, "tier");
-  if (n === 0 || n === 1) return n;
-  throw new Error(`Invalid tier: ${n}. Must be 0 or 1.`);
+  if (n === 0 || n === 1 || n === 2) return n;
+  throw new Error(`Invalid tier: ${n}. Must be 0, 1, or 2.`);
 }
 
 function defaultStats(raw: unknown): AntibodyStats {
@@ -137,10 +138,13 @@ export function validateAntibodyConfig(raw: Record<string, unknown>): AntibodyCo
     category: assertCategory(raw.category, "category"),
     tier: assertTier(raw.tier),
     threshold: assertNumber(raw.threshold, "threshold"),
+    description: typeof raw.description === "string" ? raw.description : String(raw.description ?? ""),
+    affinity_score: typeof raw.affinity_score === "number" ? raw.affinity_score : 0,
     created_at: assertString(raw.created_at, "created_at"),
     generation: typeof raw.generation === "number" ? raw.generation : 0,
     stats: defaultStats(raw.stats),
     deps: assertStringArray(raw.deps),
+    signatures: Array.isArray(raw.signatures) ? raw.signatures as AntibodyConfig["signatures"] : [],
   };
 }
 
