@@ -1,33 +1,37 @@
 /**
- * CAITLYN Agent — Terminal UI
+ * CAITLYN Agent — Terminal UI (Upgraded)
  *
- * Full-screen interactive TUI built on @earendil-works/pi-tui.
- * Provides:
- *   - Chat message display with markdown rendering and relative timestamps
- *   - Command input with scan/status/dashboard/history/help
- *   - Antibody/antigen management (/antibody, /antigen)
- *   - Vaccination from TUI (/vaccinate) with SHM progress animation
- *   - Status bar with daemon connection + scan stats, auto-refresh
- *   - Keyboard shortcuts footer bar
- *   - Spinner animation during scan with phase icons
- *   - Color-coded verdicts (MALICIOUS red, SUSPICIOUS yellow, BENIGN green)
- *   - Caitlyn-themed Unicode logo (rifle, crosshair, hat)
+ * Architecture (pi coding agent pattern):
+ *   tui.children (top → bottom):
+ *     [0] Text(logo)
+ *     [1..n-2] user/assistant/tool Markdown + Loader
+ *     [n-1] FooterComponent (2-line status)
+ *     [n]   Editor (ALWAYS last child)
+ *
+ * On submit: splice user Markdown before Editor, insert Loader
+ * On agent event: replace Loader with streaming Markdown
+ * On agent_end: remove Loader, finalize, enable input
  *
  * Usage:
- *   const tui = await CaitlynTUI.create(llmCall);
+ *   const tui = CaitlynTUI.create(llmCall, agent, sessionManager);
  *   await tui.run();
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as os from "node:os";
+import { spawnSync } from "node:child_process";
 import {
   TUI,
   Container,
-  Input,
   Markdown,
   Text,
+  Box,
+  SelectList,
   ProcessTerminal,
-  Key,
+  CancellableLoader,
+  Loader,
+  Editor,
   type Component,
   type MarkdownTheme,
 } from "@earendil-works/pi-tui";
@@ -41,8 +45,19 @@ import {
   loadAntibodyIndex,
   buildAntibodyIndex,
 } from "./library.js";
-import type { ScriptResult, AntigenEntry } from "./schema.js";
+import type { ScriptResult } from "./schema.js";
 import { CaitlyndClient } from "./caitlynd-client.js";
+import { SessionManager } from "./session/session-manager.js";
+import {
+  FooterComponent,
+  createDefaultFooterData,
+  type FooterData,
+} from "./components/footer.js";
+import { createAutocompleteProvider } from "./commands/slash-commands.js";
+import { getContextWindow, getModelDisplay } from "./config/models.js";
+import { listConfiguredProviders } from "./config/credentials.js";
+import { getProviders, getModels } from "./llm.js";
+import type { MessageEntry } from "./session/session-types.js";
 
 // ── ANSI Helpers ──────────────────────────────────────────────────
 
@@ -53,339 +68,564 @@ const C = {
   red:     "\x1b[31m",
   green:   "\x1b[32m",
   yellow:  "\x1b[33m",
-  cyan:    "\x1b[36m",
+  blue:    "\x1b[34m",
   magenta: "\x1b[35m",
+  cyan:    "\x1b[36m",
   white:   "\x1b[37m",
+  bgRed:   "\x1b[41m",
+  bgGreen: "\x1b[42m",
+  bgCyan:  "\x1b[46m",
 } as const;
-
-// ── Logo ──────────────────────────────────────────────────────────
 
 const noEmoji = process.env.CAITLYN_NO_EMOJI === "1";
 
+// ── Logo ──────────────────────────────────────────────────────────
+
 const CAITLYN_LOGO = [
-  "  ╔═══════════════════════════════════════════════╗",
-  "  ║   ▄▄▄══━★  CAITLYN  ━━╤╤╤╤━━  ║",
-  "  ║   ╔═══╗     Sheriff of Piltover     ║",
-  "  ║   ║ o ║    ⊕ Precision Defense ⊕    ║",
-  "  ║   ╚═══╝                             ║",
-  "  ║   ━━━━◉━━━━━  Targeting...  ━━━━━◉━━━━━ ║",
-  "  ╚═══════════════════════════════════════════════╝",
+  `${C.cyan}${C.bold}🛡️  C A I T L Y N${C.reset}`,
+  `${C.dim}AI Agent Immune System${C.reset}`,
+  `${C.cyan}${"─".repeat(56)}${C.reset}`,
+  `${C.dim}Continuous Agents for Injection Threats${C.reset}`,
+  `${C.dim}via Lifelong Yielding Nexus${C.reset}`,
 ].join("\n");
 
-const CAITLYN_LOGO_ASCII = [
-  "  +===============================================+",
-  "  |   ___===---*  CAITLYN  ----++++----  |",
-  "  |   +-----+     Sheriff of Piltover     |",
-  "  |   |  o  |    (o) Precision Defense (o)  |",
-  "  |   +-----+                             |",
-  "  |   ------*-------  Targeting...  -------*----- |",
-  "  +===============================================+",
-].join("\n");
+// ── Theme ─────────────────────────────────────────────────────────
+
+const THEME: MarkdownTheme = {
+  heading: (text) => `${C.bold}${C.cyan}${text}${C.reset}`,
+  bold: (text) => `${C.bold}${text}${C.reset}`,
+  italic: (text) => `${C.dim}${text}${C.reset}`,
+  strikethrough: (text) => `${C.dim}${text}${C.reset}`,
+  underline: (text) => `${C.cyan}${text}${C.reset}`,
+  code: (text) => `${C.yellow}${text}${C.reset}`,
+  codeBlock: (text) => `${text}`,
+  codeBlockBorder: (text) => `${C.dim}${text}${C.reset}`,
+  quote: (text) => text,
+  quoteBorder: (text) => `${C.dim}${text}${C.reset}`,
+  link: (text) => `${C.blue}${text}${C.reset}`,
+  linkUrl: (text) => `${C.dim}${text}${C.reset}`,
+  listBullet: (text) => `${C.cyan}${text}${C.reset}`,
+  hr: (_) => `${C.dim}${"-".repeat(72)}${C.reset}`,
+};
 
 // ── LLM Error Translation ─────────────────────────────────────────
 
 function translateLlmError(err: Error): string {
   const msg = err.message;
-  if (msg.includes("401") || msg.includes("Unauthorized")) {
-    return "API key not valid. Set CAITLYN_PROVIDER and <PROVIDER>_API_KEY.";
-  }
-  if (msg.includes("402") || msg.includes("Payment Required") || msg.includes("quota")) {
-    return "LLM API quota exceeded. Check your billing or switch provider.";
-  }
-  if (msg.includes("429") || msg.includes("Too Many Requests") || msg.includes("rate limit")) {
-    return "LLM API rate limit reached. Wait a moment and try again.";
-  }
-  if (msg.includes("Connection refused") || msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND")) {
-    return "Cannot reach LLM API. Check your network connection.";
-  }
-  if (msg.includes("timeout") || msg.includes("ETIMEDOUT")) {
-    return "LLM API timed out. The service may be overloaded.";
-  }
-  if (msg.includes("503") || msg.includes("Service Unavailable")) {
-    return "LLM API service temporarily unavailable. Try again later.";
-  }
-  return msg;
+  if (msg.includes("401") || msg.includes("Unauthorized")) return "Authentication failed. Check your API key.";
+  if (msg.includes("429") || msg.includes("rate")) return "Rate limited. Wait and try again.";
+  if (msg.includes("context_length") || msg.includes("too long")) return "Input too long. Try /compact or use a shorter message.";
+  if (msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND")) return "Cannot reach LLM provider. Check your network.";
+  if (msg.includes("timeout") || msg.includes("ETIMEDOUT")) return "LLM request timed out. Try again.";
+  if (msg.includes("insufficient_quota")) return "API quota exceeded. Check your billing.";
+  return msg.length > 200 ? msg.slice(0, 197) + "..." : msg;
 }
 
-// ── Theme ─────────────────────────────────────────────────────────
+// ── Git Branch Detection ──────────────────────────────────────────
 
-const THEME: MarkdownTheme = {
-  heading: (t: string) => `${C.bold}${C.cyan}${t}${C.reset}`,
-  link: (t: string) => `${C.cyan}${t}${C.reset}`,
-  linkUrl: (t: string) => `${C.dim}${t}${C.reset}`,
-  code: (t: string) => `${C.yellow}${t}${C.reset}`,
-  codeBlock: (t: string) => `${C.dim}${t}${C.reset}`,
-  codeBlockBorder: (t: string) => `${C.dim}${t}${C.reset}`,
-  quote: (t: string) => `${C.dim}${t}${C.reset}`,
-  quoteBorder: (t: string) => `${C.dim}│${C.reset}`,
-  hr: (t: string) => `${C.dim}${t}${C.reset}`,
-  listBullet: (t: string) => `${C.cyan}${t}${C.reset}`,
-  bold: (t: string) => `${C.bold}${t}${C.reset}`,
-  italic: (t: string) => t,
-  strikethrough: (t: string) => `${C.dim}${t}${C.reset}`,
-  underline: (t: string) => t,
+function getGitBranch(cwd: string): string | undefined {
+  try {
+    const result = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+      cwd, timeout: 2000, encoding: "utf-8",
+    });
+    if (result.status === 0 && result.stdout.trim()) {
+      return result.stdout.trim();
+    }
+  } catch { /* ignore */ }
+  return undefined;
+}
+
+// ── Token Estimation ──────────────────────────────────────────────
+
+/** Rough token count (4 chars approx 1 token for English, 1 char approx 1 token for CJK). */
+function estimateTokens(text: string): number {
+  let tokens = 0;
+  for (let i = 0; i < text.length; i++) {
+    const cp = text.codePointAt(i);
+    if (cp && cp > 0x2000) {
+      tokens += 1;
+    } else {
+      tokens += 0.25;
+    }
+    if (cp && cp > 0xffff) i++;
+  }
+  return Math.ceil(tokens);
+}
+
+// ── Default SelectList Theme ──────────────────────────────────────
+
+const selectListTheme = {
+  selectedPrefix: (text: string) => `${C.cyan}${text}${C.reset}`,
+  selectedText: (text: string) => `${C.bold}${text}${C.reset}`,
+  description: (text: string) => `${C.dim}${text}${C.reset}`,
+  scrollInfo: (text: string) => `${C.dim}${text}${C.reset}`,
+  noMatch: (text: string) => `${C.dim}${text}${C.reset}`,
 };
 
-// ── Message Types ─────────────────────────────────────────────────
+// ── Overlay Helpers ───────────────────────────────────────────────
 
-interface ChatMessage {
-  role: "user" | "assistant" | "system";
-  content: string;
-  timestamp: number;
+function makeBox(title: string, lines: string[], maxHeight = 20): Box {
+  const box = new Box(1, 1);
+  let allLines: string[];
+  if (lines.length > maxHeight) {
+    allLines = [`${C.bold}${C.cyan}${title}${C.reset}`, "", ...lines.slice(0, maxHeight - 3), `${C.dim}(scroll for more)${C.reset}`];
+  } else {
+    allLines = [`${C.bold}${C.cyan}${title}${C.reset}`, "", ...lines];
+  }
+  box.addChild(new Text(allLines.join("\n")));
+  return box;
 }
 
-// ── Chat View Component ───────────────────────────────────────────
+function buildDashboardOverlay(): Component {
+  const stats = getDashboard();
+  if (stats.total_scans === 0) {
+    return makeBox("CAITLYN Dashboard", ["No scan data yet."]);
+  }
 
-class ChatView implements Component {
-  private messages: ChatMessage[] = [];
-  private markdowns: Markdown[] = [];
-  private dirty = true;
+  const lines = [
+    `${C.bold}Total Scans:${C.reset}      ${stats.total_scans}`,
+    `${C.bold}Detected:${C.reset}        ${stats.malicious_count}`,
+    `${C.bold}Clean:${C.reset}           ${stats.benign_count}`,
+    `${C.bold}Detection Rate:${C.reset}   ${(stats.detection_rate * 100).toFixed(1)}%`,
+    "",
+    `${C.bold}Avg Latency:${C.reset}      ${stats.avg_latency_ms.toFixed(2)}ms`,
+    `${C.bold}Avg Tokens:${C.reset}       ${stats.avg_tokens.toFixed(1)}`,
+    `${C.bold}Total Tokens:${C.reset}     ${stats.total_tokens}`,
+    `${C.bold}Tier 0 Hits:${C.reset}      ${stats.tier0_hits}`,
+    `${C.bold}Tier 1 Hits:${C.reset}      ${stats.tier1_hits}`,
+  ];
 
-  addMessage(msg: ChatMessage): void {
-    this.messages.push(msg);
-    if (this.messages.length > 100) {
-      this.messages = this.messages.slice(-100);
+  if (stats.top_antibodies.length > 0) {
+    lines.push("", `${C.bold}Top Antibodies:${C.reset}`);
+    for (const a of stats.top_antibodies.slice(0, 5)) {
+      lines.push(`  ${a.id}: ${a.hits} hits`);
     }
-    this.dirty = true;
   }
 
-  addSystemMessage(content: string): void {
-    this.addMessage({ role: "system", content, timestamp: Date.now() });
-  }
+  return makeBox("CAITLYN Dashboard", lines);
+}
 
-  updateLastSystemMessage(content: string): void {
-    const last = this.messages[this.messages.length - 1];
-    if (last && last.role === "system") {
-      last.content = content;
-      last.timestamp = Date.now();
-    } else {
-      this.addSystemMessage(content);
+function buildStatusOverlay(): Component {
+  const antibodies = loadAntibodies();
+  const antigens = loadAntigens();
+  const index = loadAntibodyIndex() ?? buildAntibodyIndex(antibodies);
+
+  const lines: string[] = [];
+  lines.push(`${antibodies.length} antibodies, ${antigens.length} antigens`);
+  lines.push("");
+  lines.push(`${C.bold}Antibodies:${C.reset}`);
+
+  for (const rid of index.roots) {
+    const ab = antibodies.find((a) => a.config.id === rid);
+    if (ab) {
+      const tp = ab.config.stats?.true_positives ?? 0;
+      const fp = ab.config.stats?.false_positives ?? 0;
+      lines.push(`  ${ab.config.id} [${ab.config.category}] T${ab.config.tier} TP=${tp} FP=${fp}`);
     }
-    this.dirty = true;
   }
 
-  getMessageCount(): number {
-    return this.messages.length;
+  if (index.roots.length === 0) {
+    lines.push(`  (none loaded)`);
   }
 
-  invalidate(): void {
-    this.dirty = true;
+  lines.push("");
+  lines.push(`${C.bold}Antigens by Category:${C.reset}`);
+  const byCat: Record<string, number> = {};
+  for (const ag of antigens) byCat[ag.config.category] = (byCat[ag.config.category] || 0) + 1;
+  for (const [cat, count] of Object.entries(byCat)) {
+    lines.push(`  ${cat}: ${count}`);
   }
 
-  render(width: number): string[] {
-    if (this.dirty) {
-      this.markdowns = this.messages.map((msg) => {
-        const timeStr = formatRelativeTime(msg.timestamp);
-        const prefix = msg.role === "user"
-          ? `${C.bold}${C.green}You${C.reset}  ${C.dim}${timeStr}${C.reset}  `
-          : msg.role === "system"
-            ? `${C.bold}${C.yellow}⚡${C.reset} ${C.dim}${timeStr}${C.reset} `
-            : `${C.bold}${C.cyan}CAITLYN${C.reset} ${C.dim}${timeStr}${C.reset} `;
-        return new Markdown(prefix + msg.content, 0, 0, THEME);
-      });
-      this.dirty = false;
-    }
-
-    const lines: string[] = [];
-    for (const md of this.markdowns) {
-      lines.push(...md.render(width));
-      lines.push("");
-    }
-    return lines;
-  }
+  return makeBox("CAITLYN Library", lines);
 }
 
-function formatRelativeTime(ts: number): string {
-  const seconds = Math.floor((Date.now() - ts) / 1000);
-  if (seconds < 10) return "just now";
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+function buildHistoryOverlay(): Component {
+  const entries = loadHistory();
+  if (entries.length === 0) {
+    return makeBox("Scan History", ["No scan history yet."]);
+  }
+
+  const items = entries.map((e) => {
+    const emoji = e.verdict === "malicious" ? "🚨"
+      : e.verdict === "suspicious" ? "⚠️" : "✅";
+    const label = `${emoji} ${e.timestamp.slice(0, 19)} | ${e.verdict.toUpperCase()} | T${e.tier} | ${e.content_preview}`;
+    return { value: e.timestamp, label };
+  });
+
+  const list = new SelectList(items, 10, selectListTheme);
+  return list;
 }
 
-// ── Status Bar Component ──────────────────────────────────────────
-
-class StatusBar implements Component {
-  private daemonStatus = "checking...";
-  private lastScanInfo = "";
-  private dirty = true;
-
-  setDaemonStatus(status: string): void {
-    this.daemonStatus = status;
-    this.dirty = true;
+function buildSessionPickerOverlay(
+  sessions: Array<{ id: string; name?: string; entryCount: number; updatedAt: number }>,
+): Component {
+  if (sessions.length === 0) {
+    return makeBox("Sessions", ["No saved sessions found."]);
   }
 
-  setLastScan(info: string): void {
-    this.lastScanInfo = info;
-    this.dirty = true;
-  }
+  const items = sessions.map((s) => {
+    const date = new Date(s.updatedAt).toLocaleString();
+    const label = s.name || s.id.slice(0, 20);
+    return {
+      value: s.id,
+      label: `${label}  ${C.dim}(${s.entryCount} msgs, ${date})${C.reset}`,
+    };
+  });
 
-  invalidate(): void {
-    this.dirty = true;
-  }
-
-  render(width: number): string[] {
-    this.dirty = false;
-    const left = `${C.cyan}🛡️ caitlynd${C.reset}: ${this.daemonStatus}`;
-    const right = this.lastScanInfo;
-    const spacer = Math.max(1, width - left.length - right.length - 3);
-    return [`${C.dim}${"─".repeat(width)}${C.reset}`, `${left} ${" ".repeat(spacer)} ${right}`];
-  }
+  const list = new SelectList(items, 8, selectListTheme);
+  return list;
 }
 
-// ── Footer Bar Component ─────────────────────────────────────────
+function buildModelSelectorOverlay(): Component {
+  const items: Array<{ value: string; label: string }> = [];
+  const seen = new Set<string>();
 
-class FooterBar implements Component {
-  private dirty = true;
-
-  invalidate(): void {
-    this.dirty = true;
+  for (const p of getProviders()) {
+    try {
+      for (const m of getModels(p)) {
+        const key = `${p}/${m.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const display = getModelDisplay(p, m.id);
+        const ctx = getContextWindow(p, m.id);
+        const ctxLabel = ctx >= 1000 ? `${Math.round(ctx / 1000)}k ctx` : `${ctx} ctx`;
+        items.push({
+          value: key,
+          label: `${display}  ${C.dim}(${p})  ${ctxLabel}${C.reset}`,
+        });
+      }
+    } catch { /* skip */ }
   }
 
-  render(width: number): string[] {
-    this.dirty = false;
-    const shortcuts = [
-      `${C.dim}^C${C.reset} quit`,
-      `${C.dim}/scan${C.reset}`,
-      `${C.dim}/status${C.reset}`,
-      `${C.dim}/dashboard${C.reset}`,
-      `${C.dim}/help${C.reset}`,
-    ];
-    const joined = shortcuts.join("  ");
-    const pad = Math.max(0, width - joined.length);
-    return [
-      `${C.dim}${"─".repeat(width)}${C.reset}`,
-      `${joined}${" ".repeat(pad)}`,
-    ];
+  if (items.length === 0) {
+    return makeBox("Model Selector", [
+      "No models configured.",
+      "",
+      "Set API keys via environment variables or /login <provider>",
+    ]);
   }
+
+  const list = new SelectList(items, 10, selectListTheme);
+  return list;
 }
 
-// ── Main TUI App ──────────────────────────────────────────────────
+// ── Main TUI ──────────────────────────────────────────────────────
 
 export class CaitlynTUI {
   private tui: TUI;
-  private chatView: ChatView;
-  private input: Input;
-  private statusBar: StatusBar;
-  private footerBar: FooterBar;
+  private editor: Editor;
+  private footer: FooterComponent;
   private agent: Agent | null = null;
   private llmCall: LlmCallFn;
+  private sessionMgr: SessionManager;
   private running = false;
-  private daemonAutoStarted = false;
-  private daemonPid: number | null = null;
-  private statusBarInterval: ReturnType<typeof setInterval> | null = null;
+  private isResponding = false;
   private commandHistory: string[] = [];
   private historyIndex = -1;
-  private highContrast = process.env.CAITLYN_HIGH_CONTRAST === "1";
+  private currentProvider: string;
+  private currentModelId: string;
+  private footerTimer: ReturnType<typeof setInterval> | null = null;
+  private currentLoader: CancellableLoader | null = null;
+  private sigintHandler: (() => void) | null = null;
+  private rejectionHandler: ((reason: unknown) => void) | null = null;
 
   private constructor(
     tui: TUI,
-    chatView: ChatView,
-    input: Input,
-    statusBar: StatusBar,
-    footerBar: FooterBar,
+    editor: Editor,
+    footer: FooterComponent,
     agent: Agent | null,
     llmCall: LlmCallFn,
+    sessionMgr: SessionManager,
+    provider: string,
+    modelId: string,
   ) {
     this.tui = tui;
-    this.chatView = chatView;
-    this.input = input;
-    this.statusBar = statusBar;
-    this.footerBar = footerBar;
+    this.editor = editor;
+    this.footer = footer;
     this.agent = agent;
     this.llmCall = llmCall;
+    this.sessionMgr = sessionMgr;
+    this.currentProvider = provider;
+    this.currentModelId = modelId;
   }
 
   static async create(
     llmCall: LlmCallFn,
-    agent?: Agent | null,
+    agent: Agent | null,
+    sessionMgr?: SessionManager,
   ): Promise<CaitlynTUI> {
     const terminal = new ProcessTerminal();
     const tui = new TUI(terminal);
     tui.setClearOnShrink(false);
 
-    // Minimum terminal size check
-    const { columns = 80, rows = 24 } = process.stdout;
-    if (columns < 80 || rows < 24) {
-      console.warn(
-        `⚠️  Terminal is ${columns}×${rows}. CAITLYN works best at 80×24 or larger.`,
-      );
-    }
+    const cwd = process.cwd();
+    const mgr = sessionMgr ?? SessionManager.continueRecent(cwd);
+    const provider = process.env.CAITLYN_PROVIDER ?? "openrouter";
+    const modelId = process.env.CAITLYN_MODEL ?? "deepseek/deepseek-chat";
 
-    const header = new Text("");
-    const logo = noEmoji ? CAITLYN_LOGO_ASCII : CAITLYN_LOGO;
-    header.setText(`${C.bold}${C.cyan}${logo}${C.reset}\n`);
+    // Add logo
+    const header = new Text(
+      noEmoji ? "CAITLYN — AI Agent Immune System" : CAITLYN_LOGO,
+    );
     tui.addChild(header);
 
-    const chatView = new ChatView();
-    tui.addChild(chatView);
-
-    const statusBar = new StatusBar();
-    const footerBar = new FooterBar();
-    const input = new Input();
-
-    tui.addChild(input);
-    tui.addChild(statusBar);
-    tui.addChild(footerBar);
+    // Create footer
+    const footerData = createDefaultFooterData(cwd);
+    const stats = mgr.getTokenStats();
+    footerData.totalInput = stats.input;
+    footerData.totalOutput = stats.output;
+    footerData.totalCost = stats.cost;
+    footerData.currentModel = getModelDisplay(provider, modelId);
+    footerData.providerName = provider;
+    footerData.sessionName = mgr.getSessionName();
+    footerData.antibodyCount = loadAntibodies().length;
+    footerData.gitBranch = getGitBranch(cwd);
 
     const daemonAvailable = await isCaitlyndAvailable();
-    if (daemonAvailable) {
-      const st = await getCaitlyndStatus();
-      if (st) {
-        const uptimeStr = st.uptime_seconds != null
-          ? `, ${(st.uptime_seconds / 3600).toFixed(1)}h uptime`
-          : "";
-        statusBar.setDaemonStatus(
-          `${C.green}connected${C.reset} (${st.active_antibodies} antibodies, ${st.memory_entries} memory${uptimeStr})`,
-        );
-      } else {
-        statusBar.setDaemonStatus(`${C.green}connected${C.reset}`);
-      }
-    } else {
-      statusBar.setDaemonStatus(`${C.yellow}local mode${C.reset} (daemon not running)`);
-    }
+    footerData.daemonStatus = daemonAvailable ? "connected" : "disconnected";
 
-    const self = new CaitlynTUI(tui, chatView, input, statusBar, footerBar, agent ?? null, llmCall);
+    const footer = new FooterComponent(footerData);
+    tui.addChild(footer);
 
-    input.onSubmit = async (value: string) => {
-      await self.handleCommand(value);
+    // Create editor with autocomplete
+    const editor = new Editor(tui, {
+      borderColor: (s: string) => `${C.dim}${s}${C.reset}`,
+      selectList: selectListTheme,
+    }, { paddingX: 1 });
+
+    editor.setAutocompleteProvider(createAutocompleteProvider());
+    tui.addChild(editor);
+    tui.setFocus(editor);
+
+    const self = new CaitlynTUI(
+      tui, editor, footer, agent ?? null, llmCall, mgr, provider, modelId,
+    );
+
+    // Wire editor submit
+    editor.onSubmit = async (value: string) => {
+      await self.handleSubmit(value);
     };
 
-    // Intercept Ctrl+C — terminal is in raw mode so SIGINT never fires
+    // Global input listeners for keyboard shortcuts
+    // NOTE: Global listeners fire BEFORE the focused component's handleInput,
+    // so we must be careful not to steal editing keys from the Editor.
     tui.addInputListener((data: string) => {
+      // ── Overlay dismissal keys (always available) ────────────
+      // Esc: universal dismiss / abort
+      if (data === "\x1b") {
+        if (tui.hasOverlay()) {
+          tui.hideOverlay();
+          return { consume: true };
+        }
+        // No overlay: Esc aborts ongoing response
+        if (self.isResponding) {
+          self.abortResponse();
+          return { consume: true };
+        }
+      }
+      // Tab: dismiss overlay or focus editor
+      if (data === "\t" || data === "\x09") {
+        if (tui.hasOverlay()) {
+          tui.hideOverlay();
+          return { consume: true };
+        }
+        return { consume: true }; // Always consume Tab
+      }
+      // q: dismiss display overlay (non-interactive overlays only)
+      if (data === "q" && tui.hasOverlay()) {
+        tui.hideOverlay();
+        return { consume: true };
+      }
+      // ── Global always-available ──────────────────────────────
+      // Ctrl+C: always quit
       if (data === "\x03") {
-        self.chatView.addSystemMessage(`${C.cyan}Goodbye.${C.reset}`);
         self.stop();
         return { consume: true };
       }
+      // Ctrl+L: always clear screen
+      if (data === "\x0c") {
+        const children = tui.children;
+        children.splice(1, children.length - 3);
+        tui.requestRender();
+        return { consume: true };
+      }
+      // ── Quick-launch overlays (only when NO overlay active) ──
+      if (!tui.hasOverlay() && (self.isResponding || self.editor.disableSubmit)) {
+        if (data === "\x04") {
+          tui.showOverlay(buildDashboardOverlay(), {
+            anchor: "center", width: "70%", maxHeight: "70%",
+          });
+          return { consume: true };
+        }
+        if (data === "\x13") {
+          tui.showOverlay(buildStatusOverlay(), {
+            anchor: "center", width: "70%", maxHeight: "70%",
+          });
+          return { consume: true };
+        }
+        if (data === "\x08") {
+          tui.showOverlay(buildHistoryOverlay(), {
+            anchor: "center", width: "70%", maxHeight: "70%",
+          });
+          return { consume: true };
+        }
+        if (data === "\x10") {
+          tui.showOverlay(buildModelSelectorOverlay(), {
+            anchor: "center", width: "70%", maxHeight: "70%",
+          });
+          return { consume: true };
+        }
+      }
+      return undefined;
     });
+
+    // Wire agent listener if agent exists
+    if (agent) {
+      self.wireAgentListener(agent);
+    }
 
     return self;
   }
 
-  async handleCommand(cmd: string): Promise<void> {
-    const trimmed = cmd.trim();
-    if (!trimmed) return;
+  private wireAgentListener(agent: Agent): void {
+    let currentMessageContent = "";
 
-    if (trimmed.length > 100_000) {
-      this.chatView.addSystemMessage(`${C.yellow}Content too long (max 100,000 characters).${C.reset}`);
-      this.input.setValue("");
-      this.tui.requestRender();
-      return;
+    agent.subscribe((event) => {
+      if (!this.running) return;
+
+      switch (event.type) {
+        case "agent_start": {
+          currentMessageContent = "";
+          break;
+        }
+        case "message_update": {
+          if (event.message.role !== "assistant") break;
+          const blocks = event.message.content;
+          const text = (Array.isArray(blocks) ? blocks : [])
+            .filter((c) => c.type === "text")
+            .map((c) => (c as { type: "text"; text: string }).text)
+            .join("");
+          currentMessageContent = text;
+
+          if (this.currentLoader) {
+            this.tui.removeChild(this.currentLoader);
+            this.currentLoader = null;
+          }
+          this.updateStreamingMessage(text);
+          this.tui.requestRender();
+          break;
+        }
+        case "tool_execution_start": {
+          const toolLine = `${C.dim}⚙ ${event.toolName}${C.reset}`;
+          this.insertBeforeEditor(new Text(toolLine));
+          break;
+        }
+        case "tool_execution_end": {
+          if (event.result) {
+            const resultText = typeof event.result === "string"
+              ? event.result
+              : JSON.stringify(event.result);
+            const preview = resultText.length > 300
+              ? resultText.slice(0, 297) + "..."
+              : resultText;
+            this.insertBeforeEditor(new Text(`${C.dim}  → ${preview}${C.reset}`));
+          }
+          break;
+        }
+        case "message_end": {
+          if (this.currentLoader) {
+            this.tui.removeChild(this.currentLoader);
+            this.currentLoader = null;
+          }
+
+          const prefix = `${C.bold}${C.cyan}CAITLYN${C.reset}  ${C.dim}just now${C.reset}  `;
+          const msgMd = new Markdown(prefix + currentMessageContent, 0, 0, THEME);
+          this.insertBeforeEditor(msgMd);
+
+          if (event.message.role === "assistant") {
+            const usage = event.message.usage;
+            this.sessionMgr.appendMessage({
+              role: "assistant",
+              content: currentMessageContent,
+              usage: usage
+                ? {
+                    input: usage.input ?? 0,
+                    output: usage.output ?? 0,
+                    cacheRead: usage.cacheRead,
+                    cacheWrite: usage.cacheWrite,
+                    cost: usage.cost.total,
+                  }
+                : undefined,
+            });
+          } else {
+            this.sessionMgr.appendMessage({
+              role: "assistant",
+              content: currentMessageContent,
+            });
+          }
+          this.sessionMgr.flush();
+
+          this.refreshFooter();
+          currentMessageContent = "";
+          this.maybeCompact();
+
+          this.isResponding = false;
+          this.editor.disableSubmit = false;
+          this.tui.setFocus(this.editor);
+          this.tui.requestRender();
+          break;
+        }
+        case "agent_end": {
+          if (this.currentLoader) {
+            this.tui.removeChild(this.currentLoader);
+            this.currentLoader = null;
+          }
+          this.isResponding = false;
+          this.editor.disableSubmit = false;
+          this.tui.setFocus(this.editor);
+          this.tui.requestRender();
+          break;
+        }
+      }
+    });
+  }
+
+  private streamingMd: Markdown | null = null;
+
+  private updateStreamingMessage(text: string): void {
+    const prefix = `${C.bold}${C.cyan}CAITLYN${C.reset}  ${C.dim}streaming...${C.reset}  `;
+    if (this.streamingMd) {
+      // Remove and re-add (Markdown doesn't support in-place update)
+      this.tui.removeChild(this.streamingMd);
     }
+    this.streamingMd = new Markdown(prefix + text, 0, 0, THEME);
+    this.insertBeforeEditor(this.streamingMd);
+  }
 
-    // Record in command history (deduplicate consecutive)
+  private insertBeforeEditor(component: Component): void {
+    const children = this.tui.children;
+    children.splice(children.length - 1, 0, component);
+  }
+
+  private insertBeforeFooter(component: Component): void {
+    const children = this.tui.children;
+    // Footer is at index length-2, editor at length-1
+    children.splice(children.length - 2, 0, component);
+  }
+
+  // ── Submit Handler ───────────────────────────────────────────
+
+  async handleSubmit(value: string): Promise<void> {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    if (this.isResponding) return;
+
+    // History tracking
     if (this.commandHistory.length === 0 || this.commandHistory[this.commandHistory.length - 1] !== trimmed) {
       this.commandHistory.push(trimmed);
       if (this.commandHistory.length > 100) this.commandHistory.shift();
     }
     this.historyIndex = this.commandHistory.length;
-
-    this.chatView.addMessage({ role: "user", content: trimmed, timestamp: Date.now() });
 
     if (trimmed.startsWith("/")) {
       await this.handleSlashCommand(trimmed);
@@ -395,157 +635,233 @@ export class CaitlynTUI {
       await this.handleChat(trimmed);
     }
 
-    this.input.setValue("");
     this.tui.requestRender();
   }
 
+  // ── Slash Commands ───────────────────────────────────────────
+
   private async handleSlashCommand(cmd: string): Promise<void> {
     const parts = cmd.split(/\s+/);
-    const verb = parts[0].toLowerCase();
     const args = parts.slice(1).join(" ");
+    const verb = parts[0].toLowerCase();
 
     switch (verb) {
+      // ── Scanning & Defense ─────────────────────────────────
       case "/scan": {
-        if (!args) { this.chatView.addSystemMessage("Usage: /scan <content>"); return; }
+        if (!args) { this.showSystemMessage("Usage: /scan <content>"); return; }
         await this.doScan(args);
         break;
       }
       case "/status": {
-        await this.doStatus();
+        this.tui.showOverlay(buildStatusOverlay(), { anchor: "center", width: "70%", maxHeight: "70%" });
         break;
       }
       case "/dashboard": {
-        await this.doDashboard();
+        this.tui.showOverlay(buildDashboardOverlay(), { anchor: "center", width: "70%", maxHeight: "70%" });
         break;
       }
       case "/history": {
-        await this.doHistory(parseInt(parts[1]) || 10);
+        this.tui.showOverlay(buildHistoryOverlay(), { anchor: "center", width: "70%", maxHeight: "70%" });
         break;
       }
+
+      // ── Antibody Management ────────────────────────────────
       case "/antibody": {
         const subCmd = parts[1]?.toLowerCase();
         const abId = parts[2];
         if (subCmd === "list") { await this.doAntibodyList(); }
         else if (subCmd === "add" && abId) { await this.doAntibodyAdd(abId); }
         else if (subCmd === "remove" && abId) { await this.doAntibodyRemove(abId); }
-        else { this.chatView.addSystemMessage("Usage: /antibody list | add <id> | remove <id>"); }
+        else { this.showSystemMessage("Usage: /antibody list | add <id> | remove <id>"); }
         break;
       }
       case "/antigen": {
-        if (!args) { this.chatView.addSystemMessage("Usage: /antigen <id>"); return; }
+        if (!args) { this.showSystemMessage("Usage: /antigen <id>"); return; }
         await this.doAntigenShow(args.trim());
         break;
       }
       case "/vaccinate": {
-        if (!args) { this.chatView.addSystemMessage("Usage: /vaccinate <pattern>"); return; }
+        if (!args) { this.showSystemMessage("Usage: /vaccinate <pattern>"); return; }
         await this.doVaccinate(args);
         break;
       }
-      case "/help": {
-        this.chatView.addSystemMessage(
-          "Commands:\n" +
-          "  /scan <content>      — Security scan for injection attacks\n" +
-          "  /status              — Show antibody/antigen library\n" +
-          "  /dashboard           — Defense statistics dashboard\n" +
-          "  /history [N]         — Recent scan history\n" +
-          "  /antibody list       — List all antibodies\n" +
-          "  /antibody add <id>   — Create a new antibody (coming soon)\n" +
-          "  /antibody remove <id> — Remove an antibody\n" +
-          "  /antigen <id>        — Show antigen config and payload\n" +
-          "  /vaccinate <pattern> — Submit vaccination pattern to daemon\n" +
-          "  /help                — Show this help\n" +
-          "  /quit                — Exit CAITLYN\n\n" +
-          "  !<content>           — Quick security scan (same as /scan)\n" +
-          "  Anything else        — Chat with CAITLYN guardian agent",
-        );
+
+      // ── Session ────────────────────────────────────────────
+      case "/new": {
+        await this.doNewSession();
         break;
       }
-      case "/quit": case "/exit": {
-        this.chatView.addSystemMessage("Goodbye. Stay secure.");
+      case "/resume": {
+        await this.doResumeSession();
+        break;
+      }
+      case "/session": {
+        await this.doSessionInfo();
+        break;
+      }
+      case "/name": {
+        if (!args) { this.showSystemMessage("Usage: /name <title>"); return; }
+        this.sessionMgr.appendSessionInfo(args);
+        this.sessionMgr.flush();
+        this.footer.update({ sessionName: args });
+        this.showSystemMessage(`${C.green}Session named:${C.reset} ${args}`);
+        break;
+      }
+      case "/export": {
+        const outPath = args || `./caitlyn-session-${this.sessionMgr.getSessionId()}.jsonl`;
+        fs.copyFileSync(this.sessionMgr.getSessionFile(), outPath);
+        this.showSystemMessage(`${C.green}Exported to:${C.reset} ${outPath}`);
+        break;
+      }
+      case "/compact": {
+        await this.doCompaction();
+        break;
+      }
+      case "/tree": {
+        this.showSessionTree();
+        break;
+      }
+      case "/fork": {
+        if (!args) { this.showSystemMessage("Usage: /fork <message-id>"); return; }
+        this.doFork(args);
+        break;
+      }
+      case "/clone": {
+        this.doClone();
+        break;
+      }
+      case "/delete": {
+        this.doDelete();
+        break;
+      }
+
+      // ── Config ─────────────────────────────────────────────
+      case "/model": {
+        if (args) {
+          await this.doModelSwitch(args);
+        } else {
+          this.tui.showOverlay(buildModelSelectorOverlay(), { anchor: "center", width: "70%", maxHeight: "70%" });
+        }
+        break;
+      }
+      case "/thinking": {
+        if (!args) { this.showSystemMessage("Usage: /thinking off|low|medium|high"); return; }
+        const level = args as "off" | "low" | "medium" | "high";
+        if (!["off", "low", "medium", "high"].includes(level)) {
+          this.showSystemMessage("Thinking level must be: off, low, medium, or high");
+          return;
+        }
+        this.sessionMgr.appendThinkingLevelChange(level);
+        this.sessionMgr.flush();
+        this.footer.update({ thinkingLevel: level });
+        this.showSystemMessage(`${C.cyan}Thinking:${C.reset} ${level}`);
+        break;
+      }
+      case "/login": {
+        await this.doLogin(args);
+        break;
+      }
+      case "/settings": {
+        this.showSystemMessage("Settings: ~/.caitlyn/config.toml (edit manually)");
+        break;
+      }
+
+      // ── Meta ────────────────────────────────────────────────
+      case "/help": {
+        this.showHelp();
+        break;
+      }
+      case "/quit":
+      case "/exit": {
+        this.showSystemMessage("Goodbye. Stay secure.");
         this.stop();
         break;
       }
+      case "/clear": {
+        // Remove all message components between header and footer
+        const children = this.tui.children;
+        // Keep header (index 0), footer/editor are last 2
+        children.splice(1, children.length - 3);
+        this.tui.requestRender();
+        break;
+      }
       default: {
-        this.chatView.addSystemMessage(`Unknown command: ${verb}. Type /help for commands.`);
+        this.showSystemMessage(`Unknown command: ${verb}. Type /help for commands.`);
       }
     }
   }
 
   private async handleBangCommand(cmd: string): Promise<void> {
-    // ! prefix = quick scan (alternative to /scan)
     const content = cmd.slice(1).trim();
-    if (!content) { this.chatView.addSystemMessage("Usage: !<content> — quick security scan"); return; }
+    if (!content) { this.showSystemMessage("Usage: !<content> — quick security scan"); return; }
     await this.doScan(content);
   }
 
   private async handleChat(message: string): Promise<void> {
-    // Route plain text to agent conversation
     if (!this.agent) {
-      this.chatView.addSystemMessage(
-        `${C.yellow}Agent not available.${C.reset} Use ${C.cyan}/scan <content>${C.reset} for security scanning, or start with LLM configured.`,
+      this.showSystemMessage(
+        `${C.yellow}Agent not available.${C.reset} Use ${C.cyan}/scan <content>${C.reset} for security scanning.`,
       );
       return;
     }
+
+    this.isResponding = true;
+    this.editor.disableSubmit = true;
+
+    // Add user message
+    const prefix = `${C.bold}${C.green}You${C.reset}  ${C.dim}just now${C.reset}  `;
+    const userMd = new Markdown(prefix + message, 0, 0, THEME);
+    this.insertBeforeEditor(userMd);
+
+    // Record in session
+    this.sessionMgr.appendMessage({ role: "user", content: message });
+    this.sessionMgr.flush();
+
+    // Show loader
+    const loader = new CancellableLoader(
+      this.tui,
+      (s) => `${C.cyan}${s}${C.reset}`,
+      (s) => `${C.dim}${s}${C.reset}`,
+      "Thinking...",
+    );
+    this.currentLoader = loader;
+    this.streamingMd = null;
+
+    loader.onAbort = () => {
+      this.agent?.abort?.();
+      this.showSystemMessage(`${C.yellow}Aborted.${C.reset}`);
+      this.isResponding = false;
+      this.editor.disableSubmit = false;
+      this.tui.setFocus(this.editor);
+    };
+
+    this.insertBeforeEditor(loader);
+    this.tui.requestRender();
+
     try {
       await this.agent.prompt(message);
-      // After prompt, capture the agent's latest response
-      this.displayAgentResponse();
-    } catch (e) {
-      this.chatView.addSystemMessage(
-        `${C.red}Agent error:${C.reset} ${e instanceof Error ? e.message : String(e)}`,
-      );
+    } catch (err) {
+      if (this.currentLoader) {
+        this.tui.removeChild(this.currentLoader);
+        this.currentLoader = null;
+      }
+      const friendly = translateLlmError(err instanceof Error ? err : new Error(String(err)));
+      this.showSystemMessage(`${C.red}Agent error:${C.reset} ${friendly}`);
+      this.isResponding = false;
+      this.editor.disableSubmit = false;
+      this.tui.setFocus(this.editor);
+      this.tui.requestRender();
     }
   }
 
-  /** Extract and display the latest assistant messages from the agent's transcript. */
-  private displayAgentResponse(): void {
-    if (!this.agent) return;
-    const messages = this.agent.state.messages;
-    // Find new assistant messages since last display
-    let found = false;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i];
-      if (msg.role === "assistant") {
-        const text = msg.content
-          .filter((c): c is { type: "text"; text: string } => c.type === "text")
-          .map((c) => c.text)
-          .join("\n");
-        if (text) {
-          this.chatView.addMessage({ role: "assistant", content: text, timestamp: Date.now() });
-          found = true;
-          break; // Just show the latest
-        }
-      }
-    }
-    if (!found) {
-      this.chatView.addSystemMessage(`${C.dim}(no response)${C.reset}`);
-    }
-  }
+  // ── Scan ────────────────────────────────────────────────────
 
   private async doScan(content: string): Promise<void> {
-    this.chatView.addSystemMessage(`⊕ Scanning (${content.length} chars)...`);
-
-    const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-    let spinnerIdx = 0;
-    let phase = 0;
-    const phases = ["scanning", "analyzing", "classifying"];
-    const phaseIcons = ["⊕", "◉", "◎"];
-
-    const spinnerInterval = setInterval(() => {
-      if (!this.running) { clearInterval(spinnerInterval); return; }
-      spinnerIdx = (spinnerIdx + 1) % spinnerFrames.length;
-      phase = Math.floor(spinnerIdx / 6) % phases.length;
-      this.chatView.updateLastSystemMessage(
-        `${spinnerFrames[spinnerIdx]} ${phaseIcons[phase]} ${phases[phase]}... (${content.length} chars)`,
-      );
-      this.tui.requestRender();
-    }, 100);
+    this.showSystemMessage(`${C.cyan}⊕ Scanning (${content.length} chars)...${C.reset}`);
 
     try {
       const result = await hybridScan({ content, llmCall: this.llmCall });
-      clearInterval(spinnerInterval);
 
-      // Screen-reader-friendly: text before emoji
       const verdict = result.verdict.toUpperCase();
       let emoji: string;
       let color: string;
@@ -574,310 +890,463 @@ export class CaitlynTUI {
         }
       }
 
-      this.chatView.updateLastSystemMessage(output);
-      this.statusBar.setLastScan(`${emoji} ${verdict} ${(result.total_latency_us / 1000).toFixed(1)}ms`);
+      this.showSystemMessage(output);
     } catch (e) {
-      clearInterval(spinnerInterval);
       const err = e instanceof Error ? e : new Error(String(e));
-      const friendly = translateLlmError(err);
-      this.chatView.updateLastSystemMessage(
-        `${C.red}❌ Scan failed:${C.reset} ${friendly}`,
-      );
-      this.statusBar.setLastScan("❌ failed");
+      this.showSystemMessage(`${C.red}❌ Scan failed:${C.reset} ${translateLlmError(err)}`);
     }
   }
 
-  private async doStatus(): Promise<void> {
-    const antibodies = loadAntibodies();
-    const antigens = loadAntigens();
-    const index = loadAntibodyIndex() ?? buildAntibodyIndex(antibodies);
-
-    let output = `🛡️  **CAITLYN Library**\n`;
-    output += `${antibodies.length} antibodies (${index.roots.length} roots), ${antigens.length} antigens\n\n`;
-
-    output += "**Antibodies:**\n";
-    for (const rid of index.roots) {
-      const ab = antibodies.find((a) => a.config.id === rid);
-      if (ab) {
-        const tp = ab.config.stats?.true_positives ?? 0;
-        const fp = ab.config.stats?.false_positives ?? 0;
-        output += `  📁 ${ab.config.id} [${ab.config.category}] tier=${ab.config.tier} | TP=${tp} FP=${fp}\n`;
-      }
-    }
-
-    const byCat: Record<string, number> = {};
-    for (const ag of antigens) byCat[ag.config.category] = (byCat[ag.config.category] || 0) + 1;
-    output += "\n**Antigens:**\n";
-    for (const [cat, count] of Object.entries(byCat)) {
-      output += `  - ${cat}: ${count}\n`;
-    }
-
-    this.chatView.addSystemMessage(output);
-  }
-
-  private async doDashboard(): Promise<void> {
-    const stats = getDashboard();
-    if (stats.total_scans === 0) {
-      this.chatView.addSystemMessage("📊 No scan data yet.");
-      return;
-    }
-
-    let output = "📊 **CAITLYN Dashboard**\n\n";
-    output += `Total Scans:      ${stats.total_scans}\n`;
-    output += `Detected (🚨):    ${stats.malicious_count}\n`;
-    output += `Clean (✅):       ${stats.benign_count}\n`;
-    output += `Detection Rate:   ${(stats.detection_rate * 100).toFixed(1)}%\n\n`;
-    output += `Avg Latency:      ${stats.avg_latency_ms.toFixed(2)}ms\n`;
-    output += `Avg Tokens:       ${stats.avg_tokens.toFixed(1)}\n`;
-    output += `Total Tokens:     ${stats.total_tokens}\n\n`;
-    output += `Tier 0 Hits:      ${stats.tier0_hits} | Tier 1: ${stats.tier1_hits}\n`;
-    output += `Last Scan:        ${stats.last_scan_at ?? "N/A"}\n`;
-
-    if (stats.top_antibodies.length > 0) {
-      output += "\n**Top Antibodies:**\n";
-      for (const a of stats.top_antibodies.slice(0, 5)) {
-        output += `  - ${a.id}: ${a.hits} hits\n`;
-      }
-    }
-
-    this.chatView.addSystemMessage(output);
-  }
-
-  private async doHistory(limit: number): Promise<void> {
-    const { getHistory } = await import("./history.js");
-    const entries = getHistory(limit);
-    if (entries.length === 0) {
-      this.chatView.addSystemMessage("No scan history yet.");
-      return;
-    }
-
-    let output = `📋 **Recent Scans** (${entries.length})\n\n`;
-    for (const e of entries) {
-      const emoji = e.verdict === "malicious" ? "🚨" : e.verdict === "suspicious" ? "⚠️" : "✅";
-      output += `${emoji} ${e.timestamp.slice(0, 19)} | ${e.verdict.toUpperCase()} | T${e.tier} | ${e.content_preview}\n`;
-    }
-    this.chatView.addSystemMessage(output);
-  }
-
-  // ── Antibody CRUD ─────────────────────────────────────────────
+  // ── Antibody / Antigen ──────────────────────────────────────
 
   private async doAntibodyList(): Promise<void> {
     const antibodies = loadAntibodies();
-    if (antibodies.length === 0) {
-      this.chatView.addSystemMessage("No antibodies loaded.");
-      return;
-    }
-    let output = "**Antibodies:**\n";
+    if (antibodies.length === 0) { this.showSystemMessage("No antibodies loaded."); return; }
+    let out = `${C.bold}Antibodies (${antibodies.length}):${C.reset}\n`;
     for (const ab of antibodies) {
-      output += `  📁 ${ab.config.id} [${ab.config.category}] tier=${ab.config.tier} gen=${ab.config.generation}\n`;
+      out += `  ${ab.config.id} [${ab.config.category}] tier=${ab.config.tier} gen=${ab.config.generation}\n`;
     }
-    this.chatView.addSystemMessage(output);
+    this.showSystemMessage(out);
   }
 
   private async doAntibodyAdd(id: string): Promise<void> {
-    this.chatView.addSystemMessage(
-      `Antibody "${id}" creation via TUI coming soon. Create antibody folders directly in antibodies/<id>/ with config.yaml + README.md + detect.ts`,
+    this.showSystemMessage(
+      `Antibody "${id}" creation via TUI coming soon. Create folders directly in antibodies/<id>/ with config.yaml + README.md + detect.ts`,
     );
   }
 
   private async doAntibodyRemove(id: string): Promise<void> {
     const antibodies = loadAntibodies();
     const ab = antibodies.find((a) => a.config.id === id);
-    if (!ab) {
-      this.chatView.addSystemMessage(`Antibody "${id}" not found.`);
-      return;
-    }
-    // Show what would be removed
-    this.chatView.addSystemMessage(
-      `Removing antibody "${id}" [${ab.config.category}] from ${ab.folderPath}\n` +
-      `This action cannot be undone. Type /confirm-remove ${id} to proceed.`,
+    if (!ab) { this.showSystemMessage(`Antibody "${id}" not found.`); return; }
+    this.showSystemMessage(
+      `${C.yellow}Removing antibody "${id}" [${ab.config.category}]${C.reset}\n` +
+      `${C.dim}Manual removal required: delete antibodies/${id}/${C.reset}`,
     );
-    // Note: actual deletion deferred to /confirm-remove for safety
   }
-
-  // ── Antigen View ──────────────────────────────────────────────
 
   private async doAntigenShow(id: string): Promise<void> {
     const antigens = loadAntigens();
     const ag = antigens.find((a) => a.config.id === id);
-    if (!ag) {
-      this.chatView.addSystemMessage(`Antigen "${id}" not found.`);
-      return;
-    }
-    let output = `**Antigen: ${ag.config.name}** [${ag.config.id}]\n`;
-    output += `Category: ${ag.config.category}\n`;
-    output += `Injection point: ${ag.config.injection_point}\n`;
-    output += `Target agent: ${ag.config.target_agent}\n`;
-    output += `Template: ${ag.config.attack_template}\n`;
-    if (ag.config.escapes.length > 0) {
-      output += `Known escapes: ${ag.config.escapes.join(", ")}\n`;
-    }
+    if (!ag) { this.showSystemMessage(`Antigen "${id}" not found.`); return; }
+    let out = `${C.bold}Antigen: ${ag.config.name}${C.reset} [${ag.config.id}]\n`;
+    out += `Category: ${ag.config.category}\n`;
+    out += `Injection: ${ag.config.injection_point}\n`;
     if (ag.payload) {
-      const payloadPreview = ag.payload.length > 500
-        ? ag.payload.slice(0, 497) + "..."
-        : ag.payload;
-      output += `\n**Payload:**\n\`\`\`\n${payloadPreview}\n\`\`\``;
+      out += `\nPayload:\n${ag.payload.slice(0, 500)}${ag.payload.length > 500 ? "..." : ""}`;
     }
-    this.chatView.addSystemMessage(output);
+    this.showSystemMessage(out);
   }
-
-  // ── Vaccination ───────────────────────────────────────────────
 
   private async doVaccinate(pattern: string): Promise<void> {
     const available = await isCaitlyndAvailable();
     if (!available) {
-      this.chatView.addSystemMessage(
-        `${C.yellow}⚠️  Vaccination requires caitlynd daemon.${C.reset}\n` +
-        `Start with: cargo run -- --port 9070`,
-      );
+      this.showSystemMessage(`${C.yellow}⚠️ Vaccination requires caitlynd daemon.${C.reset}`);
       return;
     }
-
-    const stages = ["⚡ SHM mutating...", "🧬 Affinity testing...", "💉 Antibody born!"];
-    let stageIdx = 0;
-    this.chatView.addSystemMessage(stages[stageIdx]);
-
-    const stageInterval = setInterval(() => {
-      if (!this.running) { clearInterval(stageInterval); return; }
-      stageIdx = Math.min(stageIdx + 1, stages.length - 1);
-      this.chatView.updateLastSystemMessage(stages[stageIdx]);
-      this.tui.requestRender();
-    }, 800);
-
     try {
       const daemonUrl = process.env.CAITLYND_URL ?? "http://127.0.0.1:9070";
       const client = new CaitlyndClient(daemonUrl);
       const result = await client.vaccinate(pattern);
-      clearInterval(stageInterval);
-      this.chatView.updateLastSystemMessage(
-        `${C.green}✅ Vaccination complete:${C.reset} ${result.message}`,
-      );
+      this.showSystemMessage(`${C.green}✅ Vaccination complete:${C.reset} ${result.message}`);
     } catch (err) {
-      clearInterval(stageInterval);
-      this.chatView.updateLastSystemMessage(
-        `${C.red}❌ Vaccination failed:${C.reset} ${err instanceof Error ? err.message : String(err)}`,
-      );
+      this.showSystemMessage(`${C.red}❌ Vaccination failed:${C.reset} ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
-  // ── Run / Stop ──────────────────────────────────────────────────
+  // ── Session Commands ────────────────────────────────────────
+
+  private async doNewSession(): Promise<void> {
+    const newMgr = SessionManager.create(process.cwd());
+    this.showSystemMessage(`${C.green}New session:${C.reset} ${newMgr.getSessionId()}`);
+    this.showSystemMessage(`${C.dim}Restart CAITLYN to begin the new session.${C.reset}`);
+  }
+
+  private async doResumeSession(): Promise<void> {
+    const sessions = SessionManager.list(process.cwd());
+    if (sessions.length === 0) {
+      this.showSystemMessage("No saved sessions found.");
+      return;
+    }
+    this.tui.showOverlay(buildSessionPickerOverlay(sessions), { anchor: "center", width: "70%", maxHeight: "70%" });
+  }
+
+  private async doSessionInfo(): Promise<void> {
+    const mgr = this.sessionMgr;
+    const stats = mgr.getTokenStats();
+    const name = mgr.getSessionName();
+
+    let out = `${C.bold}Session Info${C.reset}\n`;
+    out += `ID:      ${mgr.getSessionId()}\n`;
+    out += `File:    ${mgr.getSessionFile()}\n`;
+    out += `Entries: ${mgr.getEntryCount()}\n`;
+    if (name) out += `Name:    ${name}\n`;
+    out += `Tokens:  ↑${stats.input} ↓${stats.output}\n`;
+    if (stats.cost > 0) out += `Cost:    $${stats.cost.toFixed(4)}\n`;
+    out += `CWD:     ${mgr.getCwd()}\n`;
+
+    this.showSystemMessage(out);
+  }
+
+  private async doCompaction(): Promise<void> {
+    const entries = this.sessionMgr.getAllEntries();
+    const msgs = entries.filter((e) => e.type === "message") as MessageEntry[];
+    if (msgs.length < 4) {
+      this.showSystemMessage("Not enough messages to compact (need at least 4).");
+      return;
+    }
+
+    // Simple: keep last 50% of messages, summarize the rest
+    const cutIndex = Math.floor(msgs.length / 2);
+    const oldMsgs = msgs.slice(0, cutIndex);
+    const firstKeptId = msgs[cutIndex].id;
+
+    const summaryText = oldMsgs
+      .map((m) => `[${m.role}]: ${m.content.slice(0, 200)}`)
+      .join("\n");
+
+    // Use LLM to summarize if available
+    let summary = "";
+    try {
+      const prompt = `Summarize this conversation history concisely (2-3 sentences), preserving key facts and decisions:\n\n${summaryText}`;
+      summary = await this.llmCall("You are a summarizer. Be concise.", prompt);
+    } catch {
+      summary = `[Conversation history condensed — ${oldMsgs.length} earlier messages summarized]`;
+    }
+
+    const tokensBefore = oldMsgs.reduce(
+      (sum, m) => sum + estimateTokens(m.content), 0,
+    );
+
+    this.sessionMgr.appendCompaction(summary, firstKeptId, tokensBefore);
+    this.sessionMgr.flush();
+    this.showSystemMessage(
+      `${C.green}Compacted.${C.reset} Summarized ${oldMsgs.length} messages (≈${tokensBefore} tokens).`,
+    );
+  }
+
+  private async maybeCompact(): Promise<void> {
+    const entries = this.sessionMgr.getAllEntries();
+    const msgs = entries.filter((e) => e.type === "message") as MessageEntry[];
+    const totalTokens = msgs.reduce((sum, m) => sum + estimateTokens(m.content), 0);
+    const ctxWindow = getContextWindow(this.currentProvider, this.currentModelId);
+
+    if (totalTokens > ctxWindow * 0.7 && msgs.length >= 4) {
+      this.footer.update({ isAutoCompact: true });
+      await this.doCompaction();
+      this.footer.update({ isAutoCompact: false });
+    }
+  }
+
+  private showSessionTree(): void {
+    const tree = this.sessionMgr.getTree();
+    function formatNode(node: typeof tree[0], depth: number): string {
+      const e = node.entry;
+      const indent = "  ".repeat(depth);
+      let line = `${indent}${e.type}: ${e.id.slice(0, 8)}`;
+      if (e.type === "message") {
+        line += ` [${(e as MessageEntry).role}]`;
+      } else if (e.type === "session_info") {
+        line += ` "${(e as import("./session/session-types.js").SessionInfoEntry).name}"`;
+      }
+      return [line, ...node.children.flatMap((c) => formatNode(c, depth + 1))].join("\n");
+    }
+
+    const lines = tree.map((n) => formatNode(n, 0)).join("\n");
+    this.showSystemMessage(
+      `${C.bold}Session Tree:${C.reset}\n${lines || "(empty)"}`,
+    );
+  }
+
+  private doFork(messageId: string): void {
+    try {
+      const newPath = this.sessionMgr.createBranchedSession(messageId);
+      this.showSystemMessage(
+        `${C.green}Forked session created:${C.reset} ${newPath}`,
+      );
+    } catch (err) {
+      this.showSystemMessage(`${C.red}Fork failed:${C.reset} ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private doClone(): void {
+    const cloned = SessionManager.forkFrom(
+      this.sessionMgr.getSessionFile(),
+      process.cwd(),
+    );
+    this.showSystemMessage(`${C.green}Cloned session:${C.reset} ${cloned.getSessionFile()}`);
+  }
+
+  private doDelete(): void {
+    const file = this.sessionMgr.getSessionFile();
+    const items = [
+      { value: "yes", label: `${C.red}Yes, delete session${C.reset}` },
+      { value: "no", label: "No, keep session" },
+    ];
+    const list = new SelectList(items, 2, selectListTheme);
+    const confirmText = new Text(`${C.yellow}Delete session?${C.reset}\n${C.dim}${file}${C.reset}`);
+    const container = new Container();
+    container.addChild(confirmText);
+    container.addChild(list);
+    const handle = this.tui.showOverlay(container, { anchor: "center", width: "60%", maxHeight: "30%" });
+    list.onSelect = (item) => {
+      handle.hide();
+      if (item.value === "yes") {
+        this.sessionMgr.delete();
+        this.showSystemMessage(`${C.yellow}Session deleted:${C.reset} ${file}`);
+      }
+    };
+    list.onCancel = () => {
+      handle.hide();
+    };
+  }
+
+  private async doModelSwitch(args: string): Promise<void> {
+    const parts = args.split("/");
+    if (parts.length < 2) {
+      this.showSystemMessage("Usage: /model <provider/model>  (e.g., /model openrouter/deepseek/deepseek-chat)");
+      return;
+    }
+    const provider = parts[0];
+    const modelId = parts.slice(1).join("/");
+
+    // Verify provider exists
+    const foundProvider = getProviders().find((p) => p === provider);
+    if (!foundProvider) {
+      const available = getProviders().join(", ");
+      this.showSystemMessage(
+        `${C.red}Unknown provider "${provider}".${C.reset} Available: ${available}`,
+      );
+      return;
+    }
+
+    // Verify models are available for this provider
+    const models = getModels(foundProvider);
+    if (models.length === 0) {
+      this.showSystemMessage(
+        `${C.red}No models available for provider "${provider}".${C.reset} Check your API key configuration.`,
+      );
+      return;
+    }
+
+    // Verify the specific model exists
+    const model = models.find((m) => m.id === modelId);
+    if (!model) {
+      const available = models.map((m) => m.id).join(", ");
+      this.showSystemMessage(
+        `${C.red}Model "${modelId}" not found for "${provider}".${C.reset} Available: ${available}`,
+      );
+      return;
+    }
+
+    this.currentProvider = provider;
+    this.currentModelId = modelId;
+    this.sessionMgr.appendModelChange(provider, modelId);
+    this.sessionMgr.flush();
+    this.footer.update({
+      currentModel: getModelDisplay(provider, modelId),
+      providerName: provider,
+    });
+
+    // Update agent model if available
+    if (this.agent) {
+      this.agent.state.model = model;
+    }
+
+    this.showSystemMessage(`${C.green}Model switched to:${C.reset} ${provider}/${modelId}`);
+  }
+
+  private async doLogin(provider: string): Promise<void> {
+    if (!provider) {
+      const configured = listConfiguredProviders();
+      if (configured.length === 0) {
+        this.showSystemMessage(
+          "No providers configured. Set API keys via environment variables.\n" +
+          "  export OPENROUTER_API_KEY=sk-...\n" +
+          "  export OPENAI_API_KEY=sk-...\n" +
+          "  etc.",
+        );
+      } else {
+        this.showSystemMessage(`Configured providers: ${configured.join(", ")}`);
+      }
+      return;
+    }
+    this.showSystemMessage(
+      `${C.dim}To configure ${provider}, set the appropriate environment variable or add the key to ~/.caitlyn/auth.json${C.reset}`,
+    );
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────
+
+  // ── Helpers ─────────────────────────────────────────────────
+
+  private showSystemMessage(content: string): void {
+    const md = new Markdown(content, 0, 0, THEME);
+    this.insertBeforeEditor(md);
+    this.tui.requestRender();
+  }
+
+  private showHelp(): void {
+    const lines = [
+      `${C.bold}${C.cyan}C A I T L Y N   C o m m a n d s${C.reset}`,
+      ``,
+      `${C.bold}Scanning & Defense:${C.reset}`,
+      `  /scan <content>      Security scan for injection attacks`,
+      `  /status              Show antibody/antigen library`,
+      `  /dashboard           Defense statistics`,
+      `  /history             Recent scan history`,
+      `  /antibody list       List antibody forest`,
+      `  /antigen <id>        Show antigen details`,
+      `  /vaccinate <pattern> Evolve antibody`,
+      ``,
+      `${C.bold}Session:${C.reset}`,
+      `  /new                 Start new session`,
+      `  /resume              Open session picker`,
+      `  /session             Show session info`,
+      `  /name <title>        Set session name`,
+      `  /export [path]       Export session`,
+      `  /compact             Compact context`,
+      `  /tree                View session tree`,
+      `  /fork <id>           Branch from message`,
+      `  /clone               Duplicate session`,
+      `  /delete              Delete session`,
+      ``,
+      `${C.bold}Config:${C.reset}`,
+      `  /model [provider/id] Switch LLM model`,
+      `  /thinking <level>    off|low|medium|high`,
+      `  /login [provider]    Configure auth`,
+      `  /settings            Open settings`,
+      ``,
+      `${C.bold}Meta:${C.reset}`,
+      `  /help                Show this help`,
+      `  /clear               Clear screen`,
+      `  /quit                Exit CAITLYN`,
+      ``,
+      `${C.dim}  !<content>           Quick scan alias${C.reset}`,
+      ``,
+      `${C.dim}  Ctrl+C quit  |  Esc back/abort  |  Tab back  |  q dismiss${C.reset}`,
+    ];
+
+    this.showSystemMessage(lines.join("\n"));
+  }
+
+  private refreshFooter(): void {
+    const stats = this.sessionMgr.getTokenStats();
+    this.footer.update({
+      totalInput: stats.input,
+      totalOutput: stats.output,
+      totalCacheRead: stats.cacheRead,
+      totalCacheWrite: stats.cacheWrite,
+      totalCost: stats.cost,
+      antibodyCount: loadAntibodies().length,
+    });
+    this.footer.invalidate();
+  }
+
+  // ── Run / Stop ──────────────────────────────────────────────
 
   async run(): Promise<void> {
     this.running = true;
 
-    const rejectionHandler = (reason: unknown) => {
+    this.rejectionHandler = (reason: unknown) => {
       try {
-        this.chatView.addSystemMessage(
-          `${C.red}⚠️ Internal error:${C.reset} ${reason instanceof Error ? reason.message : String(reason)}\n${C.dim}CAITLYN continues running. Report this bug if it persists.${C.reset}`,
+        this.showSystemMessage(
+          `${C.red}⚠️ Internal error:${C.reset} ${reason instanceof Error ? reason.message : String(reason)}\n${C.dim}CAITLYN continues running.${C.reset}`,
         );
-        this.tui.requestRender();
-      } catch {
-        // Can't even show the error — silently continue
-      }
+      } catch { /* silently continue */ }
     };
-    process.on("unhandledRejection", rejectionHandler);
-    process.on("uncaughtException", (err) => {
-      rejectionHandler(err);
-    });
+    process.on("unhandledRejection", this.rejectionHandler);
+    process.on("uncaughtException", (err) => this.rejectionHandler?.(err));
 
-    const sigintHandler = () => {
-      this.chatView.addSystemMessage(`${C.cyan}Goodbye.${C.reset}`);
+    this.sigintHandler = () => {
       this.stop();
     };
-    process.on("SIGINT", sigintHandler);
+    process.on("SIGINT", this.sigintHandler);
 
-    // Status bar auto-refresh every 30s
-    this.statusBarInterval = setInterval(async () => {
-      try {
-        const available = await isCaitlyndAvailable();
-        if (available) {
-          const st = await getCaitlyndStatus();
-          if (st) {
-            const uptimeStr = st.uptime_seconds != null
-              ? `, ${(st.uptime_seconds / 3600).toFixed(1)}h uptime`
-              : "";
-            this.statusBar.setDaemonStatus(
-              `${C.green}connected${C.reset} (${st.active_antibodies} antibodies, ${st.memory_entries} memory${uptimeStr})`,
-            );
-          } else {
-            this.statusBar.setDaemonStatus(`${C.green}connected${C.reset}`);
-          }
-        } else {
-          this.statusBar.setDaemonStatus(`${C.yellow}local mode${C.reset} (daemon not running)`);
-        }
-        this.statusBar.invalidate();
+    // Periodic footer refresh
+    this.footerTimer = setInterval(() => {
+      if (!this.running) return;
+      this.refreshFooter();
+      isCaitlyndAvailable().then((available) => {
+        this.footer.update({
+          daemonStatus: available ? "connected" : "disconnected",
+        });
+        this.footer.invalidate();
         this.tui.requestRender();
-      } catch {
-        // Status refresh failed silently
-      }
+      }).catch(() => {});
     }, 30_000);
 
-    // Welcome message
+    // Welcome messages
     const antibodies = loadAntibodies();
     const daemonAvailable = await isCaitlyndAvailable();
     const daemonText = daemonAvailable ? `${C.green}connected${C.reset}` : `${C.yellow}not running${C.reset}`;
     const agentText = this.agent ? `${C.green}ready${C.reset}` : `${C.yellow}not loaded${C.reset}`;
 
-    // Onboarding: first-run check
-    const historyEntries = loadHistory();
-    if (historyEntries.length === 0) {
-      this.chatView.addSystemMessage(
-        `${C.bold}${C.cyan}Welcome to CAITLYN!${C.reset}\n\n` +
-        `Here's how to get started:\n` +
-        `1) ${C.cyan}Type anything${C.reset} — chat with the CAITLYN security agent\n` +
-        `2) ${C.cyan}/scan <content>${C.reset} — scan content for injection attacks\n` +
-        `3) ${C.cyan}/dashboard${C.reset} — view defense statistics\n` +
-        `4) ${C.cyan}/help${C.reset} — see all commands`,
-      );
-    }
-
-    this.chatView.addSystemMessage(
-      `${C.dim}Continuous Agents for Injection Threats via Lifelong Yielding Nexus${C.reset}\n` +
-      `${C.dim}AI Agent Immune System${C.reset}\n\n` +
+    this.showSystemMessage(
+      `${C.bold}${C.cyan}Welcome to CAITLYN!${C.reset}\n\n` +
       `Daemon: ${daemonText} | Agent: ${agentText} | Antibodies: ${antibodies.length}\n` +
       `${C.dim}Type to chat, /scan to inspect, /help for commands.  Ctrl+C to exit.${C.reset}`,
     );
 
-    this.tui.setFocus(this.input);
+    this.editor.disableSubmit = false;
+    this.tui.setFocus(this.editor);
     this.tui.start();
 
     // Run until stopped
     await new Promise<void>((resolve) => {
-      const checkStop = setInterval(() => {
+      const check = setInterval(() => {
         if (!this.running) {
-          clearInterval(checkStop);
+          clearInterval(check);
           resolve();
         }
       }, 100);
     });
 
     // Cleanup
-    if (this.statusBarInterval) {
-      clearInterval(this.statusBarInterval);
-      this.statusBarInterval = null;
+    if (this.footerTimer) {
+      clearInterval(this.footerTimer);
+      this.footerTimer = null;
     }
-    process.off("SIGINT", sigintHandler);
-    process.off("unhandledRejection", rejectionHandler);
-    process.off("uncaughtException", rejectionHandler);
+    if (this.sigintHandler) {
+      process.off("SIGINT", this.sigintHandler);
+      this.sigintHandler = null;
+    }
+    if (this.rejectionHandler) {
+      process.off("unhandledRejection", this.rejectionHandler);
+      process.off("uncaughtException", this.rejectionHandler);
+      this.rejectionHandler = null;
+    }
   }
 
+
+  private abortResponse(): void {
+    this.agent?.abort?.();
+    if (this.currentLoader) {
+      this.tui.removeChild(this.currentLoader);
+      this.currentLoader = null;
+    }
+    this.showSystemMessage(`${C.yellow}Aborted.${C.reset}`);
+    this.isResponding = false;
+    this.editor.disableSubmit = false;
+    this.tui.setFocus(this.editor);
+  }
   stop(): void {
     this.running = false;
+    this.sessionMgr.flush();
     this.tui.stop();
 
-    if (this.statusBarInterval) {
-      clearInterval(this.statusBarInterval);
-      this.statusBarInterval = null;
+    if (this.footerTimer) {
+      clearInterval(this.footerTimer);
+      this.footerTimer = null;
     }
-
-    // Kill auto-started daemon
-    if (this.daemonAutoStarted && this.daemonPid) {
-      try {
-        process.kill(this.daemonPid, "SIGTERM");
-        console.log("Stopped auto-started caitlynd daemon.");
-      } catch {
-        // Already dead
-      }
+    if (this.sigintHandler) {
+      process.off("SIGINT", this.sigintHandler);
+      this.sigintHandler = null;
+    }
+    if (this.rejectionHandler) {
+      process.off("unhandledRejection", this.rejectionHandler);
+      process.off("uncaughtException", this.rejectionHandler);
+      this.rejectionHandler = null;
     }
   }
 }
