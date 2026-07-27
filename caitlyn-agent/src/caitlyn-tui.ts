@@ -38,17 +38,22 @@ import {
 } from "@earendil-works/pi-tui";
 import type { Agent } from "@earendil-works/pi-agent-core";
 import { type LlmCallFn } from "./scanner.js";
-import { hybridScan, getCaitlyndStatus, isCaitlyndAvailable } from "./hybrid-scanner.js";
+import { hybridScan } from "./hybrid-scanner.js";
 import { getDashboard, loadHistory } from "./history.js";
 import {
   loadAntibodies,
   loadAntigens,
   loadAntibodyIndex,
   buildAntibodyIndex,
+  getCostMonitor,
+  getMemoryBank,
+  getVaccinationPipeline,
+  toEvoAntibody,
+  persistVaccinatedAntibody,
+  ANTIBODIES_DIR,
 } from "./library.js";
-import type { ScriptResult } from "./schema.js";
-import { CaitlyndClient } from "./caitlynd-client.js";
 import { SessionManager } from "./session/session-manager.js";
+import type { ScriptResult } from "./schema.js";
 import {
   FooterComponent,
   createDefaultFooterData,
@@ -389,9 +394,7 @@ export class CaitlynTUI {
     footerData.antibodyCount = loadAntibodies().length;
     footerData.gitBranch = getGitBranch(cwd);
 
-    const daemonAvailable = await isCaitlyndAvailable();
-    footerData.daemonStatus = daemonAvailable ? "connected" : "disconnected";
-
+    footerData.daemonStatus = "connected";
     const footer = new FooterComponent(footerData);
     tui.addChild(footer);
 
@@ -895,9 +898,6 @@ export class CaitlynTUI {
       output += `\n${C.dim}Confidence:${C.reset} ${(result.confidence * 100).toFixed(1)}%  ${C.dim}Latency:${C.reset} ${(result.total_latency_us / 1000).toFixed(1)}ms  ${C.dim}Tokens:${C.reset} ${result.total_tokens}`;
       output += `  ${C.dim}${result.backend}${C.reset}`;
 
-      if (result.daemon_info?.triggered_vaccination) {
-        output += `\n${C.magenta}💉 Vaccination triggered!${C.reset}`;
-      }
 
       const hits = result.script_results.filter((r: ScriptResult) => r.verdict === "malicious");
       if (hits.length > 0) {
@@ -956,16 +956,41 @@ export class CaitlynTUI {
   }
 
   private async doVaccinate(pattern: string): Promise<void> {
-    const available = await isCaitlyndAvailable();
-    if (!available) {
-      this.showSystemMessage(`${C.yellow}⚠️ Vaccination requires caitlynd daemon.${C.reset}`);
+    const antibodies = loadAntibodies();
+    const parent = antibodies.find((a) => a.config.category === "injection") ?? antibodies[0];
+    if (!parent) {
+      this.showSystemMessage(`${C.yellow}No antibodies loaded to use as parent.${C.reset}`);
       return;
     }
+
+    const costMonitor = getCostMonitor();
+    const memoryBank = getMemoryBank();
+    const pipeline = getVaccinationPipeline();
+    const parentEvo = toEvoAntibody(parent);
+    const patternHash = costMonitor.computePatternHash(pattern);
+    const valsetDir = path.join(path.dirname(ANTIBODIES_DIR), "valsets");
+
+    this.showSystemMessage(`${C.cyan}💉 Running vaccination pipeline...${C.reset}`);
+
     try {
-      const daemonUrl = process.env.CAITLYND_URL ?? "http://127.0.0.1:9070";
-      const client = new CaitlyndClient(daemonUrl);
-      const result = await client.vaccinate(pattern);
-      this.showSystemMessage(`${C.green}✅ Vaccination complete:${C.reset} ${result.message}`);
+      const results = await pipeline.vaccinate(
+        patternHash, [parentEvo], costMonitor, memoryBank,
+        this.llmCall, valsetDir,
+      );
+
+      if (results.length === 0) {
+        this.showSystemMessage(`${C.yellow}Vaccination completed but no antibodies survived affinity maturation.${C.reset}`);
+        return;
+      }
+
+      for (const r of results) {
+        persistVaccinatedAntibody(r.antibody, r.memoryEntries);
+        costMonitor.markVaccinated(patternHash, r.antibody.id);
+      }
+
+      const names = results.map((r) => `${r.antibody.name} (score=${r.affinityScore.toFixed(2)})`).join(", ");
+      this.showSystemMessage(`${C.green}💉 Vaccination complete:${C.reset} ${results.length} antibody(s) — ${names}`);
+      this.refreshFooter();
     } catch (err) {
       this.showSystemMessage(`${C.red}❌ Vaccination failed:${C.reset} ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -1284,24 +1309,15 @@ export class CaitlynTUI {
     this.footerTimer = setInterval(() => {
       if (!this.running) return;
       this.refreshFooter();
-      isCaitlyndAvailable().then((available) => {
-        this.footer.update({
-          daemonStatus: available ? "connected" : "disconnected",
-        });
-        this.footer.invalidate();
-        this.tui.requestRender();
-      }).catch(() => {});
     }, 30_000);
 
     // Welcome messages
     const antibodies = loadAntibodies();
-    const daemonAvailable = await isCaitlyndAvailable();
-    const daemonText = daemonAvailable ? `${C.green}connected${C.reset}` : `${C.yellow}not running${C.reset}`;
     const agentText = this.agent ? `${C.green}ready${C.reset}` : `${C.yellow}not loaded${C.reset}`;
 
     this.showSystemMessage(
       `${C.bold}${C.cyan}Welcome to CAITLYN!${C.reset}\n\n` +
-      `Daemon: ${daemonText} | Agent: ${agentText} | Antibodies: ${antibodies.length}\n` +
+      `Agent: ${agentText} | Antibodies: ${antibodies.length} | Evolution: ${C.green}built-in${C.reset}\n` +
       `${C.dim}Type to chat, /scan to inspect, /help for commands.  Ctrl+C to exit.${C.reset}`,
     );
 

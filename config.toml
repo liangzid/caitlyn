@@ -1,10 +1,4 @@
 # CAITLYN Configuration
-# Copy this file to config.toml and customize as needed.
-
-[daemon]
-http_port = 9070
-mcp_mode = "off"
-grpc_port = 9071
 
 [llm]
 provider = "deepseek"

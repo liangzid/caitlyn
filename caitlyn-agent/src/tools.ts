@@ -9,7 +9,7 @@
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static } from "@earendil-works/pi-ai";
-import { loadAntibodies, loadAntigens, loadAntibodyIndex, buildAntibodyIndex, saveAntibody, ANTIBODIES_DIR } from "./library.js";
+import { loadAntibodies, loadAntigens, loadAntibodyIndex, buildAntibodyIndex, saveAntibody, ANTIBODIES_DIR, getCostMonitor, getMemoryBank, getVaccinationPipeline, toEvoAntibody, persistVaccinatedAntibody } from "./library.js";
 import { scan, runTier0, type LlmCallFn } from "./scanner.js";
 import { getDashboard, getHistory } from "./history.js";
 import type { AntibodyEntry, AntibodyConfig } from "./schema.js";
@@ -383,68 +383,46 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
 
         if (!parent) return textResult("No parent antibody available for vaccination.");
 
-        const systemPrompt = [
-          "You are CAITLYN's vaccination engine. Given a parent antibody and a threat pattern,",
-          "generate a new antibody variant that is more specialized against the specific pattern.",
-          "Output a single JSON object:",
-          '{ "id": "ab-<category>-<variant>", "name": "...", "category": "injection|jailbreak|poisoning|exfiltration",',
-          '  "tier": 0, "threshold": 0.7, "detect_logic": "... (regex or heuristic description)" }',
-        ].join("\n");
+        const costMonitor = getCostMonitor();
+        const memoryBank = getMemoryBank();
+        const pipeline = getVaccinationPipeline();
 
-        const userPrompt = [
-          `Parent antibody: ${parent.config.name} (${parent.config.id})`,
-          `Category: ${parent.config.category}`,
-          `Current detection: ${parent.readme.slice(0, 500)}`,
-          "",
-          `Threat pattern to counter: ${params.pattern.slice(0, 2000)}`,
-        ].join("\n");
+        // Record the pattern in cost monitor to establish a baseline
+        const patternHash = costMonitor.computePatternHash(params.pattern);
+        const parentEvo = toEvoAntibody(parent);
 
-        const response = await llmCall(systemPrompt, userPrompt);
-        let variant: Record<string, unknown>;
-        try {
-          const jsonStr = response.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-          variant = JSON.parse(jsonStr) as Record<string, unknown>;
-        } catch {
-          return textResult(`Vaccination LLM output could not be parsed as JSON:\n${response.slice(0, 500)}`);
+        // Run the full vaccination pipeline
+        const valsetDir = path.join(path.dirname(path.dirname(ANTIBODIES_DIR)), "valsets");
+        const results = await pipeline.vaccinate(
+          patternHash,
+          [parentEvo],
+          costMonitor,
+          memoryBank,
+          llmCall,
+          valsetDir,
+        );
+
+        if (results.length === 0) {
+          return textResult(
+            "Vaccination pipeline completed but no antibodies survived affinity maturation.\n" +
+            "Try with a different parent antibody or more attack samples.",
+          );
         }
 
-        const newId = (variant.id as string) ?? `ab-${parent.config.category}-v${Date.now()}`;
-        // Build and persist the new antibody
-        const abDir = path.join(ANTIBODIES_DIR, newId);
-        const entry = {
-          config: {
-            id: newId,
-            name: (variant.name as string) ?? newId,
-            parent_id: parent.config.id,
-            category: (variant.category as AntibodyConfig["category"]) ?? parent.config.category,
-            tier: (variant.tier as 0 | 1 | 2) ?? 0,
-            threshold: (variant.threshold as number) ?? 0.7,
-            description: (variant.description as string) ?? "",
-            affinity_score: (variant.affinity_score as number) ?? 0,
-            created_at: new Date().toISOString(),
-            generation: parent.config.generation + 1,
-            stats: { true_positives: 0, false_positives: 0, total_scans: 0, avg_latency_us: 0 },
-            deps: [parent.config.id],
-            signatures: (variant.signatures as AntibodyConfig["signatures"]) ?? [],
-          } satisfies AntibodyConfig,
-          readme: `# ${variant.name ?? newId}\n\nVaccinated from ${parent.config.id}.\nTarget pattern: ${params.pattern.slice(0, 200)}`,
-          scriptPath: null,
-          folderPath: abDir,
-        } satisfies AntibodyEntry;
-        saveAntibody(entry);
+        // Persist surviving antibodies
+        const saved: string[] = [];
+        for (const result of results) {
+          persistVaccinatedAntibody(result.antibody, result.memoryEntries);
+          costMonitor.markVaccinated(patternHash, result.antibody.id);
+          saved.push(
+            `  ${result.antibody.id}: ${result.antibody.name} ` +
+            `(score=${result.affinityScore.toFixed(2)}, precision=${result.precision.toFixed(2)}, recall=${result.recall.toFixed(2)})`,
+          );
+        }
 
-        const info = [
-          `💉 Vaccination candidate generated and saved:`,
-          `  ID: ${newId}`,
-          `  Name: ${variant.name ?? "unnamed"}`,
-          `  Category: ${variant.category ?? parent.config.category}`,
-          `  Tier: ${variant.tier ?? 0}`,
-          `  Threshold: ${variant.threshold ?? 0.7}`,
-          `  Location: ${abDir}`,
-          "",
-          `${(variant.detect_logic as string)?.slice(0, 300) ?? "N/A"}`,
-        ];
-        return textResult(info.join("\n"));
+        return textResult(
+          `💉 Vaccination complete — ${results.length} antibody(ies) persisted:\n${saved.join("\n")}`,
+        );
       },
     },
   ];

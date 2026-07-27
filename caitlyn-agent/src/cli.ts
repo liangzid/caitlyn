@@ -43,7 +43,6 @@ import {
   clearHistory,
   exportHistory,
 } from "./history.js";
-import { CaitlyndClient } from "./caitlynd-client.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -145,9 +144,6 @@ async function main() {
         for (const m of result.script_results.filter((r) => r.verdict === "malicious")) {
           console.log(`     - ${m.antibody_id}: ${m.reason ?? "no reason"}`);
         }
-        if (result.backend === "local" && elapsed > 1000) {
-          console.log(`\n💡 Tip: start caitlynd daemon for faster scans with more antibodies`);
-        }
         process.exit(result.verdict === "malicious" ? 1 : 0);
       } catch (err) {
         console.error("❌ Scan failed:", err instanceof Error ? err.message : String(err));
@@ -236,8 +232,6 @@ provider = "openrouter"
 # Model identifier (provider-specific)
 model = "deepseek/deepseek-chat"
 
-# Daemon URL — caitlynd for accelerated scanning
-daemon_url = "http://127.0.0.1:9070"
 
 # Tier 0 script timeout in milliseconds
 scan_timeout_ms = 500
@@ -342,26 +336,6 @@ memory_limit = 10000
 
       console.log("\n✅ Setup complete! Start with: caitlyn tui");
       process.exit(0);
-    }
-    case "vaccinate": {
-      if (args.length < 2) { console.log("Usage: caitlyn vaccinate <pattern>"); process.exit(1); }
-      const pattern = args.slice(1).join(" ");
-      const daemonUrl = process.env.CAITLYND_URL ?? "http://127.0.0.1:9070";
-      const client = new CaitlyndClient(daemonUrl);
-      const healthy = await client.health();
-      if (!healthy) {
-        console.log("❌ Vaccination requires caitlynd daemon. Start with: cargo run -- --port 9070");
-        process.exit(1);
-      }
-      try {
-        console.log(`💉 Vaccinating pattern: "${pattern}"...`);
-        const result = await client.vaccinate(pattern);
-        console.log(`✅ ${result.message}`);
-        process.exit(0);
-      } catch (err) {
-        console.error("❌ Vaccination failed:", err instanceof Error ? err.message : String(err));
-        process.exit(1);
-      }
     }
     case "help":
     case "--help":
