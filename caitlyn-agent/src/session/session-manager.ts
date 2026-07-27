@@ -171,7 +171,7 @@ export class SessionManager {
 
     return files.map((f): SessionInfo => {
       const raw = fs.readFileSync(f.path, "utf-8");
-      const lines = raw.split("\n").filter((l) => l.trim());
+      const lines = raw.split(/\r?\n/).filter((l) => l.trim());
       const entries = lines.map((l) => {
         try { return JSON.parse(l); } catch { return null; }
       }).filter(Boolean) as SessionEntry[];
