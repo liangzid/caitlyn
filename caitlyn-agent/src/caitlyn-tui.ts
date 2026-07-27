@@ -32,6 +32,7 @@ import {
   CancellableLoader,
   Loader,
   Editor,
+  matchesKey,
   type Component,
   type MarkdownTheme,
 } from "@earendil-works/pi-tui";
@@ -82,11 +83,18 @@ const noEmoji = process.env.CAITLYN_NO_EMOJI === "1";
 // ── Logo ──────────────────────────────────────────────────────────
 
 const CAITLYN_LOGO = [
-  `${C.cyan}${C.bold}🛡️  C A I T L Y N${C.reset}`,
-  `${C.dim}AI Agent Immune System${C.reset}`,
-  `${C.cyan}${"─".repeat(56)}${C.reset}`,
-  `${C.dim}Continuous Agents for Injection Threats${C.reset}`,
-  `${C.dim}via Lifelong Yielding Nexus${C.reset}`,
+  `${C.cyan}${C.bold} ╔════════════════════════════════════════════════════╗${C.reset}`,
+  `${C.cyan}${C.bold} ║${C.reset}                                                    ${C.cyan}${C.bold}║${C.reset}`,
+  `${C.cyan}${C.bold} ║${C.reset}      ${C.bold}___   _     _____  _____  __         __${C.reset}      ${C.cyan}${C.bold}║${C.reset}`,
+  `${C.cyan}${C.bold} ║${C.reset}     ${C.bold}/ __\\ /_\\    \\_   \\/__   \\/ //\\_/\\ /\\ \\ \\${C.reset}     ${C.cyan}${C.bold}║${C.reset}`,
+  `${C.cyan}${C.bold} ║${C.reset}    ${C.bold}/ /   //_\\\\    / /\\/  / /\\/ / \\_ _//  \\/ /${C.reset}     ${C.cyan}${C.bold}║${C.reset}`,
+  `${C.cyan}${C.bold} ║${C.reset}   ${C.bold}/ /___/  _  \\/\\/ /_   / / / /___/ \\/ /\\  /${C.reset}      ${C.cyan}${C.bold}║${C.reset}`,
+  `${C.cyan}${C.bold} ║${C.reset}   ${C.bold}\\____/\\_/ \\_/\\____/   \\/  \\____/\\_/\\_\\ \\/${C.reset}       ${C.cyan}${C.bold}║${C.reset}`,
+  `${C.cyan}${C.bold} ║${C.reset}                                                    ${C.cyan}${C.bold}║${C.reset}`,
+  `${C.cyan}${C.bold} ║${C.reset}  ${C.dim}AI Agent Immune System${C.reset}                            ${C.cyan}${C.bold}║${C.reset}`,
+  `${C.cyan}${C.bold} ║${C.reset}  ${C.dim}Continuous Agents for Injection Threats${C.reset}           ${C.cyan}${C.bold}║${C.reset}`,
+  `${C.cyan}${C.bold} ║${C.reset}  ${C.dim}via Lifelong Yielding Nexus${C.reset}                       ${C.cyan}${C.bold}║${C.reset}`,
+  `${C.cyan}${C.bold} ╚════════════════════════════════════════════════════╝${C.reset}`,
 ].join("\n");
 
 // ── Theme ─────────────────────────────────────────────────────────
@@ -437,8 +445,8 @@ export class CaitlynTUI {
         return { consume: true };
       }
       // ── Global always-available ──────────────────────────────
-      // Ctrl+C: always quit
-      if (data === "\x03") {
+      // Ctrl+C: always quit (matchesKey handles both legacy \x03 and Kitty protocol)
+      if (matchesKey(data, "ctrl+c")) {
         self.stop();
         return { consume: true };
       }
@@ -537,6 +545,11 @@ export class CaitlynTUI {
             this.tui.removeChild(this.currentLoader);
             this.currentLoader = null;
           }
+          // Remove the streaming message so the final message doesn't duplicate
+          if (this.streamingMd) {
+            this.tui.removeChild(this.streamingMd);
+            this.streamingMd = null;
+          }
 
           const prefix = `${C.bold}${C.cyan}CAITLYN${C.reset}  ${C.dim}just now${C.reset}  `;
           const msgMd = new Markdown(prefix + currentMessageContent, 0, 0, THEME);
@@ -579,6 +592,10 @@ export class CaitlynTUI {
           if (this.currentLoader) {
             this.tui.removeChild(this.currentLoader);
             this.currentLoader = null;
+          }
+          if (this.streamingMd) {
+            this.tui.removeChild(this.streamingMd);
+            this.streamingMd = null;
           }
           this.isResponding = false;
           this.editor.disableSubmit = false;
