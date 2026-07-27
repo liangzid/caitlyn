@@ -9,8 +9,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "dev": "tsx src/cli.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && npm run build-antibodies",
+    "build-antibodies": "npx tsx src/scripts/precompile-antibodies.ts",
     "start": "node dist/cli.js",
     "test": "vitest run"
   },

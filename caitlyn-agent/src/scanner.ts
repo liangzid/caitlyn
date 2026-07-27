@@ -7,6 +7,7 @@
  */
 
 import { spawn } from "node:child_process";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AntibodyEntry, AntigenEntry, ScanResult, ScriptResult } from "./schema.js";
 import { logScan } from "./history.js";
@@ -24,7 +25,13 @@ function runScript(opts: RunScriptOptions): Promise<ScriptResult> {
   const start = performance.now();
   const { promise, resolve } = Promise.withResolvers<ScriptResult>();
 
-  const child = spawn("npx", ["tsx", opts.scriptPath], {
+  // Prefer precompiled .mjs (50ms) over npx tsx (500ms)
+  const compiledPath = opts.scriptPath.replace(/\.ts$/, ".mjs");
+  const useCompiled = fs.existsSync(compiledPath);
+  const cmd = useCompiled ? "node" : "npx";
+  const args = useCompiled ? [compiledPath] : ["tsx", opts.scriptPath];
+
+  const child = spawn(cmd, args, {
     stdio: ["pipe", "pipe", "pipe"],
     env: { ...process.env },
   });
