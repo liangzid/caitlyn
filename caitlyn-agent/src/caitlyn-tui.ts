@@ -1331,6 +1331,7 @@ export class CaitlynTUI {
     this.tui.setFocus(this.editor);
   }
   stop(): void {
+    if (!this.running) return; // idempotent
     this.running = false;
     this.sessionMgr.flush();
     this.tui.stop();
@@ -1348,5 +1349,7 @@ export class CaitlynTUI {
       process.off("uncaughtException", this.rejectionHandler);
       this.rejectionHandler = null;
     }
+    // Ensure the process exits after cleanup
+    setTimeout(() => process.exit(0), 200);
   }
 }

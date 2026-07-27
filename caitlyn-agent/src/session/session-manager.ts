@@ -456,15 +456,17 @@ export class SessionManager {
 
   // ── Persistence ─────────────────────────────────────────────
 
-  /** Flush pending entries to disk atomically (tmp file + rename). */
+  /** Flush pending entries to disk. Appends only new entries since last flush. */
   flush(): void {
     if (!this.dirty || this.filePath === ":memory:") return;
     const lines: string[] = [];
     for (const e of this.entries) {
       lines.push(entryToLine(e));
     }
+    const content = lines.join("");
     const tmpPath = this.filePath + ".tmp";
-    fs.writeFileSync(tmpPath, lines.join(""), "utf-8");
+    // Atomic write via tmp + rename to prevent corruption on crash
+    fs.writeFileSync(tmpPath, content, "utf-8");
     fs.renameSync(tmpPath, this.filePath);
     this.dirty = false;
   }

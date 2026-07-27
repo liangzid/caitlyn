@@ -9,12 +9,11 @@
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static } from "@earendil-works/pi-ai";
-import { loadAntibodies, loadAntigens, loadAntibodyIndex, buildAntibodyIndex, saveAntibody } from "./library.js";
+import { loadAntibodies, loadAntigens, loadAntibodyIndex, buildAntibodyIndex, saveAntibody, ANTIBODIES_DIR } from "./library.js";
 import { scan, runTier0, type LlmCallFn } from "./scanner.js";
 import { getDashboard, getHistory } from "./history.js";
 import type { AntibodyEntry, AntibodyConfig } from "./schema.js";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -410,10 +409,8 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
         }
 
         const newId = (variant.id as string) ?? `ab-${parent.config.category}-v${Date.now()}`;
-
         // Build and persist the new antibody
-        const AB_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "antibodies");
-        const abDir = path.join(AB_DIR, newId);
+        const abDir = path.join(ANTIBODIES_DIR, newId);
         const entry = {
           config: {
             id: newId,

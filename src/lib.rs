@@ -157,6 +157,19 @@ impl Caitlyn {
                     antibody.id,
                     antibody.stats.precision()
                 );
+                // Drop pipeline lock before persisting to avoid holding it across I/O
+                drop(pipeline);
+                self.antibody_pool.add(antibody.clone()).await?;
+                crate::storage::antibody_store::save_antibody(
+                    &antibody,
+                    &self.config.storage.antibody_dir,
+                    &antibody.id,
+                )
+                .await?;
+                info!(
+                    "Antibody '{}' persisted to pool and disk",
+                    antibody.id
+                );
                 Ok(())
             }
             Ok(None) => {

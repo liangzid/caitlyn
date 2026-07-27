@@ -1,0 +1,45 @@
+#+TITLE: CAITLYN: Comprehensive Code Review 2025-07-25
+#+AUTHOR: Zi Liang (团长) + Agent
+#+DATE: 2026-07-25
+
+* Session Summary
+
+团长 requested a comprehensive review of the CAITLYN agent after observing three concrete problems:
+1. Agent cannot exit (进程无法退出)
+2. Agent cannot see pre-existing antigens and antibodies (无法获取已添加的抗原和抗体)
+3. Other problems exist
+
+The agent conducted a full-system audit across:
+- caitlyn-agent/src/ (19 TypeScript files: TUI, CLI, REPL, scanner, tools, library, session, etc.)
+- src/ (19 Rust files: daemon core, surveillance, evolution, storage, server)
+- antibodies/ (20+ antibody directories with config.yaml + detect.ts)
+- antigens/ (6 antigen directories)
+- AgentEval/ (Python eval framework)
+
+* Key Findings
+
+** Critical — User-Reported Issues Confirmed:
+1. Agent cannot exit: ~CaitlynTUI.stop()~ never calls ~process.exit()~; CLI main() TUI path has no exit; /quit handler only calls stop()
+2. Antibodies invisible: ~antibodies/index.json~ is empty ~{roots:[], trees:{}}~ and ~loadAntibodyIndex()~ returns non-null empty object → ~buildAntibodyIndex()~ fallback never triggers → ~list_antibodies~ shows nothing
+3. Index never persisted to disk anywhere
+
+** Critical — Existing Code Issues:
+4. Scanner spawn error handling present but fragile
+5. History read-modify-write race via write lock partial fix
+6. Session file full rewrite (not append-only)
+7. YAML parser: no multi-line strings, list-of-objects broken, 1 nesting level only
+8. Rust vaccinate() doesn't persist generated antibodies
+9. Rust scanner fail-open on LLM errors
+10. Rust hardcoded DeepSeek provider
+
+* Deliverable
+
+Full TODO document: ~tasks/caitlyn-comprehensive-review-2025-07-25.md~
+- 51 issues total: 7 Critical, 10 Major, 13 Moderate, 18 Minor, 3 Eval
+- Top 10 fixes prioritized by user impact
+- Recommended implementation order
+
+* Next Steps
+
+团长 should review the TODO and decide which issues to tackle first.
+Suggested starting point: fix C2 + C1 (index poisoning + exit) → immediate user relief.

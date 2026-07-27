@@ -88,12 +88,23 @@ export function loadHistory(): ScanLogEntry[] {
   try {
     const raw = fs.readFileSync(HISTORY_PATH, "utf-8");
     if (!raw.trim()) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      console.warn(`⚠️  scan_history.json is not an array — resetting`);
-      return [];
+    // Handle both legacy JSON array and JSONL formats
+    if (raw.trim().startsWith("[")) {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        console.warn(`⚠️  scan_history.json is not an array — resetting`);
+        return [];
+      }
+      return parsed as ScanLogEntry[];
     }
-    return parsed as ScanLogEntry[];
+    // JSONL format: one JSON object per line
+    const entries: ScanLogEntry[] = [];
+    for (const line of raw.trim().split("\n")) {
+      try {
+        entries.push(JSON.parse(line) as ScanLogEntry);
+      } catch { /* skip malformed lines */ }
+    }
+    return entries;
   } catch (err) {
     console.warn(`⚠️  Failed to load scan history: ${err instanceof Error ? err.message : String(err)}`);
     return [];
@@ -107,34 +118,39 @@ function saveHistory(entries: ScanLogEntry[]): void {
   fs.renameSync(tmpPath, HISTORY_PATH);
 }
 
+/** Append a single scan entry to the history file (JSONL format). */
+function appendHistoryEntry(entry: ScanLogEntry): void {
+  const line = JSON.stringify(entry) + "\n";
+  fs.appendFileSync(HISTORY_PATH, line, "utf-8");
+}
+
 // ── Public API ────────────────────────────────────────────────────
 
-/** Log a scan result to persistent history (serialized via write lock). */
 export async function logScan(
   result: ScanResult,
   content: string,
   source: string = "caitlyn-agent",
 ): Promise<void> {
+  const antibodyHits = result.script_results
+    .filter((r) => r.verdict === "malicious")
+    .map((r) => r.antibody_id);
+
+  const entry: ScanLogEntry = {
+    timestamp: new Date().toISOString(),
+    content_hash: hashContent(content),
+    content_preview: content.slice(0, 120),
+    verdict: result.verdict,
+    confidence: result.confidence,
+    tier: result.tier,
+    total_latency_us: result.total_latency_us,
+    total_tokens: result.total_tokens,
+    antibody_hits: antibodyHits,
+    source,
+  };
+
+  // Append-only JSONL — no read-modify-write, no lost updates
   await withLock(() => {
-    const entries = loadHistory();
-    const antibodyHits = result.script_results
-      .filter((r) => r.verdict === "malicious")
-      .map((r) => r.antibody_id);
-
-    entries.push({
-      timestamp: new Date().toISOString(),
-      content_hash: hashContent(content),
-      content_preview: content.slice(0, 120),
-      verdict: result.verdict,
-      confidence: result.confidence,
-      tier: result.tier,
-      total_latency_us: result.total_latency_us,
-      total_tokens: result.total_tokens,
-      antibody_hits: antibodyHits,
-      source,
-    });
-
-    saveHistory(entries);
+    appendHistoryEntry(entry);
   });
 }
 

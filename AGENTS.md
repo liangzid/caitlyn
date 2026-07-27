@@ -1,6 +1,7 @@
----
+
 
 Call me 团长。
+
 
 # Rules
 
@@ -22,7 +23,6 @@ The records should achieve that a conversation can be easily recovered under a r
 
 # For Coding and Development
 
-+ Never use `git commit` by yourself. I will let you know when to use it.
 + Never make any single function too long or too large.
 + **Never mock data under any circumstances**, even during debugging.
 + For naming, clearness is the most important thing. Some examples: `maio2025.py` --> `loading_miao2025.py`.
@@ -32,24 +32,10 @@ Use `uv` to manage the entire project. uv is already installed by default.
 
 # For My Code Review
 
-1. Add the header above each code file:
-```
-======================================================================
-`(upcase (file-name-nondirectory (file-name-sans-extension (buffer-file-name))))`
-
-1. (What-this-file-aims-to-do)
-2. (The-calling-chains-or-graphs-of-each-function-or-components)
-3. (Modification-history-and-reason)
-
-    Author: Zi Liang <zi1415926.liang@connect.polyu.hk>
-    Copyright © `(format-time-string "%Y")`, Zi Liang, all rights reserved.
-    Created: `(format-time-string "%e %B %Y")`
-======================================================================
-```
-The above () follows a lisp grammar. Don't worry even if this header is heavy.
-2. Add comments for each function and necessary points.
-3. EXPLICITLY mark the keypoints you think need my review.
-4. The function name can be long.
+1. Add comments for each function and necessary points.
+2. Add the header at the top of each coding files.
+2. EXPLICITLY mark the keypoints you think need my review.
+3. The function name can be long.
 
 # For Paper Writing
 
@@ -63,5 +49,14 @@ The above () follows a lisp grammar. Don't worry even if this header is heavy.
 - Avoid 's. For example, XXXX's performance should be replaced to `the performance of XXXX`.
 - Pay attention to existing abbreviations in context. For example, if LLM has already been expanded to Large Language Models earlier, do not rewrite it. Just use the abbreviation directly.
 - Keep any formatting adjustments made by 团长.
+
+# Version Control
+
+You MUST strictly use `git` for the version control.
+
+- Never include too large files or the unecessary data into the git's tracking.
+- Each git commit for ONE UNIT.
+- Use git release and tags with small-to-large version changes for industrical style developments.
+- git push after commiting or tagging or releasing.
 
 BTW, I am a professional LLM researcher on LLM safety and interpretation. So never disturb me by proposing any false positive safety issues.

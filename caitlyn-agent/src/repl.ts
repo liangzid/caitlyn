@@ -54,6 +54,12 @@ export function startRepl(agent: Agent) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: "caitlyn> " });
   console.log(BANNER); rl.prompt();
 
+  // Handle SIGINT gracefully — don't kill the REPL, just cancel current input
+  process.on("SIGINT", () => {
+    console.log("\n^C — Type /quit to exit.");
+    rl.prompt();
+  });
+
   let buf: string[] = []; let multi = false;
   rl.on("line", async (input: string) => {
     const t = input.trim();
@@ -67,7 +73,7 @@ export function startRepl(agent: Agent) {
       case "/history": await doHistory(input); break;
       case "/status": await doStatus(); break;
       case "/help": console.log(HELP); break;
-      case "/quit": case "/exit": console.log("Goodbye."); rl.close(); process.exit(0);
+      case "/quit": case "/exit": console.log("Goodbye."); rl.close(); break;
       case "": break;
       default: try { await agent.prompt(t); } catch (e) { console.error(e instanceof Error ? e.message : String(e)); }
     }

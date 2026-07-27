@@ -7,14 +7,14 @@ use crate::error::{CaitlynError, CaitlynResult};
 /// Load antibodies from directory-based and flat YAML files.
 pub async fn load_antibodies(antibody_dir: &str) -> CaitlynResult<Vec<Antibody>> {
     let dir = PathBuf::from(antibody_dir);
-    if !dir.exists() {
+    if !tokio::fs::try_exists(&dir).await.unwrap_or(false) {
         return Ok(Vec::new());
     }
 
     let mut antibodies = Vec::new();
 
     // Walk the directory recursively
-    let (skill_count, flat_count) = load_from_dir(&dir, &mut antibodies)?;
+    let (skill_count, flat_count) = load_from_dir(&dir, &mut antibodies).await?;
 
     info!(
         "Loaded {} antibodies from {} ({} skill dirs, {} flat YAMLs)",
@@ -26,21 +26,24 @@ pub async fn load_antibodies(antibody_dir: &str) -> CaitlynResult<Vec<Antibody>>
     Ok(antibodies)
 }
 
-fn load_from_dir(dir: &PathBuf, antibodies: &mut Vec<Antibody>) -> CaitlynResult<(usize, usize)> {
+async fn load_from_dir(dir: &PathBuf, antibodies: &mut Vec<Antibody>) -> CaitlynResult<(usize, usize)> {
     let mut skill_count = 0;
     let mut flat_count = 0;
 
-    for entry in std::fs::read_dir(dir)? {
-        let entry = entry?;
+    let mut entries = tokio::fs::read_dir(dir).await?;
+    while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
+        let file_type = entry.file_type().await?;
 
-        if path.is_dir() {
+        if file_type.is_dir() {
             // Check if directory contains config.yaml or skill.yaml (new format)
             let config_yaml = path.join("config.yaml");
             let skill_yaml = path.join("skill.yaml");
-            if config_yaml.exists() || skill_yaml.exists() {
-                let yaml_path = if config_yaml.exists() { config_yaml } else { skill_yaml };
-                match load_single_antibody(&yaml_path) {
+            let has_config = tokio::fs::try_exists(&config_yaml).await.unwrap_or(false);
+            let has_skill = if has_config { false } else { tokio::fs::try_exists(&skill_yaml).await.unwrap_or(false) };
+            if has_config || has_skill {
+                let yaml_path = if has_config { config_yaml } else { skill_yaml };
+                match load_single_antibody(&yaml_path).await {
                     Ok(ab) => {
                         antibodies.push(ab);
                         skill_count += 1;
@@ -51,13 +54,15 @@ fn load_from_dir(dir: &PathBuf, antibodies: &mut Vec<Antibody>) -> CaitlynResult
                 }
             } else {
                 // Recurse into subdirectories that don't have config/skill.yaml
-                let (sub_skill, sub_flat) = load_from_dir(&path, antibodies)?;
+                let (sub_skill, sub_flat) = Box::pin(load_from_dir(&path, antibodies)).await?;
                 skill_count += sub_skill;
                 flat_count += sub_flat;
             }
-        } else if path.extension().map_or(false, |e| e == "yaml" || e == "yml") {
+        } else if file_type.is_file()
+            && path.extension().map_or(false, |e| e == "yaml" || e == "yml")
+        {
             // Old format: flat YAML file (backward compat)
-            match load_single_antibody(&path) {
+            match load_single_antibody(&path).await {
                 Ok(ab) => {
                     antibodies.push(ab);
                     flat_count += 1;
@@ -71,8 +76,8 @@ fn load_from_dir(dir: &PathBuf, antibodies: &mut Vec<Antibody>) -> CaitlynResult
     Ok((skill_count, flat_count))
 }
 
-fn load_single_antibody(path: &PathBuf) -> CaitlynResult<Antibody> {
-    let content = std::fs::read_to_string(path)?;
+async fn load_single_antibody(path: &PathBuf) -> CaitlynResult<Antibody> {
+    let content = tokio::fs::read_to_string(path).await?;
     let antibody: AntibodyFile = serde_yaml::from_str(&content)
         .map_err(|e| CaitlynError::Serialization(format!("Failed to parse {:?}: {e}", path)))?;
     Ok(antibody.into())
@@ -85,7 +90,7 @@ pub async fn save_antibody(
     subdir: &str,
 ) -> CaitlynResult<PathBuf> {
     let dir = PathBuf::from(antibody_dir).join(subdir);
-    std::fs::create_dir_all(&dir)?;
+    tokio::fs::create_dir_all(&dir).await?;
 
     let filename = format!("{}.yaml", antibody.id);
     let path = dir.join(&filename);
@@ -94,7 +99,7 @@ pub async fn save_antibody(
     let yaml = serde_yaml::to_string(&file_repr)
         .map_err(|e| CaitlynError::Serialization(format!("Failed to serialize antibody: {e}")))?;
 
-    std::fs::write(&path, yaml)?;
+    tokio::fs::write(&path, &yaml).await?;
     info!("Saved antibody {} to {:?}", antibody.id, path);
     Ok(path)
 }

@@ -29,8 +29,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PKG_ROOT = path.resolve(__dirname, "..");
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
-const ANTIBODIES_DIR = path.join(PROJECT_ROOT, "antibodies");
-const ANTIGENS_DIR = path.join(PROJECT_ROOT, "antigens");
+export const ANTIBODIES_DIR = path.join(PROJECT_ROOT, "antibodies");
+export const ANTIGENS_DIR = path.join(PROJECT_ROOT, "antigens");
 
 // ── Simple YAML parser imported from yaml-parser.ts ───────────────
 
@@ -43,6 +43,19 @@ import { parseYaml, coerceValue } from "./yaml-parser.js";
 function normalizeConfig(raw: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...raw };
 
+  // Flatten single-key nested objects that are just list wrappers.
+  // Example: {deps: {deps: ["node", "tsx"]}} → {deps: ["node", "tsx"]}
+  for (const [key, value] of Object.entries(out)) {
+    if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+      const nested = value as Record<string, unknown>;
+      const nestedKeys = Object.keys(nested);
+      if (nestedKeys.length === 1 && nestedKeys[0] === key && Array.isArray(nested[key])) {
+        out[key] = nested[key];
+      }
+    }
+  }
+
+  // Handle legacy _list_* keys from old YAML parser (backward compat)
   for (const [key, value] of Object.entries(out)) {
     if (value === null || typeof value !== "object" || Array.isArray(value)) continue;
     const nested = value as Record<string, unknown>;
@@ -57,16 +70,14 @@ function normalizeConfig(raw: Record<string, unknown>): Record<string, unknown> 
   }
 
   // Ensure stats has defaults
-  if (!out.stats || typeof out.stats !== "object") {
+  if (!out.stats || typeof out.stats !== "object" || Array.isArray(out.stats)) {
     out.stats = { total_scans: 0, true_positives: 0, false_positives: 0, avg_latency_us: 0 };
   }
 
   return out;
 }
-
 // ── Config Validation ──────────────────────────────────────────────
-
-const VALID_CATEGORIES = ["injection", "jailbreak", "poisoning", "exfiltration"] as const;
+const VALID_CATEGORIES = ["injection", "jailbreak", "poisoning", "exfiltration", "unknown", "tool_misuse"] as const;
 const VALID_TIERS = [0, 1, 2] as const;
 
 function assertString(v: unknown, field: string): string {
@@ -172,7 +183,7 @@ export function validateAntigenConfig(raw: Record<string, unknown>): AntigenConf
 let _cachedAntibodies: AntibodyEntry[] | null = null;
 let _cachedAntigens: AntigenEntry[] | null = null;
 let _cacheTime = 0;
-const CACHE_TTL_MS = 5_000;
+const CACHE_TTL_MS = 30_000;
 
 function cacheExpired(): boolean {
   return Date.now() - _cacheTime > CACHE_TTL_MS;
@@ -260,6 +271,9 @@ export function saveAntibody(entry: AntibodyEntry): void {
   }
   fs.writeFileSync(path.join(dirPath, "config.yaml"), configLines.join("\n"), "utf-8");
   _cachedAntibodies = null; // invalidate cache
+  // Rebuild and persist the antibody index so the new antibody is immediately visible
+  const all = loadAntibodies();
+  buildAntibodyIndex(all);
 }
 
 export function loadAntigens(): AntigenEntry[] {
@@ -332,6 +346,8 @@ export function buildAntibodyIndex(antibodies: AntibodyEntry[]): AntibodyIndex {
   }
 
   aggregateStats(index);
+  // Auto-persist so list_antibodies always reflects current state
+  saveAntibodyIndex(index);
   return index;
 }
 
@@ -383,7 +399,15 @@ export function saveAntibodyIndex(index: AntibodyIndex): void {
 export function loadAntibodyIndex(): AntibodyIndex | null {
   const p = path.join(ANTIBODIES_DIR, "index.json");
   if (!fs.existsSync(p)) return null;
-  return JSON.parse(fs.readFileSync(p, "utf-8")) as AntibodyIndex;
+  try {
+    const raw = fs.readFileSync(p, "utf-8");
+    const parsed = JSON.parse(raw) as AntibodyIndex;
+    // Treat empty index (no roots, no trees) as stale — return null so caller rebuilds
+    if (!parsed.roots || parsed.roots.length === 0) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 export function saveAntigenIndex(index: AntigenIndex): void {

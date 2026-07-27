@@ -83,11 +83,12 @@ describe("parseYaml", () => {
     });
   });
 
-  it("parses lists via _list_ conversion", () => {
+  it("parses lists (new format — stored under parent key, flattened by normalizeConfig)", () => {
     const yaml = "deps:\n  - node\n  - tsx\n  - bun";
     const result = parseYaml(yaml);
+    // Raw parse nests under same key; normalizeConfig flattens it
     expect(result).toEqual({
-      deps: { _list_deps: ["node", "tsx", "bun"] },
+      deps: { deps: ["node", "tsx", "bun"] },
     });
   });
 
@@ -98,18 +99,16 @@ describe("parseYaml", () => {
   it("handles only comments", () => {
     expect(parseYaml("# comment 1\n# comment 2")).toEqual({});
   });
-
-  it("handles deep nesting (3+ levels) — note: simple parser flattens beyond one level", () => {
+  it("handles deep nesting (3+ levels) — new parser supports arbitrary depth", () => {
     const yaml = "level1:\n  level2:\n    level3:\n      key: deep_value";
     const result = parseYaml(yaml);
-    // The simple parser only tracks one level of nesting, so nested keys
-    // beyond the first level end up as siblings in the same nested object.
     expect(result).toHaveProperty("level1");
     const level1 = result["level1"] as Record<string, unknown>;
-    expect(level1).toHaveProperty("key", "deep_value");
-    // level2 and level3 get null values (empty rhs → null at this depth)
     expect(level1).toHaveProperty("level2");
-    expect(level1).toHaveProperty("level3");
+    const level2 = level1["level2"] as Record<string, unknown>;
+    expect(level2).toHaveProperty("level3");
+    const level3 = level2["level3"] as Record<string, unknown>;
+    expect(level3).toHaveProperty("key", "deep_value");
   });
 
   it("parses quoted strings", () => {
@@ -162,7 +161,7 @@ describe("parseYaml", () => {
       tier: 0,
       threshold: 0.6,
       stats: { total_scans: 100, true_positives: 80 },
-      deps: { _list_deps: ["node", "tsx"] },
+      deps: { deps: ["node", "tsx"] },
     });
   });
 

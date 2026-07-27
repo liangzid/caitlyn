@@ -126,7 +126,12 @@ impl DeepSeekProvider {
 
         let tokens_used = json["usage"]["total_tokens"]
             .as_u64()
-            .unwrap_or(0);
+            .filter(|&t| t > 0)
+            .unwrap_or_else(|| {
+                // Fallback: estimate from response length when API omits usage info.
+                // Conservative heuristic: ~4 characters per token for English text.
+                (content.len() as u64 / 4).max(1)
+            });
 
         Ok((content, tokens_used))
     }

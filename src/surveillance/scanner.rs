@@ -193,21 +193,30 @@ impl SurveillanceScanner {
                     .await;
 
                 match result {
-                    Ok(output) => AntibodyResult {
-                        antibody_id: antibody.id.clone(),
-                        antibody_name: antibody.name.clone(),
-                        verdict: match output.verdict.as_str() {
-                            "malicious" => Verdict::Malicious,
-                            "suspicious" => Verdict::Suspicious,
-                            _ => Verdict::Safe,
-                        },
-                        confidence: output.confidence.clamp(0.0, 1.0),
-                        reasoning: output.reasoning,
-                        matched_signatures: output.matched_patterns,
-                        tier: antibody.tier,
-                        latency_us: start.elapsed().as_micros() as u64,
-                        tokens_used: output.tokens_used,
-                    },
+                    Ok(output) => {
+                        let (verdict, confidence) = match output.verdict.as_str() {
+                            "malicious" => (Verdict::Malicious, output.confidence.clamp(0.0, 1.0)),
+                            "suspicious" => (Verdict::Suspicious, output.confidence.clamp(0.0, 1.0)),
+                            _ => {
+                                debug!(
+                                    "Antibody '{}' returned unrecognized verdict '{}'; defaulting to Suspicious",
+                                    antibody.name, output.verdict
+                                );
+                                (Verdict::Suspicious, 0.3)
+                            }
+                        };
+                        AntibodyResult {
+                            antibody_id: antibody.id.clone(),
+                            antibody_name: antibody.name.clone(),
+                            verdict,
+                            confidence,
+                            reasoning: output.reasoning,
+                            matched_signatures: output.matched_patterns,
+                            tier: antibody.tier,
+                            latency_us: start.elapsed().as_micros() as u64,
+                            tokens_used: output.tokens_used,
+                        }
+                    }
                     Err(e) => {
                         warn!(
                             "Antibody '{}' scan failed: {e}",

@@ -107,6 +107,7 @@ async function main() {
     const llmCall = await makeLlmCallSafe();
     const tui = await CaitlynTUI.create(llmCall, agent);
     await tui.run();
+    process.exit(0);
     return;
   }
 
@@ -291,7 +292,12 @@ memory_limit = 10000
             { role: "user" as const, content: [{ type: "text" as const, text: "Ping" }], timestamp: Date.now() },
           ],
         };
-        const response = await complete(model, ctx);
+        const response = await Promise.race([
+          complete(model, ctx),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("LLM ping timed out after 15s")), 15_000),
+          ),
+        ]);
         const text = response.content
           .filter((c): c is { type: "text"; text: string } => c.type === "text")
           .map((c) => c.text)

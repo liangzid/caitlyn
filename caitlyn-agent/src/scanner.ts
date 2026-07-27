@@ -113,9 +113,28 @@ function runScript(opts: RunScriptOptions): Promise<ScriptResult> {
       });
     }
   });
-
-  child.stdin?.write(opts.content);
-  child.stdin?.end();
+  // Safe stdin write: handle backpressure and errors
+  const stdin = child.stdin;
+  if (stdin) {
+    stdin.on("error", (err) => {
+      if (!settled) {
+        settle({
+          antibody_id: opts.antibodyId,
+          verdict: "benign",
+          confidence: 0,
+          reason: null,
+          latency_us: 0,
+          error: `stdin write error: ${err.message}`,
+        });
+      }
+    });
+    const ok = stdin.write(opts.content);
+    if (!ok) {
+      stdin.once("drain", () => stdin.end());
+    } else {
+      stdin.end();
+    }
+  }
 
   return promise;
 }

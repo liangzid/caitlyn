@@ -106,6 +106,8 @@ async fn main() -> anyhow::Result<()> {
             if let Err(e) = caitlyn.prune().await {
                 warn!("Error during prune: {e}");
             }
+            info!("Shutting down, draining in-flight requests...");
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             info!("Shutdown complete.");
         }
     }
