@@ -94,9 +94,10 @@ function runScript(opts: RunScriptOptions): Promise<ScriptResult> {
 
     try {
       const parsed = JSON.parse(stdout.trim());
+      const verdict = parsed.verdict;
       settle({
         antibody_id: opts.antibodyId,
-        verdict: parsed.verdict === "malicious" ? "malicious" : "benign",
+        verdict: verdict === "malicious" ? "malicious" : verdict === "suspicious" ? "suspicious" : "benign",
         confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0,
         reason: parsed.reason ?? null,
         latency_us: latency,
