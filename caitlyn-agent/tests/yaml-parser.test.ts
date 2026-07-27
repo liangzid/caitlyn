@@ -178,6 +178,81 @@ describe("parseYaml", () => {
     const result = parseYaml(yaml);
     expect(result).toEqual({ key: "value", ignored: "should_not_appear" });
   });
+
+  // ── M1: Multi-line strings ──────────────────────────────────────
+
+  it("parses literal block scalar (|)", () => {
+    const yaml = "description: |\n  Line one\n  Line two\n  Line three\nname: test";
+    const result = parseYaml(yaml);
+    expect(result.description).toBe("Line one\nLine two\nLine three");
+    expect(result.name).toBe("test");
+  });
+
+  it("parses folded block scalar (>)", () => {
+    const yaml = "summary: >\n  This is a long\n  description that\n  spans multiple lines\nkey: value";
+    const result = parseYaml(yaml);
+    expect(result.summary).toBe("This is a long description that spans multiple lines");
+    expect(result.key).toBe("value");
+  });
+
+  it("handles multi-line block at end of file", () => {
+    const yaml = "key: value\nnote: |\n  Final line";
+    const result = parseYaml(yaml);
+    expect(result.key).toBe("value");
+    expect(result.note).toBe("Final line");
+  });
+
+  // ── M2: List-of-objects ──────────────────────────────────────────
+
+  it("parses list of objects with indented sub-keys", () => {
+    const yaml = [
+      "signatures:",
+      '  - pattern: "ignore..."',
+      "    type: block",
+      '    label: "XSS Attempt"',
+      '  - pattern: "eval("',
+      "    type: regex",
+      '    label: "Code Injection"',
+    ].join("\n");
+    const result = parseYaml(yaml);
+    const sigs = result.signatures as Record<string, unknown>;
+    const arr = sigs.signatures as Array<Record<string, unknown>>;
+    expect(arr).toHaveLength(2);
+    expect(arr[0]).toEqual({ pattern: "ignore...", type: "block", label: "XSS Attempt" });
+    expect(arr[1]).toEqual({ pattern: "eval(", type: "regex", label: "Code Injection" });
+  });
+
+  it("parses list of objects with empty initial key", () => {
+    const yaml = "items:\n  - name:\n    value: something\n  - name:\n    value: else";
+    const result = parseYaml(yaml);
+    const items = result.items as Record<string, unknown>;
+    const arr = items.items as Array<Record<string, unknown>>;
+    expect(arr).toHaveLength(2);
+    expect(arr[0]).toEqual({ value: "something" });
+    expect(arr[1]).toEqual({ value: "else" });
+  });
+
+  // ── M3: Arbitrary nesting ────────────────────────────────────────
+
+  it("handles deep nesting with objects inside list items", () => {
+    const yaml = [
+      "signatures:",
+      '  - pattern: "test"',
+      "    details:",
+      "      severity: high",
+      "      owner:",
+      "        name: Alice",
+      "        team: red",
+    ].join("\n");
+    const result = parseYaml(yaml);
+    const sigs = result.signatures as Record<string, unknown>;
+    const arr = sigs.signatures as Array<Record<string, unknown>>;
+    expect(arr).toHaveLength(1);
+    const details = arr[0].details as Record<string, unknown>;
+    expect(details.severity).toBe("high");
+    const owner = details.owner as Record<string, unknown>;
+    expect(owner).toEqual({ name: "Alice", team: "red" });
+  });
 });
 
 // ── normalizeConfig tests ───────────────────────────────────────────
