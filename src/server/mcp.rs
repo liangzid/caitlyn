@@ -49,9 +49,9 @@ struct JsonRpcError {
     data: Option<Value>,
 }
 
-#[allow(dead_code)] // Reserved for future MCP notifications
+// Reserved for future MCP notifications
 #[derive(Debug, Serialize, Deserialize)]
-struct JsonRpcNotification {
+struct _JsonRpcNotification {
     jsonrpc: String,
     method: String,
     params: Option<Value>,

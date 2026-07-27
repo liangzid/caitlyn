@@ -18,7 +18,8 @@ pub struct CaitlynConfig {
 pub struct DaemonConfig {
     pub http_port: u16,
     pub mcp_mode: McpMode,
-    pub grpc_port: u16,
+    // TODO: gRPC port for future gRPC server support
+    // pub grpc_port: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,7 +90,6 @@ impl Default for CaitlynConfig {
             daemon: DaemonConfig {
                 http_port: 9070,
                 mcp_mode: McpMode::Off,
-                grpc_port: 9071,
             },
             llm: LlmConfig {
                 provider: "deepseek".into(),
@@ -191,7 +191,6 @@ impl CaitlynConfig {
         // Daemon config
         self.daemon.http_port = other.daemon.http_port;
         self.daemon.mcp_mode = other.daemon.mcp_mode;
-        self.daemon.grpc_port = other.daemon.grpc_port;
     }
 
     fn apply_env_overrides(&mut self) {
