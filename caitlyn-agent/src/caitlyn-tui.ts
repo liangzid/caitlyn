@@ -277,9 +277,13 @@ export class CaitlynTUI {
         return { consume: true };
       }
       // ── Global always-available ──────────────────────────────
-      // Ctrl+C: always quit (matchesKey handles both legacy \x03 and Kitty protocol)
+      // Ctrl+C: dismiss overlay if active, otherwise quit
       if (matchesKey(data, "ctrl+c")) {
-        self.stop();
+        if (tui.hasOverlay()) {
+          tui.hideOverlay();
+        } else {
+          self.stop();
+        }
         return { consume: true };
       }
       // Ctrl+L: always clear screen
