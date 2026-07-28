@@ -76,13 +76,13 @@ const noEmoji = process.env.CAITLYN_NO_EMOJI === "1";
 
 const CAITLYN_LOGO = [
   `${C.cyan}${C.bold} ╔════════════════════════════════════════════════════╗${C.reset}`,
-  `${C.cyan}${C.bold} ║${C.reset}                                                    ${C.cyan}${C.bold}║${C.reset}`,
-  `${C.cyan}${C.bold} ║${C.reset}      ${C.bold}___   _     _____  _____  __         __${C.reset}      ${C.cyan}${C.bold}║${C.reset}`,
-  `${C.cyan}${C.bold} ║${C.reset}     ${C.bold}/ __\\ /_\\    \\_   \\/__   \\/ //\\_/\\ /\\ \\ \\${C.reset}     ${C.cyan}${C.bold}║${C.reset}`,
-  `${C.cyan}${C.bold} ║${C.reset}    ${C.bold}/ /   //_\\\\    / /\\/  / /\\/ / \\_ _//  \\/ /${C.reset}     ${C.cyan}${C.bold}║${C.reset}`,
-  `${C.cyan}${C.bold} ║${C.reset}   ${C.bold}/ /___/  _  \\/\\/ /_   / / / /___/ \\/ /\\  /${C.reset}      ${C.cyan}${C.bold}║${C.reset}`,
-  `${C.cyan}${C.bold} ║${C.reset}   ${C.bold}\\____/\\_/ \\_/\\____/   \\/  \\____/\\_/\\_\\ \\/${C.reset}       ${C.cyan}${C.bold}║${C.reset}`,
-  `${C.cyan}${C.bold} ║${C.reset}                                                    ${C.cyan}${C.bold}║${C.reset}`,
+  `${C.cyan}${C.bold} ║${C.reset}                                                     ${C.cyan}${C.bold}║${C.reset}`,
+  `${C.cyan}${C.bold} ║${C.reset}      ${C.bold}___   _     _____  _____  __         __${C.reset}       ${C.cyan}${C.bold}║${C.reset}`,
+  `${C.cyan}${C.bold} ║${C.reset}     ${C.bold}/ __\\ /_\\    \\_   \\/__   \\/ //\\_/\\ /\\ \\ \\${C.reset}      ${C.cyan}${C.bold}║${C.reset}`,
+  `${C.cyan}${C.bold} ║${C.reset}    ${C.bold}/ /   //_\\\\    / /\\/  / /\\/ / \\_ _//  \\/ /${C.reset}      ${C.cyan}${C.bold}║${C.reset}`,
+  `${C.cyan}${C.bold} ║${C.reset}   ${C.bold}/ /___/  _  \\/\\/ /_   / / / /___/ \\/ /\\  /${C.reset}       ${C.cyan}${C.bold}║${C.reset}`,
+  `${C.cyan}${C.bold} ║${C.reset}   ${C.bold}\\____/\\_/ \\_/\\____/   \\/  \\____/\\_/\\_\\ \\/${C.reset}        ${C.cyan}${C.bold}║${C.reset}`,
+  `${C.cyan}${C.bold} ║${C.reset}                                                     ${C.cyan}${C.bold}║${C.reset}`,
   `${C.cyan}${C.bold} ║${C.reset}  ${C.dim}AI Agent Immune System${C.reset}                            ${C.cyan}${C.bold}║${C.reset}`,
   `${C.cyan}${C.bold} ║${C.reset}  ${C.dim}Continuous Agents for Injection Threats${C.reset}           ${C.cyan}${C.bold}║${C.reset}`,
   `${C.cyan}${C.bold} ║${C.reset}  ${C.dim}via Lifelong Yielding Nexus${C.reset}                       ${C.cyan}${C.bold}║${C.reset}`,
@@ -312,11 +312,26 @@ export class CaitlynTUI {
           break;
         }
         case "message_update": {
+          // DEBUG: log event structure
+          const msg = event.message as unknown as Record<string, unknown>;
+          console.error("[DEBUG message_update]", "role:", msg.role, "content-type:", Array.isArray(msg.content) ? `array[${(msg.content as unknown[]).length}]` : typeof msg.content);
+          if (Array.isArray(msg.content)) {
+            for (const block of msg.content as Array<Record<string, unknown>>) {
+              console.error("[DEBUG block]", block.type, "text:" in block ? String(block.text).slice(0, 80) : "no text");
+            }
+          }
+
           if (event.message.role !== "assistant") break;
           const blocks = event.message.content;
-          const text = (Array.isArray(blocks) ? blocks : [])
-            .filter((c) => c.type === "text")
-            .map((c) => (c as { type: "text"; text: string }).text)
+          const contentBlocks = Array.isArray(blocks) ? blocks : [];
+          // Extract text from both text and thinking blocks
+          const text = contentBlocks
+            .filter((c: { type: string }) => c.type === "text" || c.type === "thinking")
+            .map((c) => {
+              if ("text" in c && typeof c.text === "string") return c.text;
+              if ("content" in c && typeof c.content === "string") return c.content;
+              return "";
+            })
             .join("");
           currentMessageContent = text;
 
