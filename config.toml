@@ -1,11 +1,11 @@
 # CAITLYN Configuration
 
 [llm]
-provider = "openrouter"
-model = "deepseek/deepseek-chat"
-api_key_env = "OPENROUTER_API_KEY"
-base_url = "https://openrouter.ai/api/v1"
-small_model = "deepseek/deepseek-chat"
+provider = "deepseek"
+model = "deepseek-v4-pro"
+api_key_env = "DEEPSEEK_API_KEY"
+base_url = "https://api.deepseek.com"
+small_model = "deepseek-v4-flash"
 
 [scanning]
 max_parallel_tier1 = 10
