@@ -258,6 +258,10 @@ export class CaitlynTUI {
           self.abortResponse();
           return { consume: true };
         }
+        // No overlay, not responding: Esc exits
+        self.showSystemMessage(`${C.yellow}Goodbye.${C.reset}`);
+        self.stop();
+        return { consume: true };
       }
       // Tab: dismiss overlay or focus editor
       if (data === "\t" || data === "\x09") {
@@ -284,6 +288,15 @@ export class CaitlynTUI {
         children.splice(1, children.length - 3);
         tui.requestRender();
         return { consume: true };
+      }
+      // Ctrl+D: exit when editor is empty, otherwise let editor handle it
+      if (matchesKey(data, "ctrl+d")) {
+        if (!self.editor.getText().trim() && !self.isResponding) {
+          self.showSystemMessage(`${C.yellow}Goodbye.${C.reset}`);
+          self.stop();
+          return { consume: true };
+        }
+        // Editor has content — let it handle Ctrl+D (delete forward)
       }
       // ── Quick-launch overlays (only when NO overlay active) ──
       if (!tui.hasOverlay() && (self.isResponding || self.editor.disableSubmit)) {

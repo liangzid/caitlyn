@@ -24,8 +24,11 @@ import { C, selectListTheme } from "../theme.js";
 
 // ── Overlay Helpers ───────────────────────────────────────────────
 
+// ── Glass-morphism background for overlays ──────────────────────────
+const overlayBg = (text: string) => `\x1b[48;5;236m\x1b[37m${text}\x1b[0m`;
+
 export function makeBox(title: string, lines: string[], maxHeight = 20): Box {
-  const box = new Box(1, 1);
+  const box = new Box(1, 1, overlayBg);
   let allLines: string[];
   if (lines.length > maxHeight) {
     allLines = [`${C.bold}${C.cyan}${title}${C.reset}`, "", ...lines.slice(0, maxHeight - 3), `${C.dim}(scroll for more)${C.reset}`];
