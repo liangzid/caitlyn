@@ -11,6 +11,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { AntibodyEntry, AntigenEntry, ScanResult, ScriptResult } from "./schema.js";
 import { logScan } from "./history.js";
+import { recordScanFeedback } from "./library.js";
 
 // ── Tier 0: Sandbox Script Runner ─────────────────────────────────
 
@@ -191,7 +192,7 @@ export interface LlmCallFn {
  * Expected format: "verdict confidence" (e.g., "malicious 0.92").
  * Falls back to legacy single-digit format: 0 = benign, 1 = malicious.
  */
-function parseTier1Response(
+export function parseTier1Response(
   raw: string,
 ): { verdict: "benign" | "suspicious" | "malicious"; confidence: number } {
   // Try new format: "<verdict> <confidence>"
@@ -295,6 +296,11 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       total_tokens: 0,
     };
     await logScan(result, options.content);
+    recordScanFeedback(
+      t0.results.filter((r) => r.verdict === "malicious").map((r) => r.antibody_id),
+      result.verdict,
+      result.total_latency_us,
+    );
     return result;
   }
 

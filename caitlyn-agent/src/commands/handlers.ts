@@ -1,0 +1,432 @@
+/**
+ * CAITLYN TUI Command Handlers
+ *
+ * Standalone functions implementing slash-command and bang-command behavior.
+ * Each takes a TUIHost (the CaitlynTUI instance) as its first argument so the
+ * main class stays focused on wiring and interaction flow.
+ */
+
+import * as fs from "node:fs";
+import * as path from "node:path";
+import {
+  Container,
+  Text,
+  SelectList,
+  type TUI,
+} from "@earendil-works/pi-tui";
+import type { Agent } from "@earendil-works/pi-agent-core";
+import type { LlmCallFn } from "../scanner.js";
+import { hybridScan } from "../hybrid-scanner.js";
+import {
+  loadAntibodies,
+  loadAntigens,
+  getCostMonitor,
+  getMemoryBank,
+  getVaccinationPipeline,
+  toEvoAntibody,
+  persistVaccinatedAntibody,
+  ANTIBODIES_DIR,
+} from "../library.js";
+import { SessionManager } from "../session/session-manager.js";
+import type { ScriptResult } from "../schema.js";
+import type { MessageEntry, SessionInfoEntry } from "../session/session-types.js";
+import { getContextWindow, getModelDisplay } from "../config/models.js";
+import { getProviders, getModels } from "../llm.js";
+import { listConfiguredProviders } from "../config/credentials.js";
+import { C, selectListTheme, estimateTokens, translateLlmError } from "../theme.js";
+import { buildSessionPickerOverlay } from "../components/overlays.js";
+import type { FooterComponent } from "../components/footer.js";
+import type { Editor } from "@earendil-works/pi-tui";
+
+// ── Host Interface ────────────────────────────────────────────────
+
+/**
+ * Subset of CaitlynTUI that command handlers need.
+ * CaitlynTUI satisfies this structurally — no `implements` clause required.
+ */
+export interface TUIHost {
+  tui: TUI;
+  editor: Editor;
+  footer: FooterComponent;
+  agent: Agent | null;
+  llmCall: LlmCallFn;
+  sessionMgr: SessionManager;
+  currentProvider: string;
+  currentModelId: string;
+  showSystemMessage(content: string): void;
+  refreshFooter(): void;
+}
+
+// ── Scan ──────────────────────────────────────────────────────────
+
+export async function doScan(self: TUIHost, content: string): Promise<void> {
+  self.showSystemMessage(`${C.cyan}⊕ Scanning (${content.length} chars)...${C.reset}`);
+
+  try {
+    const result = await hybridScan({ content, llmCall: self.llmCall });
+
+    const verdict = result.verdict.toUpperCase();
+    let emoji: string;
+    let color: string;
+    let bgColor: string;
+    if (verdict === "MALICIOUS") {
+      emoji = "🚨"; color = C.red; bgColor = "\x1b[41m\x1b[37m";
+    } else if (verdict === "SUSPICIOUS") {
+      emoji = "⚠️"; color = C.yellow; bgColor = "\x1b[43m\x1b[30m";
+    } else {
+      emoji = "✅"; color = C.green; bgColor = "\x1b[42m\x1b[37m";
+    }
+
+    let output = `${bgColor} ${emoji}  ${verdict}  ${emoji} ${C.reset}`;
+    output += `\n${C.dim}Confidence:${C.reset} ${(result.confidence * 100).toFixed(1)}%  ${C.dim}Latency:${C.reset} ${(result.total_latency_us / 1000).toFixed(1)}ms  ${C.dim}Tokens:${C.reset} ${result.total_tokens}`;
+    output += `  ${C.dim}${result.backend}${C.reset}`;
+
+    const hits = result.script_results.filter((r: ScriptResult) => r.verdict === "malicious");
+    if (hits.length > 0) {
+      output += `\n\n${C.bold}Matched antibodies:${C.reset}\n`;
+      for (const h of hits) {
+        output += `  ${C.red}●${C.reset} ${h.antibody_id}: ${h.reason ?? "detected"} (${(h.confidence * 100).toFixed(0)}%)\n`;
+      }
+    }
+
+    self.showSystemMessage(output);
+  } catch (e) {
+    const err = e instanceof Error ? e : new Error(String(e));
+    self.showSystemMessage(`${C.red}❌ Scan failed:${C.reset} ${translateLlmError(err)}`);
+  }
+}
+
+// ── Antibody / Antigen ────────────────────────────────────────────
+
+export async function doAntibodyList(self: TUIHost): Promise<void> {
+  const antibodies = loadAntibodies();
+  if (antibodies.length === 0) { self.showSystemMessage("No antibodies loaded."); return; }
+  let out = `${C.bold}Antibodies (${antibodies.length}):${C.reset}\n`;
+  for (const ab of antibodies) {
+    out += `  ${ab.config.id} [${ab.config.category}] tier=${ab.config.tier} gen=${ab.config.generation}\n`;
+  }
+  self.showSystemMessage(out);
+}
+
+export async function doAntibodyAdd(self: TUIHost, id: string): Promise<void> {
+  self.showSystemMessage(
+    `Antibody "${id}" creation via TUI coming soon. Create folders directly in antibodies/<id>/ with config.yaml + README.md + detect.ts`,
+  );
+}
+
+export async function doAntibodyRemove(self: TUIHost, id: string): Promise<void> {
+  const antibodies = loadAntibodies();
+  const ab = antibodies.find((a) => a.config.id === id);
+  if (!ab) { self.showSystemMessage(`Antibody "${id}" not found.`); return; }
+  self.showSystemMessage(
+    `${C.yellow}Removing antibody "${id}" [${ab.config.category}]${C.reset}\n` +
+    `${C.dim}Manual removal required: delete antibodies/${id}/${C.reset}`,
+  );
+}
+
+export async function doAntigenShow(self: TUIHost, id: string): Promise<void> {
+  const antigens = loadAntigens();
+  const ag = antigens.find((a) => a.config.id === id);
+  if (!ag) { self.showSystemMessage(`Antigen "${id}" not found.`); return; }
+  let out = `${C.bold}Antigen: ${ag.config.name}${C.reset} [${ag.config.id}]\n`;
+  out += `Category: ${ag.config.category}\n`;
+  out += `Injection: ${ag.config.injection_point}\n`;
+  if (ag.payload) {
+    out += `\nPayload:\n${ag.payload.slice(0, 500)}${ag.payload.length > 500 ? "..." : ""}`;
+  }
+  self.showSystemMessage(out);
+}
+
+export async function doVaccinate(self: TUIHost, pattern: string): Promise<void> {
+  const antibodies = loadAntibodies();
+  const parent = antibodies.find((a) => a.config.category === "injection") ?? antibodies[0];
+  if (!parent) {
+    self.showSystemMessage(`${C.yellow}No antibodies loaded to use as parent.${C.reset}`);
+    return;
+  }
+
+  const costMonitor = getCostMonitor();
+  const memoryBank = getMemoryBank();
+  const pipeline = getVaccinationPipeline();
+  const parentEvo = toEvoAntibody(parent);
+  const patternHash = costMonitor.computePatternHash(pattern);
+  const valsetDir = path.join(path.dirname(ANTIBODIES_DIR), "valsets");
+
+  self.showSystemMessage(`${C.cyan}💉 Running vaccination pipeline...${C.reset}`);
+
+  try {
+    const results = await pipeline.vaccinate(
+      patternHash, [parentEvo], costMonitor, memoryBank,
+      self.llmCall, valsetDir,
+    );
+
+    if (results.length === 0) {
+      self.showSystemMessage(`${C.yellow}Vaccination completed but no antibodies survived affinity maturation.${C.reset}`);
+      return;
+    }
+
+    for (const r of results) {
+      persistVaccinatedAntibody(r.antibody, r.memoryEntries);
+      costMonitor.markVaccinated(patternHash, r.antibody.id);
+    }
+
+    const names = results.map((r) => `${r.antibody.name} (score=${r.affinityScore.toFixed(2)})`).join(", ");
+    self.showSystemMessage(`${C.green}💉 Vaccination complete:${C.reset} ${results.length} antibody(s) — ${names}`);
+    self.refreshFooter();
+  } catch (err) {
+    self.showSystemMessage(`${C.red}❌ Vaccination failed:${C.reset} ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+// ── Session Commands ──────────────────────────────────────────────
+
+export async function doNewSession(self: TUIHost): Promise<void> {
+  const newMgr = SessionManager.create(process.cwd());
+  self.showSystemMessage(`${C.green}New session:${C.reset} ${newMgr.getSessionId()}`);
+  self.showSystemMessage(`${C.dim}Restart CAITLYN to begin the new session.${C.reset}`);
+}
+
+export async function doResumeSession(self: TUIHost): Promise<void> {
+  const sessions = SessionManager.list(process.cwd());
+  if (sessions.length === 0) {
+    self.showSystemMessage("No saved sessions found.");
+    return;
+  }
+  self.tui.showOverlay(buildSessionPickerOverlay(sessions), { anchor: "center", width: "70%", maxHeight: "70%" });
+}
+
+export async function doSessionInfo(self: TUIHost): Promise<void> {
+  const mgr = self.sessionMgr;
+  const stats = mgr.getTokenStats();
+  const name = mgr.getSessionName();
+
+  let out = `${C.bold}Session Info${C.reset}\n`;
+  out += `ID:      ${mgr.getSessionId()}\n`;
+  out += `File:    ${mgr.getSessionFile()}\n`;
+  out += `Entries: ${mgr.getEntryCount()}\n`;
+  if (name) out += `Name:    ${name}\n`;
+  out += `Tokens:  ↑${stats.input} ↓${stats.output}\n`;
+  if (stats.cost > 0) out += `Cost:    $${stats.cost.toFixed(4)}\n`;
+  out += `CWD:     ${mgr.getCwd()}\n`;
+
+  self.showSystemMessage(out);
+}
+
+export async function doCompaction(self: TUIHost): Promise<void> {
+  const entries = self.sessionMgr.getAllEntries();
+  const msgs = entries.filter((e) => e.type === "message") as MessageEntry[];
+  if (msgs.length < 4) {
+    self.showSystemMessage("Not enough messages to compact (need at least 4).");
+    return;
+  }
+
+  // Simple: keep last 50% of messages, summarize the rest
+  const cutIndex = Math.floor(msgs.length / 2);
+  const oldMsgs = msgs.slice(0, cutIndex);
+  const firstKeptId = msgs[cutIndex].id;
+
+  const summaryText = oldMsgs
+    .map((m) => `[${m.role}]: ${m.content.slice(0, 200)}`)
+    .join("\n");
+
+  // Use LLM to summarize if available
+  let summary = "";
+  try {
+    const prompt = `Summarize this conversation history concisely (2-3 sentences), preserving key facts and decisions:\n\n${summaryText}`;
+    summary = await self.llmCall("You are a summarizer. Be concise.", prompt);
+  } catch {
+    summary = `[Conversation history condensed — ${oldMsgs.length} earlier messages summarized]`;
+  }
+
+  const tokensBefore = oldMsgs.reduce(
+    (sum, m) => sum + estimateTokens(m.content), 0,
+  );
+
+  self.sessionMgr.appendCompaction(summary, firstKeptId, tokensBefore);
+  self.sessionMgr.flush();
+  self.showSystemMessage(
+    `${C.green}Compacted.${C.reset} Summarized ${oldMsgs.length} messages (≈${tokensBefore} tokens).`,
+  );
+}
+
+export function showSessionTree(self: TUIHost): void {
+  const tree = self.sessionMgr.getTree();
+  function formatNode(node: typeof tree[0], depth: number): string {
+    const e = node.entry;
+    const indent = "  ".repeat(depth);
+    let line = `${indent}${e.type}: ${e.id.slice(0, 8)}`;
+    if (e.type === "message") {
+      line += ` [${(e as MessageEntry).role}]`;
+    } else if (e.type === "session_info") {
+      line += ` "${(e as SessionInfoEntry).name}"`;
+    }
+    return [line, ...node.children.flatMap((c) => formatNode(c, depth + 1))].join("\n");
+  }
+
+  const lines = tree.map((n) => formatNode(n, 0)).join("\n");
+  self.showSystemMessage(
+    `${C.bold}Session Tree:${C.reset}\n${lines || "(empty)"}`,
+  );
+}
+
+export function doFork(self: TUIHost, messageId: string): void {
+  try {
+    const newPath = self.sessionMgr.createBranchedSession(messageId);
+    self.showSystemMessage(
+      `${C.green}Forked session created:${C.reset} ${newPath}`,
+    );
+  } catch (err) {
+    self.showSystemMessage(`${C.red}Fork failed:${C.reset} ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
+export function doClone(self: TUIHost): void {
+  const cloned = SessionManager.forkFrom(
+    self.sessionMgr.getSessionFile(),
+    process.cwd(),
+  );
+  self.showSystemMessage(`${C.green}Cloned session:${C.reset} ${cloned.getSessionFile()}`);
+}
+
+export function doDelete(self: TUIHost): void {
+  const file = self.sessionMgr.getSessionFile();
+  const items = [
+    { value: "yes", label: `${C.red}Yes, delete session${C.reset}` },
+    { value: "no", label: "No, keep session" },
+  ];
+  const list = new SelectList(items, 2, selectListTheme);
+  const confirmText = new Text(`${C.yellow}Delete session?${C.reset}\n${C.dim}${file}${C.reset}`);
+  const container = new Container();
+  container.addChild(confirmText);
+  container.addChild(list);
+  const handle = self.tui.showOverlay(container, { anchor: "center", width: "60%", maxHeight: "30%" });
+  list.onSelect = (item) => {
+    handle.hide();
+    if (item.value === "yes") {
+      self.sessionMgr.delete();
+      self.showSystemMessage(`${C.yellow}Session deleted:${C.reset} ${file}`);
+    }
+  };
+  list.onCancel = () => {
+    handle.hide();
+  };
+}
+
+export async function doModelSwitch(self: TUIHost, args: string): Promise<void> {
+  const parts = args.split("/");
+  if (parts.length < 2) {
+    self.showSystemMessage("Usage: /model <provider/model>  (e.g., /model openrouter/deepseek/deepseek-chat)");
+    return;
+  }
+  const provider = parts[0];
+  const modelId = parts.slice(1).join("/");
+
+  // Verify provider exists
+  const foundProvider = getProviders().find((p) => p === provider);
+  if (!foundProvider) {
+    const available = getProviders().join(", ");
+    self.showSystemMessage(
+      `${C.red}Unknown provider "${provider}".${C.reset} Available: ${available}`,
+    );
+    return;
+  }
+
+  // Verify models are available for this provider
+  const models = getModels(foundProvider);
+  if (models.length === 0) {
+    self.showSystemMessage(
+      `${C.red}No models available for provider "${provider}".${C.reset} Check your API key configuration.`,
+    );
+    return;
+  }
+
+  // Verify the specific model exists
+  const model = models.find((m) => m.id === modelId);
+  if (!model) {
+    const available = models.map((m) => m.id).join(", ");
+    self.showSystemMessage(
+      `${C.red}Model "${modelId}" not found for "${provider}".${C.reset} Available: ${available}`,
+    );
+    return;
+  }
+
+  self.currentProvider = provider;
+  self.currentModelId = modelId;
+  self.sessionMgr.appendModelChange(provider, modelId);
+  self.sessionMgr.flush();
+  self.footer.update({
+    currentModel: getModelDisplay(provider, modelId),
+    providerName: provider,
+  });
+
+  // Update agent model if available
+  if (self.agent) {
+    self.agent.state.model = model;
+  }
+
+  self.showSystemMessage(`${C.green}Model switched to:${C.reset} ${provider}/${modelId}`);
+}
+
+export async function doLogin(self: TUIHost, provider: string): Promise<void> {
+  if (!provider) {
+    const configured = listConfiguredProviders();
+    if (configured.length === 0) {
+      self.showSystemMessage(
+        "No providers configured. Set API keys via environment variables.\n" +
+        "  export OPENROUTER_API_KEY=sk-...\n" +
+        "  export OPENAI_API_KEY=sk-...\n" +
+        "  etc.",
+      );
+    } else {
+      self.showSystemMessage(`Configured providers: ${configured.join(", ")}`);
+    }
+    return;
+  }
+  self.showSystemMessage(
+    `${C.dim}To configure ${provider}, set the appropriate environment variable or add the key to ~/.caitlyn/auth.json${C.reset}`,
+  );
+}
+
+export function showHelp(self: TUIHost): void {
+  const lines = [
+    `${C.bold}${C.cyan}C A I T L Y N   C o m m a n d s${C.reset}`,
+    ``,
+    `${C.bold}Scanning & Defense:${C.reset}`,
+    `  /scan <content>      Security scan for injection attacks`,
+    `  /status              Show antibody/antigen library`,
+    `  /dashboard           Defense statistics`,
+    `  /history             Recent scan history`,
+    `  /antibody list       List antibody forest`,
+    `  /antigen <id>        Show antigen details`,
+    `  /vaccinate <pattern> Evolve antibody`,
+    ``,
+    `${C.bold}Session:${C.reset}`,
+    `  /new                 Start new session`,
+    `  /resume              Open session picker`,
+    `  /session             Show session info`,
+    `  /name <title>        Set session name`,
+    `  /export [path]       Export session`,
+    `  /compact             Compact context`,
+    `  /tree                View session tree`,
+    `  /fork <id>           Branch from message`,
+    `  /clone               Duplicate session`,
+    `  /delete              Delete session`,
+    ``,
+    `${C.bold}Config:${C.reset}`,
+    `  /model [provider/id] Switch LLM model`,
+    `  /thinking <level>    off|low|medium|high`,
+    `  /login [provider]    Configure auth`,
+    `  /settings            Open settings`,
+    ``,
+    `${C.bold}Meta:${C.reset}`,
+    `  /help                Show this help`,
+    `  /clear               Clear screen`,
+    `  /quit                Exit CAITLYN`,
+    ``,
+    `${C.dim}  !<content>           Quick scan alias${C.reset}`,
+    ``,
+    `${C.dim}  Ctrl+C quit  |  Esc back/abort  |  Tab back  |  q dismiss${C.reset}`,
+  ];
+
+  self.showSystemMessage(lines.join("\n"));
+}

@@ -444,7 +444,10 @@ const DEFAULT_VACCINATION_CONFIG: VaccinationConfig = {
 };
 
 export function getMemoryBank(): MemoryBank {
-  if (!_memoryBank) _memoryBank = new MemoryBank();
+  if (!_memoryBank) {
+    _memoryBank = new MemoryBank();
+    _memoryBank.load();
+  }
   return _memoryBank;
 }
 
@@ -456,6 +459,7 @@ export function getCostMonitor(): CostMonitor {
       latencyThresholdUs: DEFAULT_VACCINATION_CONFIG.latencyThresholdUs,
       tokenThreshold: DEFAULT_VACCINATION_CONFIG.tokenThreshold,
     });
+    _costMonitor.load();
   }
   return _costMonitor;
 }
@@ -519,13 +523,35 @@ export function persistVaccinatedAntibody(
     "utf-8",
   );
 
-  // Add memory entries to the bank for fast-path matching
-  for (const entry of memoryEntries) {
-    getMemoryBank().add(entry);
-  }
 
   // Invalidate caches and rebuild index
   _cachedAntibodies = null;
   const all = loadAntibodies();
   buildAntibodyIndex(all);
 }
+
+/**
+ * Record scan feedback to update antibody stats.
+ * Called after each scan to close the evolution feedback loop.
+ */
+export function recordScanFeedback(
+  antibodyIds: string[],
+  verdict: string,
+  latencyUs: number,
+): void {
+  for (const id of antibodyIds) {
+    const antibody = loadAntibodies().find((a) => a.config.id === id);
+    if (!antibody) continue;
+    const stats = antibody.config.stats;
+    stats.total_scans = (stats.total_scans ?? 0) + 1;
+    if (verdict === "malicious") stats.true_positives = (stats.true_positives ?? 0) + 1;
+    else if (verdict === "benign" && stats.total_scans > 1) {
+      // Only track FP for non-first scans (first scan may be exploratory)
+    }
+    // Update rolling average latency
+    stats.avg_latency_us = stats.total_scans > 1
+      ? (stats.avg_latency_us * (stats.total_scans - 1) + latencyUs) / stats.total_scans
+      : latencyUs;
+  }
+}
+

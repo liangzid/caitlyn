@@ -173,6 +173,7 @@ export class ShmEngine {
       prompt: v.prompt,
       threshold: v.threshold,
       status: "candidate" as const,
+      signatures: v.newSignatures.length > 0 ? v.newSignatures : undefined,
       stats: {
         totalScans: 0,
         truePositives: 0,

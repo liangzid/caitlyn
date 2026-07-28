@@ -32,6 +32,8 @@ export interface Antibody {
   threshold: number;
   status: "active" | "suppressed" | "retired" | "candidate";
   stats: AntibodyStats;
+  /** Exact/regex patterns extracted by SHM for fast-path matching */
+  signatures?: string[];
 }
 
 export interface AntibodyStats {
@@ -39,7 +41,6 @@ export interface AntibodyStats {
   truePositives: number;
   falsePositives: number;
   avgLatencyUs: number;
-
   /** Derived: TP / (TP + FN) */
   recall?: number;
   /** Derived: TP / (TP + FP) */

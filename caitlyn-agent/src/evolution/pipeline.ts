@@ -96,12 +96,27 @@ export class VaccinationPipeline {
             status: "active",
           };
 
+          // Extract signatures as fast-path memory entries
+          const memoryEntries: MemoryEntry[] = (antibody.signatures ?? []).map((pattern) => ({
+            id: `mem-${antibody.id}-${pattern.slice(0, 20).replace(/[^a-zA-Z0-9]/g, "")}`,
+            pattern,
+            signatureType: pattern.includes("\\") || pattern.includes(".*") || pattern.includes("^") ? "regex" as const : "exact" as const,
+            category: antibody.category,
+            hitCount: 0,
+            createdAt: new Date().toISOString(),
+          }));
+
+          // Add to memory bank for immediate fast-path matching
+          for (const entry of memoryEntries) {
+            memoryBank.add(entry);
+          }
+
           results.push({
             antibody,
             affinityScore: survivor.affinityScore,
             precision: survivor.antibody.stats.precision ?? 0,
             recall: survivor.antibody.stats.recall ?? 0,
-            memoryEntries: [],
+            memoryEntries,
           });
         }
       } else {
