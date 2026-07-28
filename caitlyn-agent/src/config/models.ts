@@ -78,17 +78,23 @@ export const CAITLYN_MODELS: ModelInfo[] = [
   },
   {
     provider: "deepseek",
-    model: "deepseek-chat",
-    display: "DeepSeek V3",
+    model: "deepseek-v4-pro",
+    display: "DeepSeek V4",
     contextWindow: 128_000,
     input: ["text"],
   },
   {
     provider: "deepseek",
-    model: "deepseek-reasoner",
-    display: "DeepSeek R1",
+    model: "deepseek-v4-flash",
+    display: "DeepSeek V4 Flash",
     contextWindow: 128_000,
-    reasoning: true,
+    input: ["text"],
+  },
+  {
+    provider: "openrouter",
+    model: "deepseek/deepseek-v4-pro",
+    display: "DeepSeek V4",
+    contextWindow: 128_000,
     input: ["text"],
   },
 ];

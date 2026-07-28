@@ -327,6 +327,24 @@ export class CaitlynTUI {
     let currentMessageContent = "";
 
     agent.subscribe((event) => {
+      // FULL DEBUG: log every event with message content to file
+      try {
+        const m = (event as Record<string, unknown>).message as Record<string, unknown> | undefined;
+        fs.appendFileSync("/tmp/caitlyn-debug.log", JSON.stringify({
+          ts: Date.now(),
+          type: event.type,
+          role: m?.role,
+          contentLen: Array.isArray(m?.content) ? (m.content as unknown[]).length : "N/A",
+          contentPreview: Array.isArray(m?.content)
+            ? (m.content as Array<Record<string, unknown>>).map(c => ({ type: c.type, textLen: typeof c.text === "string" ? c.text.length : 0, thinkLen: typeof c.content === "string" ? c.content.length : 0 }))
+            : "no-content",
+          usage: m?.usage,
+          stopReason: m?.stopReason,
+          errorMessage: m?.errorMessage,
+          toolName: (event as Record<string, unknown>).toolName,
+        }) + "\n", "utf-8");
+      } catch { /* ok */ }
+
       if (!this.running) return;
 
       switch (event.type) {
