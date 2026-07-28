@@ -2,10 +2,10 @@
 
 [llm]
 provider = "deepseek"
-model = "deepseek-chat"
+model = "deepseek-v4-pro"
 api_key_env = "DEEPSEEK_API_KEY"
 base_url = "https://api.deepseek.com"
-small_model = "deepseek-chat"
+small_model = "deepseek-v4-flash"
 
 [scanning]
 max_parallel_tier1 = 10
