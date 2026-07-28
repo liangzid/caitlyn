@@ -129,9 +129,9 @@ export class SessionManager {
         console.warn(`Skipping malformed session entry: ${line.slice(0, 80)}`);
       }
     }
-    const cwd = cwdOverride ?? entries.find((e) => "cwd" in e && typeof (e as any).cwd === "string")
+    const cwd = cwdOverride ?? (entries.find((e) => "cwd" in e && typeof (e as any).cwd === "string")
       ? (entries.find((e) => "cwd" in e && typeof (e as any).cwd === "string") as any)?.cwd ?? process.cwd()
-      : process.cwd();
+      : process.cwd());
     const basename = path.basename(filePath);
     const idMatch = basename.match(/^([A-Z0-9]+_.+)\.jsonl$/i);
     const rawId = idMatch ? idMatch[1] : (() => { console.warn(`Session filename does not match expected pattern: ${basename}`); return makeSessionId(); })();

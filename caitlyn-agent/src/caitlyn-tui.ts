@@ -126,6 +126,29 @@ function getGitBranch(cwd: string): string | undefined {
 
 // ── Main TUI ──────────────────────────────────────────────────────
 
+/**
+ * Extract text content from an assistant message's content blocks.
+ * Handles both streaming deltas (text blocks) and thinking blocks.
+ * Exported for testability of the event-handling logic.
+ */
+export function extractAssistantContent(
+  content: unknown,
+): string {
+  const blocks = Array.isArray(content) ? content : [];
+  return blocks
+    .filter((c: unknown) => {
+      const t = (c as Record<string, unknown>).type;
+      return t === "text" || t === "thinking";
+    })
+    .map((c: unknown) => {
+      const o = c as Record<string, unknown>;
+      if ("text" in o && typeof o.text === "string") return o.text;
+      if ("content" in o && typeof o.content === "string") return o.content;
+      return "";
+    })
+    .join("");
+}
+
 export class CaitlynTUI {
   tui: TUI;
   editor: Editor;
@@ -314,19 +337,7 @@ export class CaitlynTUI {
         case "message_update": {
           const msg = event.message as unknown as { role?: string; content?: unknown };
           if (msg.role !== "assistant") break;
-          const contentBlocks = Array.isArray(msg.content) ? msg.content : [];
-          const text = contentBlocks
-            .filter((c: unknown) => {
-              const t = (c as Record<string, unknown>).type;
-              return t === "text" || t === "thinking";
-            })
-            .map((c: unknown) => {
-              const o = c as Record<string, unknown>;
-              if ("text" in o && typeof o.text === "string") return o.text;
-              if ("content" in o && typeof o.content === "string") return o.content;
-              return "";
-            })
-            .join("");
+          const text = extractAssistantContent(msg.content);
           currentMessageContent = text;
 
           if (this.currentLoader) {
@@ -365,20 +376,9 @@ export class CaitlynTUI {
           }
           // If no streaming updates fired (non-streaming API), extract content now
           if (!currentMessageContent) {
-            const blocks = Array.isArray(msg.content) ? msg.content : [];
-            currentMessageContent = blocks
-              .filter((c: unknown) => {
-                const t = (c as Record<string, unknown>).type;
-                return t === "text" || t === "thinking";
-              })
-              .map((c: unknown) => {
-                const o = c as Record<string, unknown>;
-                if ("text" in o && typeof o.text === "string") return o.text;
-                if ("content" in o && typeof o.content === "string") return o.content;
-                return "";
-              })
-              .join("");
+            currentMessageContent = extractAssistantContent(msg.content);
           }
+
 
           // Remove the streaming message so the final message doesn't duplicate
           if (this.streamingMd) {
@@ -389,7 +389,6 @@ export class CaitlynTUI {
           const prefix = `${C.bold}${C.cyan}CAITLYN${C.reset}  ${C.dim}just now${C.reset}  `;
           const msgMd = new Markdown(prefix + currentMessageContent, 0, 0, THEME);
           this.insertBeforeEditor(msgMd);
-
           const usage = (event.message as unknown as { usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; cost: { total: number } } }).usage;
           this.sessionMgr.appendMessage({
             role: "assistant",
