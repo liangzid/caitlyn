@@ -355,13 +355,16 @@ export class CaitlynTUI {
           break;
         }
         case "message_end": {
+          // Only process assistant messages — skip user/system/tool messages
+          const msg = event.message as unknown as { role?: string; content?: unknown };
+          if (msg.role !== "assistant") break;
+
           if (this.currentLoader) {
             this.tui.removeChild(this.currentLoader);
             this.currentLoader = null;
           }
           // If no streaming updates fired (non-streaming API), extract content now
           if (!currentMessageContent) {
-            const msg = event.message as unknown as { content?: unknown };
             const blocks = Array.isArray(msg.content) ? msg.content : [];
             currentMessageContent = blocks
               .filter((c: unknown) => {
@@ -387,27 +390,20 @@ export class CaitlynTUI {
           const msgMd = new Markdown(prefix + currentMessageContent, 0, 0, THEME);
           this.insertBeforeEditor(msgMd);
 
-          if (event.message.role === "assistant") {
-            const usage = event.message.usage;
-            this.sessionMgr.appendMessage({
-              role: "assistant",
-              content: currentMessageContent,
-              usage: usage
-                ? {
-                    input: usage.input ?? 0,
-                    output: usage.output ?? 0,
-                    cacheRead: usage.cacheRead,
-                    cacheWrite: usage.cacheWrite,
-                    cost: usage.cost.total,
-                  }
-                : undefined,
-            });
-          } else {
-            this.sessionMgr.appendMessage({
-              role: "assistant",
-              content: currentMessageContent,
-            });
-          }
+          const usage = (event.message as unknown as { usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; cost: { total: number } } }).usage;
+          this.sessionMgr.appendMessage({
+            role: "assistant",
+            content: currentMessageContent,
+            usage: usage
+              ? {
+                  input: usage.input ?? 0,
+                  output: usage.output ?? 0,
+                  cacheRead: usage.cacheRead,
+                  cacheWrite: usage.cacheWrite,
+                  cost: usage.cost.total,
+                }
+              : undefined,
+          });
           this.sessionMgr.flush();
 
           this.refreshFooter();
