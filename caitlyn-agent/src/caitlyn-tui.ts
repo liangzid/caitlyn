@@ -312,24 +312,18 @@ export class CaitlynTUI {
           break;
         }
         case "message_update": {
-          // DEBUG: log event structure
-          const msg = event.message as unknown as Record<string, unknown>;
-          console.error("[DEBUG message_update]", "role:", msg.role, "content-type:", Array.isArray(msg.content) ? `array[${(msg.content as unknown[]).length}]` : typeof msg.content);
-          if (Array.isArray(msg.content)) {
-            for (const block of msg.content as Array<Record<string, unknown>>) {
-              console.error("[DEBUG block]", block.type, "text:" in block ? String(block.text).slice(0, 80) : "no text");
-            }
-          }
-
-          if (event.message.role !== "assistant") break;
-          const blocks = event.message.content;
-          const contentBlocks = Array.isArray(blocks) ? blocks : [];
-          // Extract text from both text and thinking blocks
+          const msg = event.message as unknown as { role?: string; content?: unknown };
+          if (msg.role !== "assistant") break;
+          const contentBlocks = Array.isArray(msg.content) ? msg.content : [];
           const text = contentBlocks
-            .filter((c: { type: string }) => c.type === "text" || c.type === "thinking")
-            .map((c) => {
-              if ("text" in c && typeof c.text === "string") return c.text;
-              if ("content" in c && typeof c.content === "string") return c.content;
+            .filter((c: unknown) => {
+              const t = (c as Record<string, unknown>).type;
+              return t === "text" || t === "thinking";
+            })
+            .map((c: unknown) => {
+              const o = c as Record<string, unknown>;
+              if ("text" in o && typeof o.text === "string") return o.text;
+              if ("content" in o && typeof o.content === "string") return o.content;
               return "";
             })
             .join("");
@@ -365,6 +359,24 @@ export class CaitlynTUI {
             this.tui.removeChild(this.currentLoader);
             this.currentLoader = null;
           }
+          // If no streaming updates fired (non-streaming API), extract content now
+          if (!currentMessageContent) {
+            const msg = event.message as unknown as { content?: unknown };
+            const blocks = Array.isArray(msg.content) ? msg.content : [];
+            currentMessageContent = blocks
+              .filter((c: unknown) => {
+                const t = (c as Record<string, unknown>).type;
+                return t === "text" || t === "thinking";
+              })
+              .map((c: unknown) => {
+                const o = c as Record<string, unknown>;
+                if ("text" in o && typeof o.text === "string") return o.text;
+                if ("content" in o && typeof o.content === "string") return o.content;
+                return "";
+              })
+              .join("");
+          }
+
           // Remove the streaming message so the final message doesn't duplicate
           if (this.streamingMd) {
             this.tui.removeChild(this.streamingMd);
