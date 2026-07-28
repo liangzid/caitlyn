@@ -247,8 +247,8 @@ export class CaitlynTUI {
     // so we must be careful not to steal editing keys from the Editor.
     tui.addInputListener((data: string) => {
       // ── Overlay dismissal keys (always available) ────────────
-      // Esc: universal dismiss / abort
-      if (data === "\x1b") {
+      // Esc: universal dismiss / abort (matchesKey handles Kitty protocol)
+      if (matchesKey(data, "escape")) {
         if (tui.hasOverlay()) {
           tui.hideOverlay();
           return { consume: true };
