@@ -394,10 +394,13 @@ export class CaitlynTUI {
           }
           // If no streaming updates fired (non-streaming API), extract content now
           if (!currentMessageContent) {
-            currentMessageContent = extractAssistantContent(msg.content);
+            const em = event.message as unknown as { errorMessage?: string; stopReason?: string };
+            if (em.stopReason === "error" && em.errorMessage) {
+              currentMessageContent = `${C.red}⚠️ ${em.errorMessage}${C.reset}`;
+            } else {
+              currentMessageContent = extractAssistantContent(msg.content);
+            }
           }
-
-
           // Remove the streaming message so the final message doesn't duplicate
           if (this.streamingMd) {
             this.tui.removeChild(this.streamingMd);
