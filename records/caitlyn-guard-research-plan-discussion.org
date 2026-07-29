@@ -1,0 +1,32 @@
+#+TITLE: CAITLYN Guard Research Plan Discussion
+#+AUTHOR: Zi Liang
+#+DATE: 2026-07-28
+
+* Turn 1: 团长询问项目研究现状
+- 确认 Rust→TS 迁移完成，src/ 已删除，无残留
+- 团长注意到旧文档仍描述 Rust 架构 → 触发全部文档更新
+
+* Turn 2: 团长要求更新全部文档，然后描述现状
+- 更新 9 个文档：
+  1. caitlyn-status-and-roadmap.org — 完全重写（单层 TS 架构）
+  2. README.md — 移除 Rust daemon，更新项目结构
+  3. caitlyn-design-discussion.org — 追加 Turn 17 迁移记录
+  4. caitlyn-agent-impl.org — 追加 Turn 21 迁移记录
+  5. caitlyn-comprehensive-review-2025-07-25.org — 追加迁移后状态
+  6. caitlyn-comprehensive-review-2025-07-25.md — 标记 11 项已解决
+  7. caitlyn-ux-todo.md — 移除 daemon 全部 P1 项
+  8. caitlyn-design-v2.md — 标注历史文档
+  9. caitlyn-design-doc.md — 标注历史文档
+- 当前状态：纯 TS，~6,450 行，226 测试，20 抗体，AgentEval 就绪
+
+* Turn 3: Guard 概念讨论
+- 团长确认四种模式都需要，非常全面
+- 团长要求详细的 research plan，含实验验证 + unit tests
+
+* Turn 4: Guard Research Plan 完成
+- 产出：tasks/caitlyn-guard-research-plan.md (~27KB)
+- 四种模式完整设计：MCP Proxy, FS Watcher, Agent Hooks, Process Sandbox
+- 每个模式：设计 → 攻击场景 → 指标 → baselines → 12-13 个 unit tests
+- 6 个实验 (E1-E6)，5 agents × 4 modes，含 vaccination ablation
+- 实现阶段：~13 周，5 个 phase
+- 成功标准：ASR 降 ≥80%，benign 完成率 ≥90%，延迟 <200ms
