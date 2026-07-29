@@ -1,30 +1,13 @@
 {
   "roots": [
-    "ab-builtin-injection",
-    "ab-builtin-jailbreak",
-    "ab-builtin-poisoning",
-    "ab-classifier-injection",
-    "ab-classifier-jailbreak",
-    "ab-context-aware",
-    "ab-delimiter-sandwich",
-    "ab-entropy-anomaly",
-    "ab-escalation-coordinator",
-    "ab-execution-tracer",
-    "ab-hardened-prompt",
-    "ab-injection-general",
-    "ab-instruction-hierarchy",
-    "ab-jailbreak-general",
-    "ab-llm-judge",
-    "ab-pattern-injection",
-    "ab-permission-gating",
-    "ab-poisoning-general",
-    "ab-self-examination",
-    "ab-semantic-similarity"
+    "gp"
   ],
   "trees": {
-    "ab-builtin-injection": {
-      "id": "ab-builtin-injection",
-      "children": [],
+    "gp": {
+      "id": "gp",
+      "children": [
+        "p"
+      ],
       "stats_aggregated": {
         "total_scans": 0,
         "true_positives": 0,
@@ -32,9 +15,11 @@
         "avg_latency_us": 0
       }
     },
-    "ab-builtin-jailbreak": {
-      "id": "ab-builtin-jailbreak",
-      "children": [],
+    "p": {
+      "id": "p",
+      "children": [
+        "c"
+      ],
       "stats_aggregated": {
         "total_scans": 0,
         "true_positives": 0,
@@ -42,178 +27,8 @@
         "avg_latency_us": 0
       }
     },
-    "ab-builtin-poisoning": {
-      "id": "ab-builtin-poisoning",
-      "children": [],
-      "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
-        "false_positives": 0,
-        "avg_latency_us": 0
-      }
-    },
-    "ab-classifier-injection": {
-      "id": "ab-classifier-injection",
-      "children": [],
-      "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
-        "false_positives": 0,
-        "avg_latency_us": 0
-      }
-    },
-    "ab-classifier-jailbreak": {
-      "id": "ab-classifier-jailbreak",
-      "children": [],
-      "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
-        "false_positives": 0,
-        "avg_latency_us": 0
-      }
-    },
-    "ab-context-aware": {
-      "id": "ab-context-aware",
-      "children": [],
-      "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
-        "false_positives": 0,
-        "avg_latency_us": 0
-      }
-    },
-    "ab-delimiter-sandwich": {
-      "id": "ab-delimiter-sandwich",
-      "children": [],
-      "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
-        "false_positives": 0,
-        "avg_latency_us": 0
-      }
-    },
-    "ab-entropy-anomaly": {
-      "id": "ab-entropy-anomaly",
-      "children": [],
-      "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
-        "false_positives": 0,
-        "avg_latency_us": 0
-      }
-    },
-    "ab-escalation-coordinator": {
-      "id": "ab-escalation-coordinator",
-      "children": [],
-      "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
-        "false_positives": 0,
-        "avg_latency_us": 0
-      }
-    },
-    "ab-execution-tracer": {
-      "id": "ab-execution-tracer",
-      "children": [],
-      "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
-        "false_positives": 0,
-        "avg_latency_us": 0
-      }
-    },
-    "ab-hardened-prompt": {
-      "id": "ab-hardened-prompt",
-      "children": [],
-      "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
-        "false_positives": 0,
-        "avg_latency_us": 0
-      }
-    },
-    "ab-injection-general": {
-      "id": "ab-injection-general",
-      "children": [],
-      "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
-        "false_positives": 0,
-        "avg_latency_us": 0
-      }
-    },
-    "ab-instruction-hierarchy": {
-      "id": "ab-instruction-hierarchy",
-      "children": [],
-      "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
-        "false_positives": 0,
-        "avg_latency_us": 0
-      }
-    },
-    "ab-jailbreak-general": {
-      "id": "ab-jailbreak-general",
-      "children": [],
-      "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
-        "false_positives": 0,
-        "avg_latency_us": 0
-      }
-    },
-    "ab-llm-judge": {
-      "id": "ab-llm-judge",
-      "children": [],
-      "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
-        "false_positives": 0,
-        "avg_latency_us": 0
-      }
-    },
-    "ab-pattern-injection": {
-      "id": "ab-pattern-injection",
-      "children": [],
-      "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
-        "false_positives": 0,
-        "avg_latency_us": 0
-      }
-    },
-    "ab-permission-gating": {
-      "id": "ab-permission-gating",
-      "children": [],
-      "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
-        "false_positives": 0,
-        "avg_latency_us": 0
-      }
-    },
-    "ab-poisoning-general": {
-      "id": "ab-poisoning-general",
-      "children": [],
-      "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
-        "false_positives": 0,
-        "avg_latency_us": 0
-      }
-    },
-    "ab-self-examination": {
-      "id": "ab-self-examination",
-      "children": [],
-      "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
-        "false_positives": 0,
-        "avg_latency_us": 0
-      }
-    },
-    "ab-semantic-similarity": {
-      "id": "ab-semantic-similarity",
+    "c": {
+      "id": "c",
       "children": [],
       "stats_aggregated": {
         "total_scans": 0,
