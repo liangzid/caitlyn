@@ -43,3 +43,14 @@ Full TODO document: ~tasks/caitlyn-comprehensive-review-2025-07-25.md~
 
 团长 should review the TODO and decide which issues to tackle first.
 Suggested starting point: fix C2 + C1 (index poisoning + exit) → immediate user relief.
+
+* Update 2026-07-28: Rust 迁移后状态
+
+自 2026-07-27 的 Rust → TypeScript 迁移后：
+- Rust 相关 issues (C7, H7-H13) 已随 src/ 删除而自动解决
+- H7 (vaccinate 未持久化)：已在 TS evolution/pipeline.ts 中修复
+- H8 (tokens_used 为 0)：TS 实现直接使用 LLM API 返回的 usage 信息
+- H10 (fail-open)：TS scanner 在解析失败时返回 suspicious 而非 benign
+- H11 (DeepSeek 硬编码)：TS 使用 pi-ai 统一 LLM 接口，支持多 provider
+- H13 (同步 I/O)：TS 中所有文件 I/O 为异步
+- 其余 TS issues (C1-C6, M1-M10, H1-H6) 中 C1-C3, M1-M3, M10 已修复

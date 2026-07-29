@@ -138,3 +138,30 @@
 - DefenseFactory: create_defense(type, api_key, model, caitlyn_port)
 - Benchmark runner: --defense none|caitlyn|llm_judge|llm_judge_fewshot|regex_guard
 - 新增文件: defenses.py (~410 行), 总计 9 文件 ~3,000 行 Python
+
+** Turn 17: Rust → TypeScript 架构迁移 — 2026-07-27
+- 决策：将整个 CAITLYN 系统从 Rust+TS 双语言统一为纯 TypeScript
+- 原因：
+  1. 降低维护负担：两套语言意味着两套类型定义、两套测试、两套 build
+  2. 统一 evolution 引擎：SHM/Affinity 在 Rust 中但 LLM prompt 构建在 TS 中更便捷
+  3. 消除 daemon 依赖：caitlynd 作为独立进程增加部署复杂度
+- 迁移内容：
+  - src/evolution/ → caitlyn-agent/src/evolution/ (SHM, Affinity, Pipeline)
+  - src/surveillance/cost_monitor.rs → evolution/cost-monitor.ts
+  - src/core/memory.rs → evolution/memory-bank.ts
+  - src/storage/valset.rs → evolution/validation-set.ts
+- 删除内容：
+  - src/ (全部 Rust 代码, ~4200 行)
+  - Cargo.toml, Cargo.lock
+  - caitlynd-client.ts (daemon 通信客户端)
+  - 所有 daemon 引用（cli.ts, config.toml 中的 caitlynd 相关配置）
+- 新增内容：
+  - evolution/ 目录 8 个 TS 模块 (~1,400 行)
+  - library.ts: persistVaccinatedAntibody() 疫苗接种结果持久化
+  - tools.ts: caitlyn_vaccinate 使用真实 in-process pipeline
+- 影响：
+  - Hybrid scanner 从双模式（daemon + local）简化为纯本地模式
+  - Vaccination 现在在 agent 进程内执行，无需 IPC
+  - 部署从 "agent + daemon 两进程" 简化为单一 agent 进程
+- 验证：226 测试全部通过, tsc --noEmit clean
+

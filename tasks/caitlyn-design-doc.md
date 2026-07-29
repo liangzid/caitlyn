@@ -1,6 +1,6 @@
 # CAITLYN: Detailed Design Document
 
-## 1. Architecture Overview
+> **Historical document (2026-07-12)**. The Python-based architecture described below predates the Rust implementation and the subsequent TypeScript migration. See `records/caitlyn-status-and-roadmap.org` for current architecture.
 
 ### 1.1 Deployment Model
 

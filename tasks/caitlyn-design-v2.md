@@ -1,6 +1,6 @@
 # CAITLYN: Revised Design Document v2
 
-## 0. Conceptual Model (Updated)
+> **Historical document (2026-07-14)**. The Rust architecture described below was migrated to TypeScript on 2026-07-27 (commit e352889). See `records/caitlyn-status-and-roadmap.org` for current architecture.
 
 ### The Immunization Analogy (Refined)
 

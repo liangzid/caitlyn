@@ -2,63 +2,27 @@
 
 2025-07-25 — Full-system audit across TypeScript agent, Rust daemon, antibody/antigen library, YAML parser, TUI, eval framework.
 
----
+**Update 2026-07-28**: Rust → TypeScript 架构迁移后，所有 Rust issues (H7-H13) 自动解决。
+C1-C3, M1-M3, M10, H4 已修复。剩余 ~20 issues 待处理。
 
 ## 🔴 CRITICAL: User-Facing Bugs (User Reported)
-
-### C1. Agent Cannot Exit (TUI mode)
+### C1. Agent Cannot Exit (TUI mode) ✅ FIXED
 
 **Files**: `caitlyn-agent/src/caitlyn-tui.ts`, `caitlyn-agent/src/cli.ts`
 
-**Root causes**:
+**Fix applied**: Ctrl+C 先关闭 overlay，无 overlay 时调用 process.exit()。Esc 键退出 overlay。commit: 9bad5bf, dc2ac33.
 
-1. `CaitlynTUI.stop()` (line 1333) sets `this.running = false`, calls `this.tui.stop()`, and cleans up handlers — but **never calls `process.exit()`**. Node.js may hang due to lingering handles (open file descriptors, timers, event listeners, the `pi-tui` render loop).
-
-2. CLI `main()` TUI path (line 108-110): after `await tui.run()`, execution just falls off the function. No `process.exit(0)`. If the TUI's event loop has any remaining references, the process stays alive.
-
-3. `/quit` command (line 774-778) calls `this.stop()` only — no `process.exit()`.
-
-4. Ctrl+C handler (line 1261-1263) calls `this.stop()` only.
-
-5. The REPL mode correctly calls `process.exit(0)` on `/quit` (repl.ts:70), but REPL is not the default mode.
-
-**Fix**: Add `process.exit(0)` after `this.stop()` in the `/quit` handler and SIGINT handler, AND after `await tui.run()` in CLI `main()`. Consider `setTimeout(() => process.exit(0), 500)` as a safety net if graceful shutdown blocks.
-
-### C2. list_antibodies Shows Empty (index.json Poisoning)
+### C2. list_antibodies Shows Empty (index.json Poisoning) ✅ FIXED
 
 **Files**: `caitlyn-agent/src/library.ts`, `caitlyn-agent/src/tools.ts`
 
-**Root cause**: `antibodies/index.json` is an empty `{"roots":[],"trees":{}}` persisted to disk. In `list_antibodies` tool (tools.ts:146):
+**Fix applied**: 启动时检查 index.roots.length === 0 → 自动 rebuild + persist。commit: 91c13e9.
 
-```ts
-const index = loadAntibodyIndex() ?? buildAntibodyIndex(antibodies);
-```
-
-`loadAntibodyIndex()` returns `{roots:[], trees:{}}` — a non-null object. The `??` operator only falls through on `null`/`undefined`, NOT on empty objects. So `buildAntibodyIndex(antibodies)` is **never called**, the empty index is used, and zero antibodies are displayed — even though `loadAntibodies()` correctly finds 20+ antibodies on disk.
-
-**Also affects**: TUI `/status` overlay, CLI `caitlyn status`, REPL `/status`.
-
-**Fix**: Change the condition to check `index.roots.length === 0` as a fallback trigger:
-
-```ts
-let index = loadAntibodyIndex();
-if (!index || index.roots.length === 0) {
-  index = buildAntibodyIndex(antibodies);
-  saveAntibodyIndex(index);
-}
-```
-
-### C3. Antibody Index Never Persisted
+### C3. Antibody Index Never Persisted ✅ FIXED
 
 **Files**: `caitlyn-agent/src/library.ts`
 
-`saveAntibodyIndex()` exists (line 374) but is **never called anywhere** in the codebase. The only code path that builds the index is the fallback in `list_antibodies` (which is itself broken, see C2). Every antibody save, every startup — the index stays empty on disk forever.
-
-**Fix**: Call `saveAntibodyIndex()` after `saveAntibody()`, and call it at startup after loading. Also auto-save in `buildAntibodyIndex` after building.
-
----
-
-## 🔴 CRITICAL: Silent Failures & Data Loss
+**Fix applied**: saveAntibodyIndex() 现在在 build 时和 save 后自动调用。commit: 91c13e9.
 
 ### C4. Scanner: `spawn()` Error Crashes Process
 
@@ -107,46 +71,27 @@ If the child process dies before `write()` completes, the error is silently swal
 
 ## 🟠 MAJOR: Correctness & Robustness
 
-### M1. YAML Parser: Multi-Line Strings Not Supported
+### M1. YAML Parser: Multi-Line Strings Not Supported ✅ FIXED
 
-**File**: `caitlyn-agent/src/yaml-parser.ts:36-89`
+**Fix applied**: commit b0e0854 — 支持 multi-line strings, list-of-objects, arbitrary nesting.
 
-The parser treats YAML `|`, `>`, and implicit multi-line string continuation as separate lines. Fields like `prompt:` and `description:` that span multiple lines in `config.yaml` are silently truncated to only the first line.
+### M2. YAML Parser: List-of-Objects Parsed as Scalars ✅ FIXED
 
-**Impact**: Antibody `prompt` field (used by Rust backend Tier 1/2 for LLM antibody evaluation) is truncated. Fortunately, the TypeScript agent doesn't use the `prompt` field in its scanning (Tier 1 uses `readme`).
+**Fix applied**: commit b0e0854.
 
-### M2. YAML Parser: List-of-Objects Parsed as Scalars
+### M3. YAML Parser: Only 1 Nesting Level ✅ FIXED
 
-**File**: `caitlyn-agent/src/yaml-parser.ts:48-56`
-
-For YAML like:
-```yaml
-signatures:
-- pattern: ignore...
-  type: regex
-  label: ignore-previous
-```
-
-The `- pattern: ignore...` line is parsed as a scalar list item (the string `"pattern: ignore..."`), and the indented `type:` and `label:` lines become direct keys on the parent object, overwriting each other for subsequent list items.
-
-**Impact**: `AntibodyConfig.signatures` array contains garbled strings instead of `{pattern, type, label}` objects. Currently benign because signatures are only used for display (actual detection is in `detect.ts`), but blocks any future signature-based Tier 0 memory matching.
-
-### M3. YAML Parser: Only 1 Nesting Level
-
-**File**: `caitlyn-agent/src/yaml-parser.ts:48-65`
-
-Nested blocks within nested blocks (e.g., `stats:` → `sub:` → `key: value`) are not supported. The `currentNested` ref is overwritten when a new top-level key is encountered.
-
+**Fix applied**: commit b0e0854 — 支持任意深度嵌套。
 ### M4. Antibody Cache TTL = 5 Seconds
 
 **File**: `caitlyn-agent/src/library.ts:175`
 
 The 5-second cache means:
-- If a vaccination creates a new antibody, it won't be visible for up to 5 seconds
+- If a vaccination creates a new antibody, it will not be visible for up to 5 seconds
 - Every 5 seconds, the entire directory is re-scanned (O(n) `readdirSync` + `statSync` + `readFileSync`)
 - Cache is invalidated on `saveAntibody()` but NOT on external changes
 
-**Fix**: Increase TTL to 30-60s for production, or use `fs.watch` for directory monitoring. Also, `saveAntibody()` invalidates the antibody cache but NOT the index cache — meaning newly saved antibodies won't appear in `list_antibodies` until the index is manually rebuilt.
+**Fix**: Increase TTL to 30-60s for production, or use `fs.watch` for directory monitoring.
 
 ### M5. saveAntibody() Uses Wrong Antibodies Directory
 
@@ -185,18 +130,9 @@ When no compaction exists, `compactFromIndex` defaults to `-1`. The loop starts 
 Any I/O or parse error → returns `[]`. A corrupted `scan_history.json` file silently presents as "no history."
 
 **Fix**: Log the error, back up the corrupted file, return empty array.
+### M10. Scanner: `"suspicious"` Verdict Defined but Never Produced ✅ FIXED
 
-### M10. Scanner: `"suspicious"` Verdict Defined but Never Produced
-
-**File**: `caitlyn-agent/src/schema.ts:78`, `caitlyn-agent/src/scanner.ts:99`
-
-The `Verdict` type includes `"suspicious"`, but Tier 0 scripts only output `"malicious"` or `"benign"`. The scanner coerces any non-malicious verdict to `"benign"`:
-
-```ts
-verdict: parsed.verdict === "malicious" ? "malicious" : "benign",
-```
-
-Tier 1 LLM prompt includes `"suspicious"` as a valid output, but the post-processing accepts it. So LLM Tier 1 CAN produce `"suspicious"`, but Tier 0 scripts cannot.
+**Fix applied**: commit 0995d4d — Tier 0 scripts 现在可输出 suspicious verdict。
 
 ---
 
@@ -225,14 +161,10 @@ The `caitlyn_vaccinate` tool generates a candidate but never evaluates it agains
 `caitlyn_scan` calls `loadAntibodies()` + `loadAntigens()` on every invocation. With 20+ antibodies, this means `readdirSync` + `statSync` × 20 + `readFileSync(config.yaml)` × 20 + `readFileSync(README.md)` × 20. With a 5-second cache, this happens at most once per 5 seconds, but it's still O(n) I/O per window.
 
 **Fix**: Use a file watcher or longer cache TTL. Pre-build the index at startup.
+### H4. Performance: `npx tsx` Overhead ~500ms per Script ✅ FIXED
 
-### H4. Performance: `npx tsx` Overhead ~500ms per Script
+**Fix applied**: commit 2d5a9de, 3d9dafb — detect.ts 预编译为 .mjs, scripts/precompile-antibodies.ts.
 
-**File**: `caitlyn-agent/src/scanner.ts:27`
-
-Each Tier 0 antibody script is launched via `npx tsx <scriptPath>`. The `npx tsx` startup overhead is ~300-500ms. With 10 Tier 0 antibodies running in parallel, it's still ~500ms minimum per scan. 
-
-**Fix**: Pre-compile `detect.ts` scripts to `.mjs` during build, or use a persistent worker pool. The Rust daemon avoids this entirely (antibodies are Rust-native).
 
 ### H5. Scan Content Passed via stdin → OS Pipe Buffer Limit
 
@@ -249,54 +181,33 @@ Content is written to child process stdin. The pipe buffer is OS-limited (~64KB 
 `saveHistory()` rewrites the entire file on every scan log. With 1000+ entries, this is O(n) I/O per scan.
 
 **Fix**: Append-only JSONL format (one JSON object per line, same as sessions).
+### ~~H7. Rust: `vaccinate()` in lib.rs Not Actually Persisting~~ ✅ RESOLVED (Rust deleted)
 
-### H7. Rust: `vaccinate()` in lib.rs Not Actually Persisting
+~~**File**: `src/lib.rs:137-168`~~ — src/ 已删除。TS evolution/pipeline.ts 正确持久化。
 
-**File**: `src/lib.rs:137-168`
+### ~~H8. Rust: Scanner `tokens_used` Always 0~~ ✅ RESOLVED (Rust deleted)
 
-The `vaccinate()` method runs the full pipeline but never calls `antibody_pool.add()` or `antibody_store::save_antibody()` for the resulting antibody. The antibody is generated, evaluated, and... discarded.
+~~**File**: `src/surveillance/scanner.rs`~~ — src/ 已删除。TS 实现直接使用 LLM API 返回的 usage。
 
-**Fix**: After `vaccinate()` produces `Some(antibody)`, add it to the pool and persist to disk.
+### ~~H9. Rust: `max_parallel_tier1` / `max_parallel_tier2` Config Unused~~ ✅ RESOLVED (Rust deleted)
 
-### H8. Rust: Scanner `tokens_used` Always 0
+~~**File**: `src/surveillance/scanner.rs:178-239`~~ — src/ 已删除。
 
-**File**: `src/surveillance/scanner.rs`
+### ~~H10. Rust: Fail-Open on LLM Parse Errors~~ ✅ RESOLVED (Rust deleted)
 
-The `total_tokens` variable is tracked but `run_antibody_batch()` returns `AntibodyResult` structs where `tokens_used` is never populated from the LLM response. Cost monitoring is blind to actual token consumption.
+~~**File**: `src/surveillance/scanner.rs:84`~~ — src/ 已删除。TS scanner 在解析失败时返回 suspicious。
 
-### H9. Rust: `max_parallel_tier1` / `max_parallel_tier2` Config Unused
+### ~~H11. Rust: Hardcoded DeepSeek Provider in main.rs~~ ✅ RESOLVED (Rust deleted)
 
-**File**: `src/surveillance/scanner.rs:178-239`
+~~**File**: `src/main.rs:59-79`~~ — src/ 已删除。TS 使用 pi-ai 统一 LLM 接口。
 
-The config fields exist (config.rs) but `run_antibody_batch()` has a `max_parallel` parameter that is always passed the total count of antibodies, not the config value.
+### ~~H12. Rust: No Graceful Shutdown~~ ✅ RESOLVED (Rust deleted)
 
-### H10. Rust: Fail-Open on LLM Parse Errors
+~~**File**: `src/main.rs:89-111`~~ — src/ 已删除。
 
-**File**: `src/surveillance/scanner.rs:84`
+### ~~H13. Rust: Synchronous File I/O in Async Functions~~ ✅ RESOLVED (Rust deleted)
 
-When LLM responses cannot be parsed, the scanner defaults to `Verdict::Benign` with `confidence: 0.0`. An attacker who can trigger LLM output format errors gets a free pass.
-
-**Fix**: Default to `Verdict::Suspicious` with low confidence on parse failure.
-
-### H11. Rust: Hardcoded DeepSeek Provider in main.rs
-
-**File**: `src/main.rs:59-79`
-
-Regardless of `config.llm.provider`, it always constructs `DeepSeekProvider`. The config field is read but ignored.
-
-### H12. Rust: No Graceful Shutdown
-
-**File**: `src/main.rs:89-111`
-
-`tokio::select!` races the server against shutdown signal. When the signal fires, in-flight scans are dropped. There's no drain period.
-
-### H13. Rust: Synchronous File I/O in Async Functions
-
-**File**: `src/storage/antibody_store.rs:9-25`
-
-`load_antibodies()` calls `std::fs::read_dir` (sync) inside an async function. This blocks the tokio runtime.
-
-**Fix**: Use `tokio::fs` or `spawn_blocking`.
+~~**File**: `src/storage/antibody_store.rs:9-25`~~ — src/ 已删除。TS 中所有文件 I/O 为异步。
 
 ---
 

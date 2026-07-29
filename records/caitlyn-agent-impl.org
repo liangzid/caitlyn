@@ -39,3 +39,11 @@
 - Rust: 36 tests pass, binary builds
 - TS: tsc --noEmit clean, dist 构建成功
 - 状态: caitlyn-agent → ✓ (完成)
+
+** Turn 21: Rust → TypeScript 统一迁移 — 2026-07-27
+- 决策：Rust 引擎 (src/, ~4200 行) 全部迁移至 TypeScript 后删除
+- caitlynd daemon 不再需要：hybrid-scanner 简化为纯本地模式
+- caitlynd-client.ts 删除
+- evolution 引擎 (SHM, Affinity, Pipeline, CostMonitor, MemoryBank) 全部在 TS 中运行
+- /vaccinate 现在在 agent 进程内执行，无需 IPC
+- 部署：单进程 agent，无外部 daemon 依赖

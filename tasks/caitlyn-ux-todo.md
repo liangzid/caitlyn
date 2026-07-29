@@ -7,14 +7,12 @@
 - [ ] **Input validation**: reject empty/super-long content in scan; bound history size to prevent memory blow-up
 - [ ] **File system resilience**: antibody/antigen directory missing → warn, don't crash; unreadable config.yaml → skip with warning, don't fail all loading
 
-## P1 — Daemon UX (the "y/n" flow)
+## P1 — Daemon UX (DEPRECATED — daemon removed 2026-07-27)
 
-- [ ] **Auto-detect daemon on TUI start**: if `CAITLYND_URL` set but daemon unreachable, show "caitlynd daemon is not running. Start it? [y/N]"
-  - `y` → spawn `cargo run -- --port 9070` (or `caitlynd` binary), poll health endpoint, show "Daemon ready" when live
-  - `n` → continue in local mode silently
-- [ ] **Daemon status indicator in TUI**: show real-time connection status with color (green dot = connected, yellow = local mode, red = error)
-- [ ] **CLI scan: suggest daemon**: when `caitlyn scan` runs in local mode and takes >1s, print hint: "Tip: start caitlynd daemon for faster scans with more antibodies"
-- [ ] **Daemon lifecycle**: when TUI exits, offer to stop the daemon if it was auto-started: "Stop caitlynd daemon? [y/N]"
+- [x] **Auto-detect daemon on TUI start** — no longer applicable (no daemon)
+- [x] **Daemon status indicator in TUI** — no longer applicable
+- [x] **CLI scan: suggest daemon** — no longer applicable
+- [x] **Daemon lifecycle** — no longer applicable
 
 ## P2 — TUI Polish
 
@@ -53,7 +51,7 @@
 ## P6 — Code Quality
 
 - [ ] **Replace `as unknown as AntibodyConfig` casts**: the YAML parser returns `Record<string, unknown>` then we force-cast. Add a runtime schema validator (or at least a type guard) so malformed YAML is caught at load time, not at use time
-- [ ] **Extract parseYaml to its own file**: currently inlined in library.ts; it's a reusable utility
+- [x] **Remove dead code**: Rust warnings moot — Rust code deleted
 - [ ] **Add unit tests for parseYaml**: nested objects, lists, edge cases (empty file, only comments, deep nesting)
 - [ ] **Add unit tests for normalizeConfig**: `_list_` conversion, stats defaults, parent_id null handling
 - [ ] **Remove dead code in Rust**: the 4 warnings in mcp.rs (unused variables, dead structs) — either implement or `#[allow]` with reason
