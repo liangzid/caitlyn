@@ -1,8 +1,15 @@
 /**
  * CAITLYN Agent Registry
  *
- * Defines detection signatures and install logic for each supported agent.
- * Used by `caitlyn detect` and `caitlyn install` commands.
+ * Defines detection signatures and install/uninstall logic for each supported agent.
+ * Used by `caitlyn detect`, `caitlyn install`, and `caitlyn uninstall` commands.
+ *
+ * Config modification protocol:
+ *   1. Backup: every config mutation first copies <path> → <path>.caitlyn-backup
+ *   2. Idempotent merge: detects existing CAITLYN hooks, skips if already present
+ *   3. Dry-run: --dry-run flag previews changes without touching files
+ *   4. Uninstall: `caitlyn uninstall <agent>` restores from backup
+ *   5. TOML merge: line-based append for Codex config.toml (no full parser needed)
  */
 
 import * as fs from "node:fs";
@@ -12,72 +19,64 @@ import * as os from "node:os";
 // ── Types ───────────────────────────────────────────────────────────
 
 export interface AgentSignature {
-  /** Unique agent identifier. */
   id: string;
-
-  /** Human-readable name. */
   name: string;
-
-  /** Description for the user. */
   description: string;
-
-  /** How to integrate CAITLYN: "hooks" | "fs-watcher" | "both". */
   integrationMethod: "hooks" | "fs-watcher" | "both";
-
-  /** Detection: paths that indicate this agent is installed. */
   detect: AgentDetection;
-
-  /** Install: what to write where. */
   install: AgentInstall;
 }
 
 export interface AgentDetection {
-  /** Binary names to look for in PATH. */
   binaries?: string[];
-
-  /** Config file paths to check (supports ~ expansion). */
   configPaths?: string[];
-
-  /** Directory paths whose existence indicates installation (supports ~). */
   dirPaths?: string[];
-
-  /** For library agents: check package.json for dependency. */
   npmDependency?: string;
 }
 
 export interface AgentInstall {
-  /** Config file to write/modify (supports ~). */
   configPath: string;
-
-  /** Whether to merge into existing JSON or overwrite. */
   mergeStrategy: "merge-json" | "merge-toml" | "copy-file" | "print-instructions";
-
-  /** Content to write or merge. For "copy-file": path to template file. */
   content?: string;
-
-  /**
-   * JSON path → value to set.
-   * e.g. { "hooks.PreToolUse": [...] } sets hooks.PreToolUse in settings.json.
-   */
   jsonPatch?: Record<string, unknown>;
-
-  /** For TOML: [section] → { key: value }. */
-  tomlPatch?: Record<string, Record<string, unknown>>;
-
-  /** Additional files to create (e.g., plugin js/ts files). */
+  /** For idempotency check: a sentinel value that, if present in the config, means hooks are already installed. */
+  idempotencyCheck?: { jsonPath: string; matchValue: unknown };
+  tomlPatch?: { section: string; lines: string[] };
   additionalFiles?: Array<{ relPath: string; content: string }>;
-
-  /** Human-readable post-install message. */
   postInstallMessage?: string;
+  /** Files to remove during uninstall (relative to config). */
+  uninstallFiles?: string[];
 }
 
 export interface DetectResult {
   agent: AgentSignature;
   installed: boolean;
-  /** Paths that confirmed detection. */
   foundPaths: string[];
-  /** Install path (resolved from ~). */
   installPath: string;
+}
+
+export interface InstallResult {
+  agent: AgentSignature;
+  success: boolean;
+  message: string;
+  filesCreated: string[];
+  filesModified: string[];
+  dryRun: boolean;
+}
+
+export interface UninstallResult {
+  agent: AgentSignature;
+  success: boolean;
+  message: string;
+  filesRestored: string[];
+  filesRemoved: string[];
+  dryRun: boolean;
+}
+
+export interface DryRunChange {
+  filePath: string;
+  action: "create" | "modify" | "delete" | "restore";
+  description: string;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -99,13 +98,12 @@ export function which(binary: string): string | null {
       fs.accessSync(full, fs.constants.X_OK);
       return full;
     } catch {
-      // not found in this dir
+      /* not here */
     }
   }
   return null;
 }
 
-/** Find the first existing path from a list. */
 function findFirst(paths: string[]): string[] {
   const found: string[] = [];
   for (const p of paths) {
@@ -114,20 +112,27 @@ function findFirst(paths: string[]): string[] {
       fs.accessSync(expanded);
       found.push(expanded);
     } catch {
-      // doesn't exist
+      /* doesn't exist */
     }
   }
   return found;
 }
 
+function backupPath(p: string): string {
+  return p + ".caitlyn-backup";
+}
+
 // ── Registry ────────────────────────────────────────────────────────
+
+const CAITLYN_HOOK_SENTINEL = "caitlyn-hook";
 
 export const AGENT_REGISTRY: AgentSignature[] = [
   // ── Claude Code ────────────────────────────────────────────────
   {
     id: "claude-code",
     name: "Claude Code (Anthropic)",
-    description: "Anthropic's CLI coding agent. Uses Claude Agent SDK with PreToolUse/PostToolUse hooks.",
+    description:
+      "Anthropic's CLI coding agent. Uses Claude Agent SDK with PreToolUse/PostToolUse hooks.",
     integrationMethod: "hooks",
     detect: {
       binaries: ["claude"],
@@ -151,6 +156,11 @@ export const AGENT_REGISTRY: AgentSignature[] = [
           },
         ],
       },
+      idempotencyCheck: {
+        jsonPath: "hooks.PreToolUse",
+        matchValue: CAITLYN_HOOK_SENTINEL,
+      },
+      uninstallFiles: ["~/.claude/settings.json.caitlyn-backup"],
       postInstallMessage:
         "Claude Code hooks installed. PreToolUse and PostToolUse will scan all tool calls.\n" +
         "Run `claude` normally — CAITLYN hooks fire automatically.",
@@ -188,7 +198,18 @@ export const AGENT_REGISTRY: AgentSignature[] = [
           ],
         },
       },
-      additionalFiles: [], // config.toml enable is handled separately
+      idempotencyCheck: {
+        jsonPath: "hooks.PreToolUse",
+        matchValue: CAITLYN_HOOK_SENTINEL,
+      },
+      tomlPatch: {
+        section: "features",
+        lines: ["codex_hooks = true"],
+      },
+      uninstallFiles: [
+        "~/.codex/hooks.json.caitlyn-backup",
+        "~/.codex/config.toml.caitlyn-backup",
+      ],
       postInstallMessage:
         "Codex hooks installed. NOTE: Codex PreToolUse only intercepts Bash commands.\n" +
         "File operations (Write, Edit, Read) are NOT covered by hooks.\n" +
@@ -214,6 +235,11 @@ export const AGENT_REGISTRY: AgentSignature[] = [
       jsonPatch: {
         plugin: ["@caitlyn/opencode-plugin"],
       },
+      idempotencyCheck: {
+        jsonPath: "plugin",
+        matchValue: "@caitlyn/opencode-plugin",
+      },
+      uninstallFiles: ["~/.config/opencode/opencode.json.caitlyn-backup"],
       postInstallMessage:
         "OpenCode CAITLYN plugin configured. Run `npm install @caitlyn/opencode-plugin` to install the plugin package.\n" +
         "Then run `opencode` normally — hooks fire automatically.",
@@ -239,11 +265,10 @@ CAITLYN Guard Plugin for Hermes Agent.
 Intercepts tool calls via pre_tool_call hook.
 Installed by: caitlyn install hermes
 """
-import json, os, subprocess, sys
+import json, subprocess
 
 def register(ctx):
     async def pre_tool_call(tool_name, args, agent_context):
-        # Call caitlyn-hook binary for scanning
         try:
             input_data = json.dumps({
                 "tool": tool_name,
@@ -251,22 +276,24 @@ def register(ctx):
             })
             result = subprocess.run(
                 ["caitlyn-hook", "hermes"],
-                input=input_data,
-                capture_output=True,
-                text=True,
-                timeout=30,
+                input=input_data, capture_output=True, text=True, timeout=30,
             )
             if result.returncode != 0:
-                return {"action": "allow"}  # fail-open
+                return {"action": "allow"}
             decision = json.loads(result.stdout)
             if decision.get("action") == "block":
                 return {"action": "block", "message": decision.get("reason", "blocked by CAITLYN")}
         except Exception:
-            pass  # fail-open on any error
+            pass
         return {"action": "allow"}
 
     ctx.register_hook("pre_tool_call", pre_tool_call)
 `,
+      idempotencyCheck: {
+        jsonPath: "",
+        matchValue: "",
+      },
+      uninstallFiles: ["~/.hermes/plugins/caitlyn_plugin.py"],
       postInstallMessage:
         "Hermes CAITLYN plugin installed at ~/.hermes/plugins/caitlyn_plugin.py.\n" +
         "Run `hermes` normally — pre_tool_call hook fires automatically.",
@@ -294,6 +321,11 @@ def register(ctx):
           source: "@caitlyn/openclaw-plugin",
         },
       },
+      idempotencyCheck: {
+        jsonPath: "plugins.entries.caitlyn-guard",
+        matchValue: "",
+      },
+      uninstallFiles: ["~/.openclaw/openclaw.json.caitlyn-backup"],
       postInstallMessage:
         "OpenClaw CAITLYN plugin configured. Run `npm install @caitlyn/openclaw-plugin` to install the plugin package.\n" +
         "Then restart the OpenClaw gateway: `openclaw gateway restart`.",
@@ -313,6 +345,7 @@ def register(ctx):
     install: {
       configPath: "(in your agent source code)",
       mergeStrategy: "print-instructions",
+      uninstallFiles: [],
       postInstallMessage:
         "pi-coding-agent uses in-process middleware. Add these lines to your agent setup:\n\n" +
         "  import { AgentHooksEngine, createPiAgentHookAdapter } from 'caitlyn/guard';\n" +
@@ -325,30 +358,21 @@ def register(ctx):
 
 // ── Detection ───────────────────────────────────────────────────────
 
-/** Detect which supported agents are installed on this system. */
 export function detectAgents(): DetectResult[] {
   return AGENT_REGISTRY.map((agent) => {
     const foundPaths: string[] = [];
-
-    // Check binaries
     if (agent.detect.binaries) {
       for (const bin of agent.detect.binaries) {
         const p = which(bin);
         if (p) foundPaths.push(p);
       }
     }
-
-    // Check config paths
     if (agent.detect.configPaths) {
       foundPaths.push(...findFirst(agent.detect.configPaths));
     }
-
-    // Check directories
     if (agent.detect.dirPaths) {
       foundPaths.push(...findFirst(agent.detect.dirPaths));
     }
-
-    // Check npm dependency (look in cwd and ancestors for package.json)
     if (agent.detect.npmDependency) {
       let dir = process.cwd();
       for (let i = 0; i < 10; i++) {
@@ -361,14 +385,13 @@ export function detectAgents(): DetectResult[] {
             break;
           }
         } catch {
-          // no package.json or unreadable
+          /* no package.json */
         }
         const parent = path.dirname(dir);
         if (parent === dir) break;
         dir = parent;
       }
     }
-
     return {
       agent,
       installed: foundPaths.length > 0,
@@ -378,18 +401,126 @@ export function detectAgents(): DetectResult[] {
   });
 }
 
-// ── Install ─────────────────────────────────────────────────────────
+// ── CAITLYN Hook Presence Check ─────────────────────────────────────
 
-export interface InstallResult {
-  agent: AgentSignature;
-  success: boolean;
-  message: string;
-  filesCreated: string[];
-  filesModified: string[];
+/** Check whether CAITLYN hooks are already installed for a given agent. */
+export function isHookInstalled(agentId: string): boolean {
+  const agent = AGENT_REGISTRY.find((a) => a.id === agentId);
+  if (!agent || !agent.install.idempotencyCheck) return false;
+
+  const { jsonPath, matchValue } = agent.install.idempotencyCheck;
+  const configPath = expandPath(agent.install.configPath);
+
+  if (agent.install.mergeStrategy === "copy-file") {
+    // Check if the copied file exists
+    return fs.existsSync(configPath);
+  }
+
+  if (agent.install.mergeStrategy === "merge-json") {
+    try {
+      const raw = fs.readFileSync(configPath, "utf-8");
+      const existing = JSON.parse(raw);
+      const value = getNested(existing, jsonPath);
+      if (matchValue === "") return value !== undefined;
+      if (typeof value === "string") return value.includes(String(matchValue));
+      if (Array.isArray(value)) {
+        return value.some((v) => JSON.stringify(v).includes(String(matchValue)));
+      }
+      return JSON.stringify(value).includes(String(matchValue));
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
 }
 
-/** Install CAITLYN hooks into a specific agent. */
-export function installAgent(agentId: string): InstallResult {
+// ── Dry-Run ─────────────────────────────────────────────────────────
+
+/** Preview what `caitlyn install <agentId>` would do without modifying files. */
+export function dryRunInstall(agentId: string): DryRunChange[] {
+  const agent = AGENT_REGISTRY.find((a) => a.id === agentId);
+  if (!agent) return [];
+
+  const changes: DryRunChange[] = [];
+  const install = agent.install;
+  const configPath = expandPath(install.configPath);
+  const exists = fs.existsSync(configPath);
+
+  if (install.mergeStrategy === "copy-file") {
+    changes.push({
+      filePath: configPath,
+      action: exists ? "modify" : "create",
+      description: exists
+        ? `Overwrite ${install.configPath} with CAITLYN plugin`
+        : `Create ${install.configPath}`,
+    });
+  } else if (install.mergeStrategy === "merge-json") {
+    changes.push({
+      filePath: configPath,
+      action: exists ? "modify" : "create",
+      description: exists
+        ? `Merge CAITLYN hooks into ${install.configPath} (existing keys preserved)`
+        : `Create ${install.configPath} with CAITLYN hooks`,
+    });
+  } else if (install.mergeStrategy === "merge-toml") {
+    changes.push({
+      filePath: configPath,
+      action: "modify",
+      description: `Append CAITLYN section to ${install.configPath}`,
+    });
+  }
+
+  if (install.additionalFiles) {
+    for (const f of install.additionalFiles) {
+      changes.push({
+        filePath: expandPath(f.relPath),
+        action: "create",
+        description: `Create ${f.relPath}`,
+      });
+    }
+  }
+
+  return changes;
+}
+
+/** Preview what `caitlyn uninstall <agentId>` would do. */
+export function dryRunUninstall(agentId: string): DryRunChange[] {
+  const agent = AGENT_REGISTRY.find((a) => a.id === agentId);
+  if (!agent) return [];
+
+  const changes: DryRunChange[] = [];
+  const install = agent.install;
+  const configPath = expandPath(install.configPath);
+  const backup = backupPath(configPath);
+
+  if (fs.existsSync(backup)) {
+    changes.push({
+      filePath: configPath,
+      action: "restore",
+      description: `Restore ${install.configPath} from backup`,
+    });
+  }
+
+  if (install.uninstallFiles) {
+    for (const f of install.uninstallFiles) {
+      const fp = expandPath(f);
+      if (fs.existsSync(fp)) {
+        changes.push({
+          filePath: fp,
+          action: "delete",
+          description: `Remove ${f}`,
+        });
+      }
+    }
+  }
+
+  return changes;
+}
+
+// ── Install ─────────────────────────────────────────────────────────
+
+export function installAgent(agentId: string, dryRun = false): InstallResult {
   const agent = AGENT_REGISTRY.find((a) => a.id === agentId);
   if (!agent) {
     return {
@@ -398,6 +529,31 @@ export function installAgent(agentId: string): InstallResult {
       message: `Unknown agent: ${agentId}. Supported: ${AGENT_REGISTRY.map((a) => a.id).join(", ")}`,
       filesCreated: [],
       filesModified: [],
+      dryRun,
+    };
+  }
+
+  // Idempotency check
+  if (isHookInstalled(agentId)) {
+    return {
+      agent,
+      success: true,
+      message: `CAITLYN hooks are already installed for ${agent.name}. Nothing to do.`,
+      filesCreated: [],
+      filesModified: [],
+      dryRun,
+    };
+  }
+
+  if (dryRun) {
+    const changes = dryRunInstall(agentId);
+    return {
+      agent,
+      success: true,
+      message: `Dry-run: would make ${changes.length} change(s):\n${changes.map((c) => `  ${c.action} ${c.filePath}`).join("\n")}`,
+      filesCreated: [],
+      filesModified: [],
+      dryRun,
     };
   }
 
@@ -411,30 +567,27 @@ export function installAgent(agentId: string): InstallResult {
         mergeJsonConfig(install.configPath, install.jsonPatch || {});
         filesModified.push(expandPath(install.configPath));
         break;
-
       case "copy-file":
         copyFileConfig(install.configPath, install.content || "");
         filesCreated.push(expandPath(install.configPath));
         break;
-
       case "merge-toml":
-        mergeTomlConfig(install.configPath, install.tomlPatch || {});
+        mergeTomlConfig(install.configPath, install.tomlPatch);
         filesModified.push(expandPath(install.configPath));
         break;
-
       case "print-instructions":
-        // No file changes — user follows printed instructions
         break;
     }
 
-    // Create additional files
     if (install.additionalFiles) {
       for (const f of install.additionalFiles) {
         const fullPath = expandPath(f.relPath);
         const dir = path.dirname(fullPath);
         fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(fullPath, f.content, "utf-8");
-        filesCreated.push(fullPath);
+        if (!fs.existsSync(fullPath)) {
+          fs.writeFileSync(fullPath, f.content, "utf-8");
+          filesCreated.push(fullPath);
+        }
       }
     }
 
@@ -444,6 +597,7 @@ export function installAgent(agentId: string): InstallResult {
       message: install.postInstallMessage || `CAITLYN hooks installed for ${agent.name}.`,
       filesCreated,
       filesModified,
+      dryRun,
     };
   } catch (err) {
     return {
@@ -452,26 +606,104 @@ export function installAgent(agentId: string): InstallResult {
       message: `Failed to install hooks: ${String(err)}`,
       filesCreated,
       filesModified,
+      dryRun,
     };
   }
 }
 
-// ── Config Merging ──────────────────────────────────────────────────
+// ── Uninstall ───────────────────────────────────────────────────────
+
+export function uninstallAgent(agentId: string, dryRun = false): UninstallResult {
+  const agent = AGENT_REGISTRY.find((a) => a.id === agentId);
+  if (!agent) {
+    return {
+      agent: { id: agentId } as AgentSignature,
+      success: false,
+      message: `Unknown agent: ${agentId}`,
+      filesRestored: [],
+      filesRemoved: [],
+      dryRun,
+    };
+  }
+
+  if (dryRun) {
+    const changes = dryRunUninstall(agentId);
+    return {
+      agent,
+      success: true,
+      message: `Dry-run: would make ${changes.length} change(s):\n${changes.map((c) => `  ${c.action} ${c.filePath}`).join("\n")}`,
+      filesRestored: [],
+      filesRemoved: [],
+      dryRun,
+    };
+  }
+
+  const install = agent.install;
+  const filesRestored: string[] = [];
+  const filesRemoved: string[] = [];
+
+  try {
+    // Restore from backup
+    const configPath = expandPath(install.configPath);
+    const backup = backupPath(configPath);
+    if (fs.existsSync(backup)) {
+      fs.copyFileSync(backup, configPath);
+      fs.unlinkSync(backup);
+      filesRestored.push(configPath);
+    }
+
+    // Remove installed files
+    if (install.uninstallFiles) {
+      for (const f of install.uninstallFiles) {
+        const fp = expandPath(f);
+        if (fs.existsSync(fp)) {
+          fs.unlinkSync(fp);
+          filesRemoved.push(fp);
+        }
+      }
+    }
+
+    return {
+      agent,
+      success: true,
+      message: `CAITLYN hooks removed for ${agent.name}.`,
+      filesRestored,
+      filesRemoved,
+      dryRun,
+    };
+  } catch (err) {
+    return {
+      agent,
+      success: false,
+      message: `Failed to uninstall: ${String(err)}`,
+      filesRestored,
+      filesRemoved,
+      dryRun,
+    };
+  }
+}
+
+// ── JSON Config Merging ─────────────────────────────────────────────
 
 function mergeJsonConfig(configPath: string, patch: Record<string, unknown>): void {
   const fullPath = expandPath(configPath);
   const dir = path.dirname(fullPath);
   fs.mkdirSync(dir, { recursive: true });
 
-  // Read existing config
+  // 1. Backup existing config
+  if (fs.existsSync(fullPath)) {
+    fs.copyFileSync(fullPath, backupPath(fullPath));
+  }
+
+  // 2. Read existing config (or start fresh)
   let existing: Record<string, unknown> = {};
   try {
     existing = JSON.parse(fs.readFileSync(fullPath, "utf-8"));
   } catch {
-    // File doesn't exist or invalid JSON — start fresh
+    /* file doesn't exist or invalid — start fresh */
   }
 
-  // Apply patch at dotted paths
+  // 3. Apply patch
   const merged = applyJsonPatch(existing, patch);
   fs.writeFileSync(fullPath, JSON.stringify(merged, null, 2), "utf-8");
 }
@@ -480,7 +712,7 @@ function applyJsonPatch(
   obj: Record<string, unknown>,
   patch: Record<string, unknown>,
 ): Record<string, unknown> {
-  const result = JSON.parse(JSON.stringify(obj)); // deep clone
+  const result = JSON.parse(JSON.stringify(obj));
   for (const [key, value] of Object.entries(patch)) {
     setNested(result, key, value);
   }
@@ -499,49 +731,97 @@ function setNested(obj: Record<string, unknown>, dottedKey: string, value: unkno
   current[keys[keys.length - 1]] = value;
 }
 
+function getNested(obj: Record<string, unknown>, dottedKey: string): unknown {
+  if (!dottedKey) return obj;
+  const keys = dottedKey.split(".");
+  let current: unknown = obj;
+  for (const key of keys) {
+    if (current === null || current === undefined) return undefined;
+    if (typeof current !== "object") return undefined;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}
+
+// ── File Copy ───────────────────────────────────────────────────────
+
 function copyFileConfig(configPath: string, content: string): void {
   const fullPath = expandPath(configPath);
   const dir = path.dirname(fullPath);
   fs.mkdirSync(dir, { recursive: true });
+
+  // Backup
+  if (fs.existsSync(fullPath)) {
+    fs.copyFileSync(fullPath, backupPath(fullPath));
+  }
+
   fs.writeFileSync(fullPath, content, "utf-8");
 }
 
+// ── TOML Merge ──────────────────────────────────────────────────────
+
 function mergeTomlConfig(
-  _configPath: string,
-  _patch: Record<string, Record<string, unknown>>,
+  configPath: string,
+  patch?: { section: string; lines: string[] },
 ): void {
-  // TOML merging is complex (preserve comments, ordering).
-  // For now: if the file exists, append new sections. If not, create it.
-  // Full TOML parser required for proper merge — defer to Phase 2.
-  throw new Error("TOML merge not yet implemented. Please manually edit the config file.");
+  if (!patch) return;
+  const fullPath = expandPath(configPath);
+  const dir = path.dirname(fullPath);
+  fs.mkdirSync(dir, { recursive: true });
+
+  // 1. Backup
+  if (fs.existsSync(fullPath)) {
+    fs.copyFileSync(fullPath, backupPath(fullPath));
+  }
+
+  // 2. Read existing or start fresh
+  let content: string;
+  try {
+    content = fs.readFileSync(fullPath, "utf-8");
+  } catch {
+    content = "";
+  }
+
+  // 3. Idempotency: check if section + lines already present
+  const sectionHeader = `[${patch.section}]`;
+  if (content.includes(sectionHeader)) {
+    const allLinesPresent = patch.lines.every((line) => content.includes(line));
+    if (allLinesPresent) return; // already configured
+  }
+
+  // 4. Append section if missing
+  if (!content.includes(sectionHeader)) {
+    if (content.length > 0 && !content.endsWith("\n")) content += "\n";
+    content += `\n${sectionHeader}\n`;
+    for (const line of patch.lines) {
+      content += line + "\n";
+    }
+  } else {
+    // Section exists but lines missing — append to section
+    const lines = content.split("\n");
+    const sectionIdx = lines.findIndex((l) => l.trim() === sectionHeader);
+    if (sectionIdx >= 0) {
+      for (const line of patch.lines) {
+        if (!content.includes(line)) {
+          lines.splice(sectionIdx + 1, 0, line);
+        }
+      }
+      content = lines.join("\n");
+    }
+  }
+
+  fs.writeFileSync(fullPath, content, "utf-8");
 }
 
-// ── Codex-specific: enable hooks in config.toml ─────────────────────
+// ── Codex-specific helper ───────────────────────────────────────────
 
-/** Enable codex_hooks feature flag in ~/.codex/config.toml. */
 export function enableCodexHooks(): boolean {
   const configPath = expandPath("~/.codex/config.toml");
   try {
-    let content: string;
-    try {
-      content = fs.readFileSync(configPath, "utf-8");
-    } catch {
-      // Create default config
-      content = "";
-    }
-
-    if (content.includes("codex_hooks = true")) return true; // already enabled
-
-    // Append or add [features] section
-    if (content.includes("[features]")) {
-      content = content.replace(/\[features\]/, "[features]\ncodex_hooks = true");
-    } else {
-      content += "\n[features]\ncodex_hooks = true\n";
-    }
-
-    const dir = path.dirname(configPath);
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(configPath, content, "utf-8");
+    mergeTomlConfig(configPath, {
+      section: "features",
+      lines: ["codex_hooks = true"],
+    });
     return true;
   } catch {
     return false;

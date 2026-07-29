@@ -498,3 +498,37 @@
 {"id":"mem-ab-test-1-v1785312713048-8pgi-DROPDATABASE","pattern":"DROP DATABASE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T08:11:53.048Z"}
 {"id":"hit-me","pattern":"target","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T08:11:53.049Z"}
 {"id":"no-hit","pattern":"specific","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T08:11:53.049Z"}
+{"id":"mem-1","pattern":"malicious payload","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.893Z"}
+{"id":"mem-1","pattern":"DROP TABLE users","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.894Z"}
+{"id":"mem-2","pattern":"DROP TABLE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.896Z"}
+{"id":"mem-regex-1","pattern":"SELECT .* FROM .* WHERE","signatureType":"regex","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.896Z"}
+{"id":"mem-regex","pattern":"SELECT .* FROM .* WHERE","signatureType":"regex","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.896Z"}
+{"id":"mem-ci","pattern":"DROP TABLE","signatureType":"regex","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.897Z"}
+{"id":"mem-1","pattern":"DROP TABLE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.897Z"}
+{"id":"mem-sub","pattern":"malicious","signatureType":"exact","category":"jailbreak","hitCount":0,"createdAt":"2026-07-29T09:09:36.898Z"}
+{"id":"first","pattern":"alpha","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.898Z"}
+{"id":"second","pattern":"beta","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.898Z"}
+{"id":"mem-first","pattern":"alpha","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-29T09:09:36.898Z"}
+{"id":"third","pattern":"gamma","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.898Z"}
+{"id":"mem-second","pattern":"beta","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-29T09:09:36.898Z"}
+{"id":"a","pattern":"pat-a","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-29T09:09:36.899Z"}
+{"id":"b","pattern":"pat-b","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-29T09:09:36.899Z"}
+{"id":"entry-0","pattern":"pattern-0","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.900Z"}
+{"id":"entry-1","pattern":"pattern-1","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.900Z"}
+{"id":"entry-2","pattern":"pattern-2","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.900Z"}
+{"id":"entry-3","pattern":"pattern-3","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.900Z"}
+{"id":"entry-4","pattern":"pattern-4","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.900Z"}
+{"id":"to-remove","pattern":"test","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-29T09:09:36.901Z"}
+{"id":"a","pattern":"pa","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.902Z"}
+{"id":"b","pattern":"pb","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.902Z"}
+{"id":"to-remove","pattern":"secret","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.903Z"}
+{"id":"regex-rm","pattern":"test\\d+","signatureType":"regex","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.905Z"}
+{"id":"a","pattern":"pa","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.906Z"}
+{"id":"b","pattern":"pb","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.906Z"}
+{"id":"c","pattern":"pc","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.906Z"}
+{"id":"a","pattern":"pa","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.909Z"}
+{"id":"b","pattern":"pb","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.909Z"}
+{"id":"hit-me","pattern":"target","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.912Z"}
+{"id":"no-hit","pattern":"specific","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.912Z"}
+{"id":"mem-ab-test-1-v1785316176927-i140-DROPTABLE","pattern":"DROP TABLE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.927Z"}
+{"id":"mem-ab-test-1-v1785316176927-i140-DROPDATABASE","pattern":"DROP DATABASE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.927Z"}

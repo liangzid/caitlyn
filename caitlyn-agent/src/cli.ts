@@ -43,7 +43,7 @@ import {
   clearHistory,
   exportHistory,
 } from "./history.js";
-import { detectAgents, installAgent, enableCodexHooks } from "./adapters/registry.js";
+import { detectAgents, installAgent, uninstallAgent, isHookInstalled } from "./adapters/registry.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -181,31 +181,57 @@ async function main() {
     }
 
     case "install": {
-      const target = args[1];
+      const dryRun = args.includes("--dry-run");
+      const target = args[1] === "--dry-run" ? args[2] : args[1];
       if (!target) {
-        console.log("Usage: caitlyn install <agent>");
+        console.log("Usage: caitlyn install [--dry-run] <agent>");
         console.log("Supported agents:");
-        const results = detectAgents();
-        for (const r of results) {
-          console.log(`  ${r.agent.id.padEnd(14)} ${r.agent.name}`);
+        for (const r of detectAgents()) {
+          const marker = isHookInstalled(r.agent.id) ? " (already installed)" : "";
+          console.log(`  ${r.agent.id.padEnd(14)} ${r.agent.name}${marker}`);
         }
         process.exit(1);
       }
 
-      // Special handling for codex: enable hooks feature flag
-      if (target === "codex") {
-        const ok = enableCodexHooks();
-        if (ok) console.log("  ✅ Enabled codex_hooks feature flag in ~/.codex/config.toml");
-        else console.log("  ⚠️  Could not enable codex_hooks — please add manually");
+      if (isHookInstalled(target)) {
+        console.log(`✅ CAITLYN hooks are already installed for ${target}.`);
+        console.log(`   Use \`caitlyn uninstall ${target}\` to remove them.`);
+        process.exit(0);
       }
 
-      const result = installAgent(target);
-      console.log(result.success ? "✅" : "❌", result.message);
+      const result = installAgent(target, dryRun);
+      const prefix = dryRun ? "🔍 [DRY-RUN]" : "✅";
+      console.log(prefix, result.message);
       if (result.filesCreated.length > 0) {
         console.log("  Created:", result.filesCreated.join(", "));
       }
       if (result.filesModified.length > 0) {
         console.log("  Modified:", result.filesModified.join(", "));
+      }
+      process.exit(result.success ? 0 : 1);
+    }
+
+    case "uninstall": {
+      const dryRun = args.includes("--dry-run");
+      const target = args[1] === "--dry-run" ? args[2] : args[1];
+      if (!target) {
+        console.log("Usage: caitlyn uninstall [--dry-run] <agent>");
+        console.log("Supported agents:");
+        for (const r of detectAgents()) {
+          const marker = isHookInstalled(r.agent.id) ? " (installed)" : "";
+          console.log(`  ${r.agent.id.padEnd(14)} ${r.agent.name}${marker}`);
+        }
+        process.exit(1);
+      }
+
+      const result = uninstallAgent(target, dryRun);
+      const prefix = dryRun ? "🔍 [DRY-RUN]" : result.success ? "✅" : "❌";
+      console.log(prefix, result.message);
+      if (result.filesRestored.length > 0) {
+        console.log("  Restored:", result.filesRestored.join(", "));
+      }
+      if (result.filesRemoved.length > 0) {
+        console.log("  Removed:", result.filesRemoved.join(", "));
       }
       process.exit(result.success ? 0 : 1);
     }
@@ -369,11 +395,9 @@ memory_limit = 10000
 provider = "openrouter"
 model = "deepseek/deepseek-chat"
 daemon_url = "http://127.0.0.1:9070"
-scan_timeout_ms = 500
-memory_limit = 10000
 `;
-          fs.writeFileSync(configPath, configContent, "utf-8");
-          console.log(`   ✅ Created ${configPath}`);
+          fs.writeFileSync("config.toml", configContent, "utf-8");
+          console.log("✅ Generated config.toml");
         } else {
           console.log("   Skipped.");
         }
@@ -390,25 +414,26 @@ memory_limit = 10000
       console.log("Usage: caitlyn <command> [options]");
       console.log("");
       console.log("Commands:");
-      console.log("  tui                   Full-screen Terminal UI (default)");
-      console.log("  scan <content>        Quick security scan");
-      console.log("  status                Show antibody/antigen library status");
-      console.log("  dashboard             Show defense stats dashboard");
-      console.log("  history [N]           Show recent scan history (default 20)");
-      console.log("  history --export json [path]  Export scan history to file");
-      console.log("  history --clear       Clear all scan history");
-      console.log("  detect                Scan system for supported agents");
-      console.log("  install <agent>       Inject CAITLYN hooks into agent config");
-      console.log("  providers             List available LLM providers");
-      console.log("  init                  Generate default config.toml");
-      console.log("  vaccinate <pattern>   Submit vaccination pattern to daemon");
-      console.log("  help                  Show this help");
+      console.log("  tui                        Full-screen Terminal UI (default)");
+      console.log("  scan <content>             Quick security scan");
+      console.log("  status                     Show antibody/antigen library status");
+      console.log("  dashboard                  Show defense stats dashboard");
+      console.log("  history [N]                Show recent scan history (default 20)");
+      console.log("  history --export json [p]  Export scan history to file");
+      console.log("  history --clear            Clear all scan history");
+      console.log("  detect                     Scan system for supported agents");
+      console.log("  install [--dry-run] <a>    Inject CAITLYN hooks into agent config");
+      console.log("  uninstall [--dry-run] <a>  Remove CAITLYN hooks, restore backup");
+      console.log("  providers                  List available LLM providers");
+      console.log("  init                       Generate default config.toml");
+      console.log("  vaccinate <pattern>        Submit vaccination pattern");
+      console.log("  help                       Show this help");
       console.log("");
       process.exit(0);
     }
     default: {
       console.log(`Unknown command: ${command}`);
-      console.log("Usage: caitlyn [tui|repl|scan|status|dashboard|history|detect|install|providers|init|setup|vaccinate]");
+      console.log("Usage: caitlyn [tui|repl|scan|status|dashboard|history|detect|install|uninstall|providers|init|setup|vaccinate]");
       process.exit(1);
     }
   }
