@@ -11,9 +11,9 @@
  *   caitlyn history [N]       Show recent scan history
  *   caitlyn history --export json [path]   Export scan history to file
  *   caitlyn history --clear   Clear scan history
+ *   caitlyn detect            Scan system for supported agents
+ *   caitlyn install <agent>   Inject CAITLYN hooks into an agent's config
  *   caitlyn providers         List available LLM providers
- *   caitlyn init              Generate default config.toml
- *   caitlyn setup             Interactive first-run setup wizard
  *   caitlyn vaccinate <pattern>  Submit vaccination pattern to daemon
  */
 
@@ -43,6 +43,7 @@ import {
   clearHistory,
   exportHistory,
 } from "./history.js";
+import { detectAgents, installAgent, enableCodexHooks } from "./adapters/registry.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -163,6 +164,50 @@ async function main() {
       for (const ag of antigens) byCat[ag.config.category] = (byCat[ag.config.category] || 0) + 1;
       for (const [cat, count] of Object.entries(byCat)) console.log(`   - ${cat}: ${count}`);
       process.exit(0);
+    }
+
+    case "detect": {
+      const results = detectAgents();
+      console.log("🔍 Scanning system for supported agents...\n");
+      for (const r of results) {
+        const icon = r.installed ? "✅" : "❌";
+        console.log(`  ${icon} ${r.agent.id.padEnd(14)} ${r.agent.name}`);
+        if (r.installed && r.foundPaths.length > 0) {
+          console.log(`     found: ${r.foundPaths[0]}`);
+        }
+      }
+      console.log(`\nRun \`caitlyn install <agent>\` to add CAITLYN hooks.`);
+      process.exit(0);
+    }
+
+    case "install": {
+      const target = args[1];
+      if (!target) {
+        console.log("Usage: caitlyn install <agent>");
+        console.log("Supported agents:");
+        const results = detectAgents();
+        for (const r of results) {
+          console.log(`  ${r.agent.id.padEnd(14)} ${r.agent.name}`);
+        }
+        process.exit(1);
+      }
+
+      // Special handling for codex: enable hooks feature flag
+      if (target === "codex") {
+        const ok = enableCodexHooks();
+        if (ok) console.log("  ✅ Enabled codex_hooks feature flag in ~/.codex/config.toml");
+        else console.log("  ⚠️  Could not enable codex_hooks — please add manually");
+      }
+
+      const result = installAgent(target);
+      console.log(result.success ? "✅" : "❌", result.message);
+      if (result.filesCreated.length > 0) {
+        console.log("  Created:", result.filesCreated.join(", "));
+      }
+      if (result.filesModified.length > 0) {
+        console.log("  Modified:", result.filesModified.join(", "));
+      }
+      process.exit(result.success ? 0 : 1);
     }
     case "dashboard": {
       const stats = getDashboard();
@@ -346,16 +391,16 @@ memory_limit = 10000
       console.log("");
       console.log("Commands:");
       console.log("  tui                   Full-screen Terminal UI (default)");
-      console.log("  repl                  Basic readline REPL");
       console.log("  scan <content>        Quick security scan");
       console.log("  status                Show antibody/antigen library status");
       console.log("  dashboard             Show defense stats dashboard");
       console.log("  history [N]           Show recent scan history (default 20)");
       console.log("  history --export json [path]  Export scan history to file");
       console.log("  history --clear       Clear all scan history");
+      console.log("  detect                Scan system for supported agents");
+      console.log("  install <agent>       Inject CAITLYN hooks into agent config");
       console.log("  providers             List available LLM providers");
       console.log("  init                  Generate default config.toml");
-      console.log("  setup                 Interactive first-run setup wizard");
       console.log("  vaccinate <pattern>   Submit vaccination pattern to daemon");
       console.log("  help                  Show this help");
       console.log("");
@@ -363,7 +408,7 @@ memory_limit = 10000
     }
     default: {
       console.log(`Unknown command: ${command}`);
-      console.log("Usage: caitlyn [tui|repl|scan|status|dashboard|history|providers|init|setup|vaccinate]");
+      console.log("Usage: caitlyn [tui|repl|scan|status|dashboard|history|detect|install|providers|init|setup|vaccinate]");
       process.exit(1);
     }
   }
