@@ -122,6 +122,80 @@ function backupPath(p: string): string {
   return p + ".caitlyn-backup";
 }
 
+/**
+ * Read a plugin source file bundled with caitlyn.
+ * At runtime (dist/), plugins are at dist/plugins/.
+ */
+function readPluginSource(filename: string): string | null {
+  // At runtime (dist/), plugins are at dist/plugins/
+  // In dev (src/), they're at src/plugins/
+  const candidates = [
+    path.join(import.meta.dirname, "plugins", filename),
+    path.join(import.meta.dirname, "..", "plugins", filename),
+    path.join(import.meta.dirname, "..", "src", "plugins", filename),
+  ];
+  for (const p of candidates) {
+    try { return fs.readFileSync(p, "utf-8"); } catch { /* try next */ }
+  }
+  return null;
+}
+
+// ── Plugin Sources (bundled, no disk read needed at install time) ───
+
+const OPENCODE_PLUGIN_SOURCE = `/**
+ * CAITLYN OpenCode Plugin
+ * Registers tool.execute.before/after hooks. Delegates to caitlyn-hook.
+ */
+import { spawnSync } from "node:child_process";
+function scan(tool, content) {
+  try {
+    const r = spawnSync("caitlyn-hook", [], { input: JSON.stringify({ tool, content }), timeout: 5000, encoding: "utf-8" });
+    if (r.error || r.status === null) return { action: "allow", reason: "hook unavailable" };
+    const o = JSON.parse(r.stdout.trim());
+    return { action: o.action, reason: o.reason || "scanned by CAITLYN" };
+  } catch { return { action: "allow", reason: "scan error" }; }
+}
+export default function main(api) {
+  api.on("tool.execute.before", async (ctx) => {
+    const input = (ctx.input || ctx);
+    const d = scan(input.tool || "unknown", input.args ? JSON.stringify(input.args) : "");
+    if (d.action === "block") throw new Error("[CAITLYN] " + d.reason);
+  });
+  api.on("tool.execute.after", async (ctx) => {
+    const input = (ctx.input || ctx);
+    const output = (ctx.output || {});
+    const d = scan(input.tool || "unknown", output.output || "");
+    if (d.action === "block") output.output = "[CAITLYN BLOCKED] " + d.reason;
+    else if (d.action === "flag") output.output = "[CAITLYN FLAGGED] " + (output.output || "");
+  });
+}`;
+
+const OPENCLAW_PLUGIN_SOURCE = `/**
+ * CAITLYN OpenClaw Plugin
+ * Registers before_tool_call/after_tool_call hooks. Delegates to caitlyn-hook.
+ */
+import { spawnSync } from "node:child_process";
+function scan(tool, content) {
+  try {
+    const r = spawnSync("caitlyn-hook", [], { input: JSON.stringify({ tool, content }), timeout: 5000, encoding: "utf-8" });
+    if (r.error || r.status === null) return { action: "allow", reason: "hook unavailable" };
+    const o = JSON.parse(r.stdout.trim());
+    return { action: o.action, reason: o.reason || "scanned by CAITLYN" };
+  } catch { return { action: "allow", reason: "scan error" }; }
+}
+export default function main(api) {
+  api.on("before_tool_call", async (ctx) => {
+    const d = scan(ctx.tool || "unknown", ctx.args ? JSON.stringify(ctx.args) : "");
+    if (d.action === "block") return { action: "deny", reason: "[CAITLYN] " + d.reason };
+    return { action: "allow" };
+  });
+  api.on("after_tool_call", async (ctx) => {
+    const content = typeof ctx.result === "string" ? ctx.result : JSON.stringify(ctx.result || "");
+    const d = scan(ctx.tool || "unknown", content);
+    if (d.action === "block") console.error("[CAITLYN] Blocked tool output from " + ctx.tool + ": " + d.reason);
+  });
+}`;
+
 // ── Registry ────────────────────────────────────────────────────────
 
 const CAITLYN_HOOK_SENTINEL = "caitlyn-hook";
@@ -233,16 +307,22 @@ export const AGENT_REGISTRY: AgentSignature[] = [
       configPath: "~/.config/opencode/opencode.json",
       mergeStrategy: "merge-json",
       jsonPatch: {
-        plugin: ["@caitlyn/opencode-plugin"],
+        plugin: ["./.opencode/plugins/caitlyn-plugin.js"],
       },
       idempotencyCheck: {
         jsonPath: "plugin",
-        matchValue: "@caitlyn/opencode-plugin",
+        matchValue: "caitlyn-plugin",
       },
-      uninstallFiles: ["~/.config/opencode/opencode.json.caitlyn-backup"],
+      additionalFiles: [
+        { relPath: "~/.config/opencode/plugins/caitlyn-plugin.js", content: OPENCODE_PLUGIN_SOURCE },
+      ],
+      uninstallFiles: [
+        "~/.config/opencode/opencode.json.caitlyn-backup",
+        "~/.config/opencode/plugins/caitlyn-plugin.js",
+      ],
       postInstallMessage:
-        "OpenCode CAITLYN plugin configured. Run `npm install @caitlyn/opencode-plugin` to install the plugin package.\n" +
-        "Then run `opencode` normally — hooks fire automatically.",
+        "OpenCode CAITLYN plugin installed.\n" +
+        "Run `opencode` normally — hooks fire automatically.",
     },
   },
 
@@ -275,7 +355,7 @@ def register(ctx):
                 "args": args if isinstance(args, dict) else {"raw": str(args)},
             })
             result = subprocess.run(
-                ["caitlyn-hook", "hermes"],
+                ["caitlyn-hook"],
                 input=input_data, capture_output=True, text=True, timeout=30,
             )
             if result.returncode != 0:
@@ -318,17 +398,23 @@ def register(ctx):
       jsonPatch: {
         "plugins.entries.caitlyn-guard": {
           enabled: true,
-          source: "@caitlyn/openclaw-plugin",
+          source: "./plugins/caitlyn-plugin.js",
         },
       },
       idempotencyCheck: {
         jsonPath: "plugins.entries.caitlyn-guard",
-        matchValue: "",
+        matchValue: "caitlyn-plugin",
       },
-      uninstallFiles: ["~/.openclaw/openclaw.json.caitlyn-backup"],
+      additionalFiles: [
+        { relPath: "~/.openclaw/plugins/caitlyn-plugin.js", content: OPENCLAW_PLUGIN_SOURCE },
+      ],
+      uninstallFiles: [
+        "~/.openclaw/openclaw.json.caitlyn-backup",
+        "~/.openclaw/plugins/caitlyn-plugin.js",
+      ],
       postInstallMessage:
-        "OpenClaw CAITLYN plugin configured. Run `npm install @caitlyn/openclaw-plugin` to install the plugin package.\n" +
-        "Then restart the OpenClaw gateway: `openclaw gateway restart`.",
+        "OpenClaw CAITLYN plugin installed.\n" +
+        "Restart the OpenClaw gateway: `openclaw gateway restart`.",
     },
   },
 
@@ -585,7 +671,8 @@ export function installAgent(agentId: string, dryRun = false): InstallResult {
         const dir = path.dirname(fullPath);
         fs.mkdirSync(dir, { recursive: true });
         if (!fs.existsSync(fullPath)) {
-          fs.writeFileSync(fullPath, f.content, "utf-8");
+          const content = f.content || readPluginSource(path.basename(f.relPath)) || "// CAITLYN plugin — source not found, reinstall caitlyn";
+          fs.writeFileSync(fullPath, content, "utf-8");
           filesCreated.push(fullPath);
         }
       }

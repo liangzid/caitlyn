@@ -9,9 +9,9 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json && npm run build-antibodies",
+    "build": "tsc -p tsconfig.json && npm run build-antibodies && npm run build-plugins",
     "build-antibodies": "npx tsx src/scripts/precompile-antibodies.ts",
-    "start": "node dist/cli.js",
+    "build-plugins": "mkdir -p dist/plugins && cp src/plugins/opencode-plugin.ts dist/plugins/opencode-plugin.js && cp src/plugins/openclaw-plugin.ts dist/plugins/openclaw-plugin.js",
     "test": "vitest run"
   },
   "dependencies": {

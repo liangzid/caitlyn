@@ -532,3 +532,105 @@
 {"id":"no-hit","pattern":"specific","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.912Z"}
 {"id":"mem-ab-test-1-v1785316176927-i140-DROPTABLE","pattern":"DROP TABLE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.927Z"}
 {"id":"mem-ab-test-1-v1785316176927-i140-DROPDATABASE","pattern":"DROP DATABASE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-29T09:09:36.927Z"}
+{"id":"mem-1","pattern":"DROP TABLE users","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.196Z"}
+{"id":"mem-1","pattern":"malicious payload","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.196Z"}
+{"id":"mem-2","pattern":"DROP TABLE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.197Z"}
+{"id":"mem-regex-1","pattern":"SELECT .* FROM .* WHERE","signatureType":"regex","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.198Z"}
+{"id":"mem-ci","pattern":"DROP TABLE","signatureType":"regex","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.199Z"}
+{"id":"mem-regex","pattern":"SELECT .* FROM .* WHERE","signatureType":"regex","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.199Z"}
+{"id":"mem-sub","pattern":"malicious","signatureType":"exact","category":"jailbreak","hitCount":0,"createdAt":"2026-07-30T01:03:29.199Z"}
+{"id":"mem-1","pattern":"DROP TABLE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.200Z"}
+{"id":"mem-first","pattern":"alpha","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-30T01:03:29.200Z"}
+{"id":"mem-second","pattern":"beta","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-30T01:03:29.200Z"}
+{"id":"a","pattern":"pat-a","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-30T01:03:29.200Z"}
+{"id":"b","pattern":"pat-b","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-30T01:03:29.200Z"}
+{"id":"first","pattern":"alpha","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.200Z"}
+{"id":"second","pattern":"beta","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.200Z"}
+{"id":"third","pattern":"gamma","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.200Z"}
+{"id":"to-remove","pattern":"test","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-30T01:03:29.202Z"}
+{"id":"entry-0","pattern":"pattern-0","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.202Z"}
+{"id":"entry-1","pattern":"pattern-1","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.202Z"}
+{"id":"entry-2","pattern":"pattern-2","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.202Z"}
+{"id":"entry-3","pattern":"pattern-3","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.202Z"}
+{"id":"entry-4","pattern":"pattern-4","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.202Z"}
+{"id":"a","pattern":"pa","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.203Z"}
+{"id":"b","pattern":"pb","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.204Z"}
+{"id":"to-remove","pattern":"secret","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.205Z"}
+{"id":"regex-rm","pattern":"test\\d+","signatureType":"regex","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.206Z"}
+{"id":"a","pattern":"pa","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.208Z"}
+{"id":"b","pattern":"pb","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.208Z"}
+{"id":"c","pattern":"pc","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.208Z"}
+{"id":"a","pattern":"pa","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.210Z"}
+{"id":"b","pattern":"pb","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.210Z"}
+{"id":"hit-me","pattern":"target","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.213Z"}
+{"id":"no-hit","pattern":"specific","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.214Z"}
+{"id":"mem-ab-test-1-v1785373409224-dxss-DROPTABLE","pattern":"DROP TABLE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.225Z"}
+{"id":"mem-ab-test-1-v1785373409224-dxss-DROPDATABASE","pattern":"DROP DATABASE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:03:29.225Z"}
+{"id":"mem-1","pattern":"malicious payload","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.191Z"}
+{"id":"mem-regex","pattern":"SELECT .* FROM .* WHERE","signatureType":"regex","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.192Z"}
+{"id":"mem-1","pattern":"DROP TABLE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.192Z"}
+{"id":"first","pattern":"alpha","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.193Z"}
+{"id":"second","pattern":"beta","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.193Z"}
+{"id":"third","pattern":"gamma","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.193Z"}
+{"id":"entry-0","pattern":"pattern-0","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.193Z"}
+{"id":"entry-1","pattern":"pattern-1","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.193Z"}
+{"id":"entry-2","pattern":"pattern-2","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.193Z"}
+{"id":"entry-3","pattern":"pattern-3","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.193Z"}
+{"id":"entry-4","pattern":"pattern-4","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.193Z"}
+{"id":"a","pattern":"pa","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.194Z"}
+{"id":"b","pattern":"pb","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.194Z"}
+{"id":"to-remove","pattern":"secret","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.194Z"}
+{"id":"regex-rm","pattern":"test\\d+","signatureType":"regex","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.195Z"}
+{"id":"a","pattern":"pa","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.196Z"}
+{"id":"b","pattern":"pb","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.196Z"}
+{"id":"c","pattern":"pc","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.196Z"}
+{"id":"a","pattern":"pa","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.197Z"}
+{"id":"b","pattern":"pb","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.197Z"}
+{"id":"hit-me","pattern":"target","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.198Z"}
+{"id":"no-hit","pattern":"specific","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.199Z"}
+{"id":"mem-1","pattern":"DROP TABLE users","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.205Z"}
+{"id":"mem-2","pattern":"DROP TABLE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.207Z"}
+{"id":"mem-regex-1","pattern":"SELECT .* FROM .* WHERE","signatureType":"regex","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.208Z"}
+{"id":"mem-ci","pattern":"DROP TABLE","signatureType":"regex","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.208Z"}
+{"id":"mem-sub","pattern":"malicious","signatureType":"exact","category":"jailbreak","hitCount":0,"createdAt":"2026-07-30T01:54:22.209Z"}
+{"id":"mem-first","pattern":"alpha","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-30T01:54:22.210Z"}
+{"id":"mem-second","pattern":"beta","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-30T01:54:22.210Z"}
+{"id":"a","pattern":"pat-a","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-30T01:54:22.210Z"}
+{"id":"b","pattern":"pat-b","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-30T01:54:22.210Z"}
+{"id":"to-remove","pattern":"test","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-30T01:54:22.212Z"}
+{"id":"mem-ab-test-1-v1785376462227-p62m-DROPTABLE","pattern":"DROP TABLE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.227Z"}
+{"id":"mem-ab-test-1-v1785376462227-p62m-DROPDATABASE","pattern":"DROP DATABASE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:54:22.227Z"}
+{"id":"mem-1","pattern":"DROP TABLE users","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.652Z"}
+{"id":"mem-2","pattern":"DROP TABLE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.654Z"}
+{"id":"mem-regex-1","pattern":"SELECT .* FROM .* WHERE","signatureType":"regex","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.654Z"}
+{"id":"mem-ci","pattern":"DROP TABLE","signatureType":"regex","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.655Z"}
+{"id":"mem-sub","pattern":"malicious","signatureType":"exact","category":"jailbreak","hitCount":0,"createdAt":"2026-07-30T01:57:57.655Z"}
+{"id":"mem-1","pattern":"malicious payload","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.655Z"}
+{"id":"mem-first","pattern":"alpha","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-30T01:57:57.656Z"}
+{"id":"mem-second","pattern":"beta","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-30T01:57:57.656Z"}
+{"id":"a","pattern":"pat-a","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-30T01:57:57.656Z"}
+{"id":"b","pattern":"pat-b","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-30T01:57:57.656Z"}
+{"id":"to-remove","pattern":"test","signatureType":"exact","category":"test","hitCount":0,"createdAt":"2026-07-30T01:57:57.658Z"}
+{"id":"mem-regex","pattern":"SELECT .* FROM .* WHERE","signatureType":"regex","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.658Z"}
+{"id":"mem-1","pattern":"DROP TABLE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.659Z"}
+{"id":"first","pattern":"alpha","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.660Z"}
+{"id":"second","pattern":"beta","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.660Z"}
+{"id":"third","pattern":"gamma","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.661Z"}
+{"id":"entry-0","pattern":"pattern-0","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.662Z"}
+{"id":"entry-1","pattern":"pattern-1","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.662Z"}
+{"id":"entry-2","pattern":"pattern-2","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.663Z"}
+{"id":"entry-3","pattern":"pattern-3","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.663Z"}
+{"id":"entry-4","pattern":"pattern-4","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.663Z"}
+{"id":"a","pattern":"pa","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.664Z"}
+{"id":"b","pattern":"pb","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.664Z"}
+{"id":"to-remove","pattern":"secret","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.665Z"}
+{"id":"regex-rm","pattern":"test\\d+","signatureType":"regex","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.667Z"}
+{"id":"a","pattern":"pa","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.668Z"}
+{"id":"b","pattern":"pb","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.668Z"}
+{"id":"c","pattern":"pc","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.668Z"}
+{"id":"a","pattern":"pa","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.670Z"}
+{"id":"b","pattern":"pb","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.670Z"}
+{"id":"hit-me","pattern":"target","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.673Z"}
+{"id":"no-hit","pattern":"specific","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.674Z"}
+{"id":"mem-ab-test-1-v1785376677680-x6pn-DROPTABLE","pattern":"DROP TABLE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.680Z"}
+{"id":"mem-ab-test-1-v1785376677680-x6pn-DROPDATABASE","pattern":"DROP DATABASE","signatureType":"exact","category":"injection","hitCount":0,"createdAt":"2026-07-30T01:57:57.680Z"}
