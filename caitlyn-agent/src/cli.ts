@@ -44,6 +44,8 @@ import {
   exportHistory,
 } from "./history.js";
 import { detectAgents, installAgent, uninstallAgent, isHookInstalled } from "./adapters/registry.js";
+import { isDaemonRunning, startDaemon, stopDaemon, daemonStatus } from "./daemon/index.js";
+import { isDaemonAvailable, daemonScan, getDaemonStatus, daemonWatch, getWatchInfo } from "./daemon/index.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -112,6 +114,60 @@ async function main() {
   }
 
   switch (command) {
+    case "daemon": {
+      const sub = args[1];
+      if (!sub || sub === "status") {
+        const s = daemonStatus();
+        if (s.running) {
+          console.log(`✅ Daemon running (PID ${s.pid}, port ${s.port})`);
+          const ds = await getDaemonStatus();
+          if (ds) {
+            console.log(`   Uptime: ${Math.round(ds.uptime_ms / 1000)}s`);
+            console.log(`   Antibodies: ${ds.antibodies_loaded} | Scans: ${ds.scans_total}`);
+            if (ds.watch_dirs.length > 0) console.log(`   Watching: ${ds.watch_dirs.join(", ")}`);
+          }
+        } else {
+          console.log("❌ Daemon not running. Use `caitlyn daemon start`.");
+        }
+        process.exit(0);
+      }
+      if (sub === "start") {
+        const { started, message } = await startDaemon();
+        console.log(started ? "✅" : "⚠️", message);
+        process.exit(started ? 0 : 1);
+      }
+      if (sub === "stop") {
+        const { stopped, message } = stopDaemon();
+        console.log(stopped ? "✅" : "⚠️", message);
+        process.exit(stopped ? 0 : 1);
+      }
+      console.log("Usage: caitlyn daemon [start|stop|status]");
+      process.exit(1);
+    }
+
+    case "watch": {
+      const dirs = args.slice(1).filter((a) => !a.startsWith("-"));
+      if (dirs.length === 0) {
+        const info = await getWatchInfo();
+        if (info?.active) {
+          console.log(`👁️  Watching: ${info.dirs.join(", ")}`);
+          if (info.stats) console.log(`   Events: ${info.stats.totalEvents} | Blocked: ${info.stats.filesBlocked}`);
+        } else {
+          console.log("👁️  Not watching. Usage: caitlyn watch <dir1> [dir2...]");
+        }
+        process.exit(0);
+      }
+      if (!isDaemonRunning()) {
+        console.log("Starting daemon first...");
+        const { started } = await startDaemon();
+        if (!started) { console.log("❌ Cannot start daemon."); process.exit(1); }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      const ok = await daemonWatch(dirs);
+      console.log(ok ? `✅ Watching: ${dirs.join(", ")}` : "❌ Failed");
+      process.exit(ok ? 0 : 1);
+    }
+
     case "providers": {
       for (const p of getProviders()) {
         const models = getModels(p);
