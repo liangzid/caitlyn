@@ -196,6 +196,41 @@ export default function main(api) {
   });
 }`;
 
+
+const PI_MIDDLEWARE_SOURCE = [
+  "/**",
+  " * CAITLYN Middleware for pi-agent-core.",
+  " * Calls caitlyn-hook before/after every tool call.",
+  " * Usage: import { createCaitlynMiddleware } from './caitlyn-middleware.js';",
+  " *        agent.use(createCaitlynMiddleware());",
+  " */",
+  "import { spawnSync } from 'node:child_process';",
+  "",
+  "function scan(tool, content) {",
+  "  try {",
+  "    const r = spawnSync('caitlyn-hook', [], {",
+  "      input: JSON.stringify({ tool, content }), timeout: 5000, encoding: 'utf-8',",
+  "    });",
+  "    if (r.error || r.status === null) return { action: 'allow', reason: 'hook unavailable' };",
+  "    const o = JSON.parse(r.stdout.trim());",
+  "    return { action: o.action, reason: o.reason || 'scanned by CAITLYN' };",
+  "  } catch { return { action: 'allow', reason: 'scan error' }; }",
+  "}",
+  "",
+  "export function createCaitlynMiddleware() {",
+  "  return async (ctx, next) => {",
+  "    const argsText = ctx.args ? JSON.stringify(ctx.args) : '';",
+  "    const before = scan(ctx.toolName, argsText);",
+  "    if (before.action === 'block') { ctx.cancel('[CAITLYN] ' + before.reason); return; }",
+  "    await next();",
+  "    const resultText = typeof ctx.result === 'string' ? ctx.result : JSON.stringify(ctx.result || '');",
+  "    const after = scan(ctx.toolName, resultText);",
+  "    if (after.action === 'block') ctx.setResult('[CAITLYN BLOCKED] ' + after.reason);",
+  "    else if (after.action === 'flag') ctx.setResult('[CAITLYN FLAGGED] ' + (typeof ctx.result === 'string' ? ctx.result : ''));",
+  "  };",
+  "}",
+].join("\n");
+
 // ── Registry ────────────────────────────────────────────────────────
 
 const CAITLYN_HOOK_SENTINEL = "caitlyn-hook";
@@ -423,21 +458,25 @@ def register(ctx):
     id: "pi",
     name: "pi-coding-agent (Earendil Works)",
     description:
-      "TypeScript coding agent based on pi-agent-core. Middleware via agent.use().",
+      "TypeScript coding agent based on pi-agent-core. Protected via middleware hook calling caitlyn-hook, same as all other agents.",
     integrationMethod: "hooks",
     detect: {
       npmDependency: "@earendil-works/pi-agent-core",
     },
     install: {
-      configPath: "(in your agent source code)",
-      mergeStrategy: "print-instructions",
+      configPath: "(in your agent entry point)",
+      mergeStrategy: "copy-file",
+      content: PI_MIDDLEWARE_SOURCE,
+      idempotencyCheck: {
+        jsonPath: "",
+        matchValue: "",
+      },
       uninstallFiles: [],
       postInstallMessage:
-        "pi-coding-agent uses in-process middleware. Add these lines to your agent setup:\n\n" +
-        "  import { AgentHooksEngine, createPiAgentHookAdapter } from 'caitlyn/guard';\n" +
-        "  const engine = new AgentHooksEngine(config, llmCall);\n" +
-        "  agent.use(createPiAgentHookAdapter(engine).middleware);\n\n" +
-        "The hook engine runs Tier 0 + Tier 1 scanning for every tool call.",
+        "pi-coding-agent CAITLYN middleware ready.\n" +
+        "Add this line to your agent entry point:\n" +
+        '  import "./caitlyn-middleware.js";\n' +
+        "The middleware calls caitlyn-hook before and after every tool call, same as all other agents.",
     },
   },
 ];

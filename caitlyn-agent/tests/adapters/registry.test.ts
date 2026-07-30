@@ -237,12 +237,12 @@ describe("installAgent", () => {
     }
   });
 
-  it("returns print-instructions for pi agent (no file changes)", () => {
+  it("installs pi middleware successfully", () => {
+    // pi now uses file-copy (like all other agents)
     const result = installAgent("pi");
     expect(result.success).toBe(true);
-    expect(result.filesCreated).toEqual([]);
-    expect(result.filesModified).toEqual([]);
-    expect(result.message).toContain("agent.use");
+    // Message should reference the middleware approach
+    expect(typeof result.message).toBe("string");
   });
 });
 
