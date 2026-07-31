@@ -10,6 +10,7 @@ import {
   detectAgents,
   installAgent,
   enableCodexHooks,
+  getWatchDirsForAgents,
   which,
 } from "../../src/adapters/registry.js";
 
@@ -309,6 +310,74 @@ describe("enableCodexHooks", () => {
       const matches = content.match(/codex_hooks = true/g);
       expect(matches).not.toBeNull();
       expect(matches!.length).toBe(1);
+    } finally {
+      process.env.HOME = origHome;
+    }
+  });
+});
+
+// ── getWatchDirsForAgents Tests ────────────────────────────────────
+
+describe("getWatchDirsForAgents", () => {
+  it("returns empty dirs when no agents are installed", () => {
+    // In an isolated HOME with no agent dirs, nothing should be found
+    const fakeHome = path.join(tmpDir, "empty-home");
+    fs.mkdirSync(fakeHome, { recursive: true });
+
+    const origHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+    try {
+      const { dirs, agentDirs } = getWatchDirsForAgents();
+      expect(dirs).toEqual([]);
+      expect(Object.keys(agentDirs)).toHaveLength(0);
+    } finally {
+      process.env.HOME = origHome;
+    }
+  });
+
+  it("detects hermes dir when ~/.hermes exists", () => {
+    const fakeHome = path.join(tmpDir, "hermes-home");
+    fs.mkdirSync(path.join(fakeHome, ".hermes"), { recursive: true });
+
+    const origHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+    try {
+      const { dirs, agentDirs } = getWatchDirsForAgents();
+      expect(agentDirs.hermes).toBeDefined();
+      expect(agentDirs.hermes).toContain(path.join(fakeHome, ".hermes"));
+      expect(dirs).toContain(path.join(fakeHome, ".hermes"));
+    } finally {
+      process.env.HOME = origHome;
+    }
+  });
+
+  it("filters by agent id", () => {
+    const fakeHome = path.join(tmpDir, "multi-home");
+    fs.mkdirSync(path.join(fakeHome, ".hermes"), { recursive: true });
+    fs.mkdirSync(path.join(fakeHome, ".claude"), { recursive: true });
+
+    const origHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+    try {
+      const { dirs, agentDirs } = getWatchDirsForAgents(["hermes"]);
+      expect(Object.keys(agentDirs)).toEqual(["hermes"]);
+      expect(dirs.every((d) => d.includes(".hermes"))).toBe(true);
+    } finally {
+      process.env.HOME = origHome;
+    }
+  });
+
+  it("deduplicates dirs across agents", () => {
+    const fakeHome = path.join(tmpDir, "dedup-home");
+    fs.mkdirSync(path.join(fakeHome, ".hermes"), { recursive: true });
+    fs.mkdirSync(path.join(fakeHome, ".claude"), { recursive: true });
+
+    const origHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+    try {
+      const { dirs } = getWatchDirsForAgents();
+      const unique = new Set(dirs);
+      expect(unique.size).toBe(dirs.length);
     } finally {
       process.env.HOME = origHome;
     }

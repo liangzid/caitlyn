@@ -43,7 +43,7 @@ import {
   clearHistory,
   exportHistory,
 } from "./history.js";
-import { detectAgents, installAgent, uninstallAgent, isHookInstalled } from "./adapters/registry.js";
+import { detectAgents, installAgent, uninstallAgent, isHookInstalled, getWatchDirsForAgents } from "./adapters/registry.js";
 import { isDaemonRunning, startDaemon, stopDaemon, daemonStatus } from "./daemon/index.js";
 import { isDaemonAvailable, daemonScan, getDaemonStatus, daemonWatch, getWatchInfo } from "./daemon/index.js";
 
@@ -146,17 +146,47 @@ async function main() {
     }
 
     case "watch": {
-      const dirs = args.slice(1).filter((a) => !a.startsWith("-"));
-      if (dirs.length === 0) {
+      const flags = args.slice(1);
+      // --add dir: explicit custom dir; bare non-flag args treated as dirs too
+      const addFlagIdx = flags.indexOf("--add");
+      const addDirs = addFlagIdx >= 0 ? flags.slice(addFlagIdx + 1).filter((a) => !a.startsWith("--")) : [];
+      const customDirs = [...flags.filter((a) => !a.startsWith("--")), ...addDirs];
+      const agentFlag = flags.find((a) => a.startsWith("--agent="));
+      const agentIds = agentFlag ? [agentFlag.split("=")[1]] : undefined;
+
+      if (flags.length === 0 || flags.includes("--status")) {
+        // Query mode: show what the daemon is watching
         const info = await getWatchInfo();
         if (info?.active) {
           console.log(`👁️  Watching: ${info.dirs.join(", ")}`);
           if (info.stats) console.log(`   Events: ${info.stats.totalEvents} | Blocked: ${info.stats.filesBlocked}`);
         } else {
-          console.log("👁️  Not watching. Usage: caitlyn watch <dir1> [dir2...]");
+          console.log("👁️  Not watching.");
         }
         process.exit(0);
       }
+
+      // Compute dirs: auto-detect installed agents + custom dirs
+      const { dirs: agentDirs, agentDirs: perAgent } = getWatchDirsForAgents(agentIds);
+      const dirs = [...agentDirs, ...customDirs];
+
+      if (dirs.length === 0) {
+        console.log("❌ No installed agents with known directories found.");
+        console.log("   Install an agent hook first (caitlyn install <agent>) or pass dirs explicitly:");
+        console.log("   caitlyn watch --add /path/to/dir");
+        process.exit(1);
+      }
+
+      // Show what we detected
+      if (agentIds) {
+        console.log(`👁️  Detected ${agentIds.join(", ")}: ${agentDirs.join(", ")}`);
+      } else if (customDirs.length === 0) {
+        console.log(`👁️  Auto-detected ${Object.keys(perAgent).length} installed agent(s):`);
+        for (const [id, d] of Object.entries(perAgent)) {
+          console.log(`     ${id}: ${d.join(", ")}`);
+        }
+      }
+
       if (!isDaemonRunning()) {
         console.log("Starting daemon first...");
         const { started } = await startDaemon();

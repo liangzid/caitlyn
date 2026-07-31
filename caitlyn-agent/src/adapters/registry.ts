@@ -526,6 +526,39 @@ export function detectAgents(): DetectResult[] {
   });
 }
 
+// ── Watch Dirs ────────────────────────────────────────────────────────
+
+/**
+ * Compute directories to watch for installed agents.
+ * Uses each agent's declared session/config dirs.
+ *
+ * With no args: watches all installed agents' dirs.
+ * With agentIds: watches only those agents' dirs.
+ */
+export function getWatchDirsForAgents(agentIds?: string[]): {
+  dirs: string[];
+  agentDirs: Record<string, string[]>;
+} {
+  const results = detectAgents();
+  const agentDirs: Record<string, string[]> = {};
+
+  for (const r of results) {
+    // Filter to requested agents if specified
+    if (agentIds && !agentIds.includes(r.agent.id)) continue;
+
+    // Only consider agents that are installed
+    if (!r.installed) continue;
+
+    const dirs = (r.agent.detect.dirPaths || []).map((d) => expandPath(d).replace(/\/+$/, ""));
+    if (dirs.length > 0) {
+      agentDirs[r.agent.id] = dirs;
+    }
+  }
+
+  const dirs = Object.values(agentDirs).flat();
+  return { dirs, agentDirs };
+}
+
 // ── CAITLYN Hook Presence Check ─────────────────────────────────────
 
 /** Check whether CAITLYN hooks are already installed for a given agent. */
