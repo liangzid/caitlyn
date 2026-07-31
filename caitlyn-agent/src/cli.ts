@@ -189,6 +189,22 @@ async function main() {
       const content = args.slice(1).join(" ");
       if (!content.trim()) { console.log("Error: content cannot be empty."); process.exit(1); }
       if (content.length > 100_000) { console.log("Error: content too long (max 100KB)."); process.exit(1); }
+
+      // Route through daemon if running (Tier 0 + Tier 1 in background)
+      if (isDaemonRunning()) {
+        const daemonResult = await daemonScan(content);
+        if (daemonResult) {
+          const emoji = daemonResult.verdict === "malicious" ? "🚨" : "✅";
+          console.log(`${emoji} ${daemonResult.verdict.toUpperCase()} (${(daemonResult.confidence * 100).toFixed(1)}%) [daemon]`);
+          console.log(`   Latency: ${(daemonResult.total_latency_us / 1000).toFixed(1)}ms | Tokens: ${daemonResult.total_tokens}`);
+          for (const m of daemonResult.script_results.filter((r) => r.verdict === "malicious")) {
+            console.log(`     - ${m.antibody_id}: ${m.reason ?? "no reason"}`);
+          }
+          process.exit(daemonResult.verdict === "malicious" ? 1 : 0);
+        }
+        console.log("⚠️  Daemon scan failed — falling back to local scan.");
+      }
+
       const llmCall = await makeLlmCallSafe();
       console.log(`🔍 Scanning (${content.length} chars)...`);
       const scanStart = performance.now();

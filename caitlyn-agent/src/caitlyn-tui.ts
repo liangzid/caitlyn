@@ -33,6 +33,7 @@ import {
 } from "@earendil-works/pi-tui";
 import type { Agent } from "@earendil-works/pi-agent-core";
 import { type LlmCallFn } from "./scanner.js";
+import { isDaemonRunning } from "./daemon/index.js";
 import { loadAntibodies, loadAntibodyIndex, buildAntibodyIndex } from "./library.js";
 import { SessionManager } from "./session/session-manager.js";
 import {
@@ -219,7 +220,7 @@ export class CaitlynTUI {
     footerData.antibodyCount = loadAntibodies().length;
     footerData.gitBranch = getGitBranch(cwd);
 
-    footerData.daemonStatus = "connected";
+    footerData.daemonStatus = isDaemonRunning() ? "connected" : "disconnected";
     const footer = new FooterComponent(footerData);
     tui.addChild(footer);
 
