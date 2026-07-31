@@ -28,6 +28,7 @@ import {
   Loader,
   Editor,
   matchesKey,
+  visibleWidth,
   type Component,
   type MarkdownTheme,
 } from "@earendil-works/pi-tui";
@@ -45,7 +46,7 @@ import {
 import { createAutocompleteProvider } from "./commands/slash-commands.js";
 import { getContextWindow, getModelDisplay } from "./config/models.js";
 import type { MessageEntry } from "./session/session-types.js";
-import { C, selectListTheme, estimateTokens, translateLlmError } from "./theme.js";
+import { C, PAL, fg, paint, badge, gradLines, gradText, gradColorAt, selectListTheme, estimateTokens, translateLlmError } from "./theme.js";
 import {
   buildDashboardOverlay,
   buildStatusOverlay,
@@ -76,20 +77,58 @@ const noEmoji = process.env.CAITLYN_NO_EMOJI === "1";
 
 // ── Logo ──────────────────────────────────────────────────────────
 
-const CAITLYN_LOGO = [
-  `${C.cyan}${C.bold} ╔════════════════════════════════════════════════════╗${C.reset}`,
-  `${C.cyan}${C.bold} ║${C.reset}                                                     ${C.cyan}${C.bold}║${C.reset}`,
-  `${C.cyan}${C.bold} ║${C.reset}      ${C.bold}___   _     _____  _____  __         __${C.reset}       ${C.cyan}${C.bold}║${C.reset}`,
-  `${C.cyan}${C.bold} ║${C.reset}     ${C.bold}/ __\\ /_\\    \\_   \\/__   \\/ //\\_/\\ /\\ \\ \\${C.reset}      ${C.cyan}${C.bold}║${C.reset}`,
-  `${C.cyan}${C.bold} ║${C.reset}    ${C.bold}/ /   //_\\\\    / /\\/  / /\\/ / \\_ _//  \\/ /${C.reset}      ${C.cyan}${C.bold}║${C.reset}`,
-  `${C.cyan}${C.bold} ║${C.reset}   ${C.bold}/ /___/  _  \\/\\/ /_   / / / /___/ \\/ /\\  /${C.reset}       ${C.cyan}${C.bold}║${C.reset}`,
-  `${C.cyan}${C.bold} ║${C.reset}   ${C.bold}\\____/\\_/ \\_/\\____/   \\/  \\____/\\_/\\_\\ \\/${C.reset}        ${C.cyan}${C.bold}║${C.reset}`,
-  `${C.cyan}${C.bold} ║${C.reset}                                                     ${C.cyan}${C.bold}║${C.reset}`,
-  `${C.cyan}${C.bold} ║${C.reset}  ${C.dim}AI Agent Immune System${C.reset}                            ${C.cyan}${C.bold}║${C.reset}`,
-  `${C.cyan}${C.bold} ║${C.reset}  ${C.dim}Continuous Agents for Injection Threats${C.reset}           ${C.cyan}${C.bold}║${C.reset}`,
-  `${C.cyan}${C.bold} ║${C.reset}  ${C.dim}via Lifelong Yielding Nexus${C.reset}                       ${C.cyan}${C.bold}║${C.reset}`,
-  `${C.cyan}${C.bold} ╚════════════════════════════════════════════════════╝${C.reset}`,
+const CAITLYN_ART = [
+  "   ___   _     _____  _____  __         __",
+  "  / __\\ /_\\    \\_   \\/__   \\/ //\\_/\\ /\\ \\ \\",
+  " / /   //_\\\\    / /\\/  / /\\/ / \\_ _//  \\/ /",
+  "/ /___/  _  \\/\\/ /_   / / / /___/ \\/ /\\  /",
+  "\\____/\\_/ \\_/\\____/   \\/  \\____/\\_/\\_\\ \\/",
 ].join("\n");
+
+/** Signature ramp: cyan → teal → violet → magenta (bottom glows pink). */
+const LOGO_RAMP = [PAL.cyan, PAL.cyanDeep, PAL.teal, PAL.violetDeep, PAL.violet, PAL.magenta, PAL.pink];
+
+const LOGO_TAGLINES = [
+  { text: "AI AGENT IMMUNE SYSTEM", color: PAL.cyan },
+  { text: "CONTINUOUS AGENTS FOR INJECTION THREATS", color: PAL.violet },
+  { text: "VIA LIFELONG YIELDING NEXUS", color: PAL.magenta },
+];
+
+/**
+ * Build the glowing CAITLYN emblem: gradient box borders (vertical ramp),
+ * per-character gradient on the ASCII art (horizontal ramp), tinted taglines.
+ */
+function buildLogo(): string {
+  const artLines = CAITLYN_ART.split("\n");
+  const artW = Math.max(...artLines.map((l) => [...l].length));
+  const pad = 2;
+  const innerW = artW + pad * 2;
+
+  const total = artLines.length + 2 + 1 + LOGO_TAGLINES.length + 1 + 2; // art + spacers + taglines + rule
+  let idx = 0;
+  const vColor = () => gradColorAt(LOGO_RAMP, idx++ / (total - 1));
+  const line = (content: string, contentW: number) => {
+    const c = vColor();
+    return `${fg(c)}║${C.reset}${content}${fg(c)}${" ".repeat(Math.max(0, innerW - contentW))}║${C.reset}`;
+  };
+
+  const out: string[] = [];
+  out.push(`${fg(gradColorAt(LOGO_RAMP, 0))}╔${C.reset}${gradLines("═".repeat(innerW), LOGO_RAMP, false)}${fg(gradColorAt(LOGO_RAMP, 0))}╗${C.reset}`);
+  idx = 0;
+  out.push(line("", 0));
+  for (const a of artLines) {
+    out.push(line(` ${gradText(a, PAL.cyan, PAL.magenta, true)} `, artW + 2));
+  }
+  out.push(line("", 0));
+  out.push(`${fg(vColor())}╠${C.reset}${gradLines("═".repeat(innerW), LOGO_RAMP, false)}${fg(vColor())}╣${C.reset}`);
+  for (const tag of LOGO_TAGLINES) {
+    out.push(line(` ${paint(tag.text, tag.color, undefined, false)} `, [...tag.text].length + 2));
+  }
+  out.push(`${fg(gradColorAt(LOGO_RAMP, 1))}╚${C.reset}${gradLines("═".repeat(innerW), LOGO_RAMP, false)}${fg(gradColorAt(LOGO_RAMP, 1))}╝${C.reset}`);
+  return out.join("\n");
+}
+
+const CAITLYN_LOGO = buildLogo();
 
 // ── Theme ─────────────────────────────────────────────────────────
 
@@ -370,7 +409,7 @@ export class CaitlynTUI {
           break;
         }
         case "tool_execution_start": {
-          const toolLine = `${C.dim}⚙ ${event.toolName}${C.reset}`;
+          const toolLine = `${fg(PAL.warn)}◆${C.reset} ${fg(PAL.dim)}${event.toolName}${C.reset}`;
           this.insertBeforeEditor(new Text(toolLine));
           break;
         }
@@ -382,7 +421,7 @@ export class CaitlynTUI {
             const preview = resultText.length > 300
               ? resultText.slice(0, 297) + "..."
               : resultText;
-            this.insertBeforeEditor(new Text(`${C.dim}  → ${preview}${C.reset}`));
+            this.insertBeforeEditor(new Text(`${fg(PAL.faint)}  ↳ ${preview}${C.reset}`));
           }
           break;
         }
@@ -410,7 +449,7 @@ export class CaitlynTUI {
             this.streamingMd = null;
           }
 
-          const prefix = `${C.bold}${C.cyan}CAITLYN${C.reset}  ${C.dim}just now${C.reset}  `;
+          const prefix = `${fg(PAL.cyan)}▍${C.reset} ${gradText("CAITLYN", PAL.cyan, PAL.violet, true)}  ${fg(PAL.faint)}just now${C.reset}  `;
           const msgMd = new Markdown(prefix + currentMessageContent, 0, 0, THEME);
           this.insertBeforeEditor(msgMd);
           const usage = (event.message as unknown as { usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number; cost: { total: number } } }).usage;
@@ -461,7 +500,7 @@ export class CaitlynTUI {
   private streamingMd: Markdown | null = null;
 
   private updateStreamingMessage(text: string): void {
-    const prefix = `${C.bold}${C.cyan}CAITLYN${C.reset}  ${C.dim}streaming...${C.reset}  `;
+    const prefix = `${fg(PAL.cyan)}▍${C.reset} ${gradText("CAITLYN", PAL.cyan, PAL.violet, true)}  ${fg(PAL.violet)}streaming${C.reset}  `;
     if (this.streamingMd) {
       // Remove and re-add (Markdown doesn't support in-place update)
       this.tui.removeChild(this.streamingMd);
@@ -677,7 +716,7 @@ export class CaitlynTUI {
     this.editor.disableSubmit = true;
 
     // Add user message
-    const prefix = `${C.bold}${C.green}You${C.reset}  ${C.dim}just now${C.reset}  `;
+    const prefix = `${fg(PAL.ok)}▍${C.reset} ${gradText("YOU", PAL.ok, PAL.teal, true)}  ${fg(PAL.faint)}just now${C.reset}  `;
     const userMd = new Markdown(prefix + message, 0, 0, THEME);
     this.insertBeforeEditor(userMd);
 
@@ -783,13 +822,18 @@ export class CaitlynTUI {
 
     // Welcome messages
     const antibodies = loadAntibodies();
-    const agentText = this.agent ? `${C.green}ready${C.reset}` : `${C.yellow}not loaded${C.reset}`;
     // Ensure antibody index is valid (rebuild if missing or stale)
 
+    const agentChip = this.agent
+      ? badge("● READY", PAL.ok, PAL.okBg)
+      : badge("○ OFFLINE", PAL.warn, PAL.warnBg);
+    const abChip = badge(`${antibodies.length} ANTIBODIES`, PAL.cyan, PAL.cyanBg);
+    const evoChip = badge("EVOLUTION ONLINE", PAL.violet, PAL.violetBg);
+
     this.showSystemMessage(
-      `${C.bold}${C.cyan}Welcome to CAITLYN!${C.reset}\n\n` +
-      `Agent: ${agentText} | Antibodies: ${antibodies.length} | Evolution: ${C.green}built-in${C.reset}\n` +
-      `${C.dim}Type to chat, /scan to inspect, /help for commands.  Ctrl+C to exit.${C.reset}`,
+      gradText("◈ CAITLYN DEFENSE ONLINE ◈", PAL.cyan, PAL.magenta, true) + "\n\n" +
+      `${agentChip} ${abChip} ${evoChip}\n\n` +
+      `${fg(PAL.faint)}Type to chat · /scan to inspect · /help for commands · Ctrl+C to exit${C.reset}`,
     );
 
     this.editor.disableSubmit = false;

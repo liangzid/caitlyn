@@ -33,7 +33,7 @@ import type { MessageEntry, SessionInfoEntry } from "../session/session-types.js
 import { getContextWindow, getModelDisplay } from "../config/models.js";
 import { getProviders, getModels } from "../llm.js";
 import { listConfiguredProviders } from "../config/credentials.js";
-import { C, selectListTheme, estimateTokens, translateLlmError } from "../theme.js";
+import { C, PAL, fg, paint, badge, bar, gradText, selectListTheme, estimateTokens, translateLlmError, verdictMeta, categoryColor, tierColor } from "../theme.js";
 import { buildSessionPickerOverlay } from "../components/overlays.js";
 import type { FooterComponent } from "../components/footer.js";
 import type { Editor } from "@earendil-works/pi-tui";
@@ -60,32 +60,33 @@ export interface TUIHost {
 // ── Scan ──────────────────────────────────────────────────────────
 
 export async function doScan(self: TUIHost, content: string): Promise<void> {
-  self.showSystemMessage(`${C.cyan}⊕ Scanning (${content.length} chars)...${C.reset}`);
+  self.showSystemMessage(`${fg(PAL.cyan)}◈ ${C.reset}${fg(PAL.dim)}Scanning ${content.length} chars...${C.reset}`);
 
   try {
     const result = await hybridScan({ content, llmCall: self.llmCall });
 
-    const verdict = result.verdict.toUpperCase();
-    let emoji: string;
-    let color: string;
-    let bgColor: string;
-    if (verdict === "MALICIOUS") {
-      emoji = "🚨"; color = C.red; bgColor = "\x1b[41m\x1b[37m";
-    } else if (verdict === "SUSPICIOUS") {
-      emoji = "⚠️"; color = C.yellow; bgColor = "\x1b[43m\x1b[30m";
-    } else {
-      emoji = "✅"; color = C.green; bgColor = "\x1b[42m\x1b[37m";
-    }
+    const meta = verdictMeta(result.verdict);
+    const rate = Math.max(0, Math.min(1, result.confidence));
+    const verdictColor = result.verdict === "malicious" ? PAL.danger
+      : result.verdict === "suspicious" ? PAL.warn
+      : PAL.ok;
 
-    let output = `${bgColor} ${emoji}  ${verdict}  ${emoji} ${C.reset}`;
-    output += `\n${C.dim}Confidence:${C.reset} ${(result.confidence * 100).toFixed(1)}%  ${C.dim}Latency:${C.reset} ${(result.total_latency_us / 1000).toFixed(1)}ms  ${C.dim}Tokens:${C.reset} ${result.total_tokens}`;
-    output += `  ${C.dim}${result.backend}${C.reset}`;
+    let output = paint(` ${meta.icon}  ${result.verdict.toUpperCase()}  ${meta.icon} `, meta.fg, meta.bg, true);
+    output += `\n${fg(PAL.faint)}confidence${C.reset} ${bar(rate, 20, verdictColor)} ${fg(verdictColor)}${C.bold}${(rate * 100).toFixed(1)}%${C.reset}`;
+    output += `\n${fg(PAL.faint)}latency${C.reset} ${fg(PAL.text)}${(result.total_latency_us / 1000).toFixed(1)}ms${C.reset}`;
+    output += `  ${fg(PAL.faint)}tokens${C.reset} ${fg(PAL.text)}${result.total_tokens}${C.reset}`;
+    output += `  ${badge(`T${result.tier}`, tierColor(result.tier), PAL.panelHi, false)}`;
+    output += `  ${fg(PAL.faint)}${result.backend}${C.reset}`;
 
     const hits = result.script_results.filter((r: ScriptResult) => r.verdict === "malicious");
     if (hits.length > 0) {
-      output += `\n\n${C.bold}Matched antibodies:${C.reset}\n`;
+      // Map antibody ids → configs to color-code by category
+      const abById = new Map(loadAntibodies().map((a) => [a.config.id, a.config]));
+      output += `\n\n${gradText("MATCHED ANTIBODIES", PAL.cyan, PAL.violet, true)}\n`;
       for (const h of hits) {
-        output += `  ${C.red}●${C.reset} ${h.antibody_id}: ${h.reason ?? "detected"} (${(h.confidence * 100).toFixed(0)}%)\n`;
+        const cat = abById.get(h.antibody_id)?.category ?? "unknown";
+        const cc = categoryColor(cat);
+        output += ` ${fg(cc)}●${C.reset} ${fg(PAL.text)}${h.antibody_id}${C.reset} ${fg(PAL.faint)}— ${h.reason ?? "detected"} (${(h.confidence * 100).toFixed(0)}%)${C.reset}\n`;
       }
     }
 
@@ -101,9 +102,10 @@ export async function doScan(self: TUIHost, content: string): Promise<void> {
 export async function doAntibodyList(self: TUIHost): Promise<void> {
   const antibodies = loadAntibodies();
   if (antibodies.length === 0) { self.showSystemMessage("No antibodies loaded."); return; }
-  let out = `${C.bold}Antibodies (${antibodies.length}):${C.reset}\n`;
+  let out = `${gradText("ANTIBODY FOREST", PAL.cyan, PAL.violet, true)}  ${badge(`${antibodies.length} LOADED`, PAL.cyan, PAL.cyanBg, false)}\n`;
   for (const ab of antibodies) {
-    out += `  ${ab.config.id} [${ab.config.category}] tier=${ab.config.tier} gen=${ab.config.generation}\n`;
+    const cc = categoryColor(ab.config.category);
+    out += ` ${fg(cc)}◆${C.reset} ${fg(PAL.text)}${ab.config.id}${C.reset} ${badge(ab.config.category.toUpperCase(), cc, PAL.panelHi, false)} ${badge(`T${ab.config.tier}`, tierColor(ab.config.tier), PAL.panelHi, false)} ${fg(PAL.faint)}gen ${ab.config.generation}${C.reset}\n`;
   }
   self.showSystemMessage(out);
 }
@@ -200,14 +202,16 @@ export async function doSessionInfo(self: TUIHost): Promise<void> {
   const stats = mgr.getTokenStats();
   const name = mgr.getSessionName();
 
-  let out = `${C.bold}Session Info${C.reset}\n`;
-  out += `ID:      ${mgr.getSessionId()}\n`;
-  out += `File:    ${mgr.getSessionFile()}\n`;
-  out += `Entries: ${mgr.getEntryCount()}\n`;
-  if (name) out += `Name:    ${name}\n`;
-  out += `Tokens:  ↑${stats.input} ↓${stats.output}\n`;
-  if (stats.cost > 0) out += `Cost:    $${stats.cost.toFixed(4)}\n`;
-  out += `CWD:     ${mgr.getCwd()}\n`;
+  const row = (k: string, v: string) =>
+    ` ${fg(PAL.faint)}${k.padEnd(8)}${C.reset}${fg(PAL.text)}${v}${C.reset}`;
+  let out = `${gradText("SESSION INFO", PAL.cyan, PAL.violet, true)}\n`;
+  out += row("ID", mgr.getSessionId()) + "\n";
+  out += row("FILE", mgr.getSessionFile()) + "\n";
+  out += row("ENTRIES", String(mgr.getEntryCount())) + "\n";
+  if (name) out += row("NAME", name) + "\n";
+  out += row("TOKENS", `↑${stats.input} ↓${stats.output}`) + "\n";
+  if (stats.cost > 0) out += row("COST", `$${stats.cost.toFixed(4)}`) + "\n";
+  out += row("CWD", mgr.getCwd()) + "\n";
 
   self.showSystemMessage(out);
 }
@@ -388,19 +392,20 @@ export async function doLogin(self: TUIHost, provider: string): Promise<void> {
 }
 
 export function showHelp(self: TUIHost): void {
+  const section = (title: string) => ` ${gradText(title, PAL.cyan, PAL.violet, true)} `;
   const lines = [
-    `${C.bold}${C.cyan}C A I T L Y N   C o m m a n d s${C.reset}`,
+    `${paint(" ◈ ", PAL.cyan, PAL.cyanBg, true)} ${gradText("CAITLYN COMMANDS", PAL.cyan, PAL.magenta, true)}`,
     ``,
-    `${C.bold}Scanning & Defense:${C.reset}`,
+    section("SCANNING & DEFENSE"),
     `  /scan <content>      Security scan for injection attacks`,
-    `  /status              Show antibody/antigen library`,
-    `  /dashboard           Defense statistics`,
+    `  /status              Immune library status`,
+    `  /dashboard           Defense telemetry dashboard`,
     `  /history             Recent scan history`,
     `  /antibody list       List antibody forest`,
     `  /antigen <id>        Show antigen details`,
     `  /vaccinate <pattern> Evolve antibody`,
     ``,
-    `${C.bold}Session:${C.reset}`,
+    section("SESSION"),
     `  /new                 Start new session`,
     `  /resume              Open session picker`,
     `  /session             Show session info`,
@@ -412,20 +417,20 @@ export function showHelp(self: TUIHost): void {
     `  /clone               Duplicate session`,
     `  /delete              Delete session`,
     ``,
-    `${C.bold}Config:${C.reset}`,
+    section("CONFIG"),
     `  /model [provider/id] Switch LLM model`,
     `  /thinking <level>    off|low|medium|high`,
     `  /login [provider]    Configure auth`,
     `  /settings            Open settings`,
     ``,
-    `${C.bold}Meta:${C.reset}`,
+    section("META"),
     `  /help                Show this help`,
     `  /clear               Clear screen`,
     `  /quit                Exit CAITLYN`,
     ``,
-    `${C.dim}  !<content>           Quick scan alias${C.reset}`,
+    `${fg(PAL.faint)}!<content>  quick scan alias${C.reset}`,
     ``,
-    `${C.dim}  Ctrl+C quit  |  Esc back/abort  |  Tab back  |  q dismiss${C.reset}`,
+    `${fg(PAL.faint)}Ctrl+C quit  ·  Esc back/abort  ·  Tab back  ·  q dismiss${C.reset}`,
   ];
 
   self.showSystemMessage(lines.join("\n"));

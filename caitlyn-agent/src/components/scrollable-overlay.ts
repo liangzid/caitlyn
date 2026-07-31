@@ -1,20 +1,37 @@
 /**
- * Scrollable Overlay — wraps content in a box with keyboard scrolling.
+ * Scrollable Overlay — glass panel with gradient frame and keyboard scrolling.
  *
- * Supports: j/k, ↓/↑, Space/Shift+Space, PageDown/PageUp, Home/End
+ * Supports: j/k, ↓/↑, Space/Shift+Space, PageDown/PageUp, Home/End.
+ * Renders a right-edge scrollbar thumb and keycap-styled nav hints.
  */
-import {
-  Box,
-  Text,
-  type Component,
-} from "@earendil-works/pi-tui";
-import { C } from "../theme.js";
+import { type Component, visibleWidth } from "@earendil-works/pi-tui";
+import { C, PAL, fg, bg, keycap, gradLines, gradColorAt, panelHeader } from "../theme.js";
 
-const overlayBg = (text: string) => `\x1b[48;5;236m\x1b[37m${text}\x1b[0m`;
+const PANEL_BG = PAL.panelLo;
+const glass = (text: string) => `${bg(PANEL_BG)}${text}${C.reset}`;
+
+/** Gradient frame colors for the panel border. */
+const FRAME_RAMP = [PAL.cyan, PAL.teal, PAL.violet, PAL.magenta] as const;
+
+/** Pad an ANSI-colored string to an exact display width. */
+function padAnsi(text: string, width: number): string {
+  const pad = Math.max(0, width - visibleWidth(text));
+  return text + " ".repeat(pad);
+}
+
+/** Top border: ╭──(gradient)──╮  */
+function frameTop(innerWidth: number): string {
+  return glass(`${fg(gradColorAt(FRAME_RAMP, 0))}╭${C.reset}${gradLines("─".repeat(innerWidth), FRAME_RAMP, false)}${fg(gradColorAt(FRAME_RAMP, 1))}╮${C.reset}`);
+}
+
+/** Bottom border: ╰──(gradient)──╯ */
+function frameBottom(innerWidth: number): string {
+  return glass(`${fg(gradColorAt(FRAME_RAMP, 1))}╰${C.reset}${gradLines("─".repeat(innerWidth), FRAME_RAMP, false)}${fg(gradColorAt(FRAME_RAMP, 0))}╯${C.reset}`);
+}
 
 export class ScrollableBox implements Component {
   children: Component[] = [];
-  private lines: string[] = [];
+  private lines: string[];
   private title: string;
   private visibleLines: number;
   private scrollOffset = 0;
@@ -30,20 +47,42 @@ export class ScrollableBox implements Component {
     this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, maxOffset));
 
     const visible = this.lines.slice(this.scrollOffset, this.scrollOffset + this.visibleLines);
+    const innerWidth = Math.max(1, width - 2);
 
-    const header = `${C.bold}${C.cyan}${this.title}${C.reset}`;
+    // Right-edge scrollbar thumb
+    const thumbSize = Math.max(1, Math.round((this.visibleLines / Math.max(1, this.lines.length)) * this.visibleLines));
+    const thumbStart = maxOffset === 0
+      ? 0
+      : Math.round((this.scrollOffset / maxOffset) * Math.max(0, this.visibleLines - thumbSize));
+    const scrollChar = (i: number): string =>
+      i >= thumbStart && i < thumbStart + thumbSize
+        ? `${fg(PAL.cyan)}▐${C.reset}`
+        : `${fg(PAL.panelHi)}▐${C.reset}`;
+
     const hasMoreAbove = this.scrollOffset > 0;
     const hasMoreBelow = this.scrollOffset + this.visibleLines < this.lines.length;
 
-    const nav = [
-      hasMoreAbove ? `${C.dim}▲  scroll: j/k ↑/↓  PgUp/PgDn  q/Esc/Ctrl+C to close${C.reset}`
-        : hasMoreBelow ? `${C.dim}▼  scroll: j/k ↑/↓  PgUp/PgDn  q/Esc/Ctrl+C to close${C.reset}`
-        : `${C.dim}scroll: j/k ↑/↓  q/Esc/Ctrl+C to close${C.reset}`,
-    ];
+    const navHints = `${keycap("j")} ${keycap("k")} ${keycap("PgUp")} ${keycap("PgDn")} · ${keycap("q")}/${keycap("Esc")} close`;
+    const navHint = hasMoreAbove
+      ? `${fg(PAL.faint)}▲ ${navHints}${C.reset}`
+      : hasMoreBelow
+        ? `${fg(PAL.faint)}▼ ${navHints}${C.reset}`
+        : `${fg(PAL.faint)}${navHints}${C.reset}`;
 
-    const result = [header, "", ...visible, "", ...nav];
-    const innerWidth = Math.max(1, width - 2);
-    return result.map((line) => overlayBg(line.padEnd(innerWidth, " ")));
+    const body: string[] = [];
+    body.push(frameTop(innerWidth));
+    body.push(glass(padAnsi(panelHeader(this.title, innerWidth, "◈"), innerWidth)));
+    body.push(glass(" ".repeat(innerWidth)));
+    for (let i = 0; i < this.visibleLines; i++) {
+      const content = visible[i] ?? "";
+      const padded = padAnsi(content, innerWidth - 1);
+      body.push(glass(`${padded}${scrollChar(i)}`));
+    }
+    body.push(glass(" ".repeat(innerWidth)));
+    body.push(glass(padAnsi(navHint, innerWidth)));
+    body.push(frameBottom(innerWidth));
+
+    return body;
   }
 
   handleInput(data: string): void {

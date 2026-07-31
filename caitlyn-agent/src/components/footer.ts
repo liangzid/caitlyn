@@ -2,15 +2,16 @@
  * CAITLYN Footer Component
  *
  * Two-line status bar showing:
- *   Line 1: cwd (with ~), git branch, session name
- *   Line 2: token stats, cost, context %, model/provider, daemon status
+ *   Line 1: cwd, git branch, session name  ·  daemon + antibody pills
+ *   Line 2: token/cost/context telemetry    ·  model + thinking level
  *
- * Ported from pi coding agent's FooterComponent.
+ * Styled with the bioluminescent palette from theme.ts.
  */
 
 import { type Component, visibleWidth } from "@earendil-works/pi-tui";
 import { sep, relative, resolve } from "node:path";
 import { homedir } from "node:os";
+import { C, PAL, fg, badge, gradText, bar } from "../theme.js";
 
 // ── Helpers ───────────────────────────────────────────────────────
 
@@ -35,18 +36,6 @@ function formatCost(cost: number): string {
   if (cost < 1) return `$${cost.toFixed(3)}`;
   return `$${cost.toFixed(2)}`;
 }
-
-// ── ANSI ──────────────────────────────────────────────────────────
-
-const C = {
-  dim:    "\x1b[2m",
-  reset:  "\x1b[0m",
-  cyan:   "\x1b[36m",
-  green:  "\x1b[32m",
-  yellow: "\x1b[33m",
-  red:    "\x1b[31m",
-  bold:   "\x1b[1m",
-} as const;
 
 // ── Data Interface ────────────────────────────────────────────────
 
@@ -104,53 +93,75 @@ export class FooterComponent implements Component {
     this.dirty = false;
     const d = this.data;
 
-    // Line 1: cwd + git branch + session name
-    let left1 = `${C.cyan}${formatCwd(d.cwd)}${C.reset}`;
+    // ── Line 1 ────────────────────────────────────────────────
+    // Left: cwd + git branch + session name
+    let left1 = `${fg(PAL.cyan)}◈${C.reset} ${gradText(formatCwd(d.cwd), PAL.cyan, PAL.teal)}`;
     if (d.gitBranch) {
-      left1 += ` ${C.dim}${d.gitBranch}${C.reset}`;
+      left1 += `  ${fg(PAL.faint)}⎇${C.reset} ${fg(PAL.dim)}${d.gitBranch}${C.reset}`;
     }
     if (d.sessionName) {
-      left1 += ` ${C.dim}•${C.reset} ${d.sessionName}`;
+      left1 += `  ${fg(PAL.faint)}◆${C.reset} ${fg(PAL.dim)}${d.sessionName}${C.reset}`;
     }
 
-    // Line 1 right: daemon status + antibody count (with text label)
-    const daemonIcon = d.daemonStatus === "connected" ? `${C.green}● daemon${C.reset}`
-      : d.daemonStatus === "checking" ? `${C.yellow}◌ checking${C.reset}`
-      : `${C.dim}○ local${C.reset}`;
-    const right1 = `${daemonIcon}  ${d.antibodyCount} antibodies`;
+    // Right: daemon status + antibody count pills
+    const daemonPill = d.daemonStatus === "connected"
+      ? badge("● DAEMON", PAL.ok, PAL.okBg)
+      : d.daemonStatus === "checking"
+        ? badge("◌ CHECKING", PAL.warn, PAL.warnBg)
+        : badge("○ LOCAL", PAL.faint, PAL.grayBg);
+    const abPill = badge(`${d.antibodyCount} AB`, PAL.cyan, PAL.cyanBg);
+    const right1 = `${daemonPill} ${abPill}`;
 
-    // Line 2 left: token stats (text labels instead of cryptic symbols)
-    const parts2: string[] = [];
-    parts2.push(`${C.dim}in${C.reset} ${formatTokens(d.totalInput)}`);
-    parts2.push(`${C.dim}out${C.reset} ${formatTokens(d.totalOutput)}`);
+    // ── Line 2 ────────────────────────────────────────────────
+    // Left: token telemetry, ordered by priority so narrow widths
+    // drop the least important items instead of overflowing.
+    const base2: Array<{ text: string; priority: number }> = [];
+    base2.push({ text: `${fg(PAL.faint)}⇣${C.reset} ${formatTokens(d.totalInput)}`, priority: 90 });
+    base2.push({ text: `${fg(PAL.faint)}⇡${C.reset} ${formatTokens(d.totalOutput)}`, priority: 85 });
     if (d.totalCacheRead > 0) {
-      parts2.push(`${C.dim}cacheR${C.reset} ${formatTokens(d.totalCacheRead)}`);
+      base2.push({ text: `${fg(PAL.faint)}⧉r${C.reset} ${formatTokens(d.totalCacheRead)}`, priority: 50 });
     }
     if (d.totalCacheWrite > 0) {
-      parts2.push(`${C.dim}cacheW${C.reset} ${formatTokens(d.totalCacheWrite)}`);
+      base2.push({ text: `${fg(PAL.faint)}⧉w${C.reset} ${formatTokens(d.totalCacheWrite)}`, priority: 45 });
     }
-    parts2.push(formatCost(d.totalCost));
+    base2.push({ text: `${fg(PAL.warn)}${formatCost(d.totalCost)}${C.reset}`, priority: 70 });
 
-    // Context window usage
+    // Context window: mini gauge + percent
     if (d.contextPercent !== undefined) {
-      const ctxColor = d.contextPercent > 90 ? C.red
-        : d.contextPercent > 70 ? C.yellow
-        : C.green;
-      const autoLabel = d.isAutoCompact ? " (auto)" : "";
-      parts2.push(
-        `${ctxColor}${d.contextPercent}%${C.reset}/${formatTokens(d.contextTokens ?? 0)}k${C.dim}${autoLabel}${C.reset}`,
-      );
+      const pct = Math.max(0, Math.min(100, d.contextPercent));
+      const ctxColor = pct > 90 ? PAL.danger : pct > 70 ? PAL.warn : PAL.ok;
+      const autoLabel = d.isAutoCompact ? ` ${fg(PAL.faint)}↻${C.reset}` : "";
+      base2.push({
+        text: `${bar(pct / 100, 10, ctxColor)}${fg(ctxColor)}${Math.round(pct)}%${C.reset}${autoLabel}`,
+        priority: 80,
+      });
+    }
+    base2.sort((a, b) => b.priority - a.priority);
+
+    // Right: model + thinking level (thinking dropped first on narrow widths)
+    const rightBase = `${fg(PAL.dim)}${d.currentModel}${C.reset}`;
+    const thinkingPart = d.thinkingLevel && d.thinkingLevel !== "off"
+      ? ` ${badge(d.thinkingLevel, PAL.violet, PAL.violetBg, false)}`
+      : "";
+    let right2 = rightBase + thinkingPart;
+
+    let left2 = "";
+    for (const item of base2) {
+      const joined = left2 === "" ? item.text : `${left2}  ${item.text}`;
+      const fits = visibleWidth(joined) <= width - visibleWidth(right2) - 4;
+      if (fits) {
+        left2 = joined;
+        continue;
+      }
+      // Not enough room with the thinking badge — retry with model only
+      right2 = rightBase;
+      if (left2 === "" && visibleWidth(item.text) <= width - visibleWidth(right2) - 4) {
+        left2 = item.text;
+      }
+      break;
     }
 
-    const left2 = parts2.join("  ");
-
-    // Line 2 right: model/provider/thinking
-    let right2 = `${C.dim}${d.currentModel}${C.reset}`;
-    if (d.thinkingLevel && d.thinkingLevel !== "off") {
-      right2 += ` ${C.yellow}${d.thinkingLevel}${C.reset}`;
-    }
-
-    // Render two lines with spacing
+    // ── Compose with spacing ──────────────────────────────────
     const left1Width = visibleWidth(left1);
     const right1Width = visibleWidth(right1);
     const spacer1 = Math.max(1, width - left1Width - right1Width);
@@ -159,7 +170,7 @@ export class FooterComponent implements Component {
     const spacer2 = Math.max(1, width - left2Width - right2Width);
 
     return [
-      `${C.dim}${"─".repeat(width)}${C.reset}`,
+      `${fg(PAL.cyan)}▍${C.reset}${fg(PAL.border)}${"─".repeat(Math.max(0, width - 1))}${C.reset}`,
       `${left1}${" ".repeat(spacer1)}${right1}`,
       `${left2}${" ".repeat(spacer2)}${right2}`,
     ];

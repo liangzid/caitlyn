@@ -1,0 +1,36 @@
+#+TITLE: Caitlyn TUI 视觉升级讨论记录
+#+DATE: 2026-07-31
+
+* 结论
+用户要求把 Caitlyn TUI 的 UI/图标/仪表盘/状态做成成熟产品观感，并明确授权：
+"锚定一种风格，然后越绚丽越好"（审美判断交给实现者）。
+
+** 锚定风格: Bioluminescent Defense OS（生物发光防御系统）
+- 深色玻璃面板（236/235 底）+ 青→紫→品红渐变主视觉
+- 256 色安全色板（PAL token），语义色: ok/warn/danger + 分类色 + tier 色
+- 原语: badge 胶囊、bar 仪表条、keycap 按键、panelHeader 面板头、gradLines 渐变
+- 全部落地在 theme.ts，组件只引用 token
+
+** 改动清单
+- theme.ts: 新增 PAL 调色板 + fg/bg/paint/badge/bar/keycap/gradLines/gradText/gradColorAt/panelHeader/verdictMeta/categoryColor/tierColor；selectListTheme 换新
+- caitlyn-tui.ts: logo 改为渐变玻璃徽章（边框垂直渐变、字母水平渐变）；消息前缀 YOU/CAITLYN 带色条+渐变；工具行 ◆/↳；欢迎横幅 chips
+- footer.ts: 两行状态栏重设计；行1 图标+daemon/抗体胶囊；行2 遥测按优先级自适应降级（窄屏不溢出）；分隔线带青色锚点
+- scrollable-overlay.ts: 玻璃面板 + 渐变边框 ╭╮╰╯ + 右侧滚动条 thumb + keycap 导航
+- overlays.ts: Dashboard 重做（KPI 卡片、检测率仪表条、Tier 拆分、性能行、Top 抗体排行）；Status 加分类/tier 徽章；History 加 verdict 彩色徽章
+- handlers.ts: 扫描结果彩色横幅 + 置信度仪表条 + tier 徽章；帮助页渐变分区
+
+** 顺带修的 bug
+- 陈旧抗体索引（index.json roots=["gp"] 无法解析）导致 Status 一直显示空森林
+  → overlay 对 roots 做解析校验，失效时回退列出全部抗体
+- footer 在 80 列宽下溢出 → 按优先级自适应丢弃低优先级项
+
+** 验证
+- tsc --noEmit 干净; vitest 335/335 通过; npm run build 通过
+- 渲染 harness 验证全部组件在 80/120 列零溢出（临时文件已删）
+- PTY 实测: 启动 logo/欢迎横幅/footer 正常; /dashboard /status /help 正常渲染;
+  !scan 输出彩色横幅 + 仪表条; Esc 退出 exit=0
+
+** 未来方向（待 grilling）
+- 会话树 /tree 的可视化（当前纯文本缩进）
+- daemon 状态页（watch 目录、hook 状态）
+- 扫描时 Footer 显示实时进度
