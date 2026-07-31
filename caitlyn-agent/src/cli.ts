@@ -154,8 +154,8 @@ async function main() {
       const agentFlag = flags.find((a) => a.startsWith("--agent="));
       const agentIds = agentFlag ? [agentFlag.split("=")[1]] : undefined;
 
-      if (flags.length === 0 || flags.includes("--status")) {
-        // Query mode: show what the daemon is watching
+      // Query mode: --status (or --list) shows what the daemon is watching
+      if (flags.includes("--status") || flags.includes("--list")) {
         const info = await getWatchInfo();
         if (info?.active) {
           console.log(`👁️  Watching: ${info.dirs.join(", ")}`);
