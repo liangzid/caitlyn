@@ -113,21 +113,21 @@ export class FooterComponent implements Component {
       left1 += ` ${C.dim}•${C.reset} ${d.sessionName}`;
     }
 
-    // Line 1 right: daemon status + antibody count
-    const daemonIcon = d.daemonStatus === "connected" ? `${C.green}●${C.reset}`
-      : d.daemonStatus === "checking" ? `${C.yellow}◌${C.reset}`
-      : `${C.red}○${C.reset}`;
-    const right1 = `${daemonIcon} ${d.antibodyCount} antibodies`;
+    // Line 1 right: daemon status + antibody count (with text label)
+    const daemonIcon = d.daemonStatus === "connected" ? `${C.green}● daemon${C.reset}`
+      : d.daemonStatus === "checking" ? `${C.yellow}◌ checking${C.reset}`
+      : `${C.dim}○ local${C.reset}`;
+    const right1 = `${daemonIcon}  ${d.antibodyCount} antibodies`;
 
-    // Line 2 left: token stats
+    // Line 2 left: token stats (text labels instead of cryptic symbols)
     const parts2: string[] = [];
-    parts2.push(`${C.dim}↑${C.reset}${formatTokens(d.totalInput)}`);
-    parts2.push(`${C.dim}↓${C.reset}${formatTokens(d.totalOutput)}`);
+    parts2.push(`${C.dim}in${C.reset} ${formatTokens(d.totalInput)}`);
+    parts2.push(`${C.dim}out${C.reset} ${formatTokens(d.totalOutput)}`);
     if (d.totalCacheRead > 0) {
-      parts2.push(`${C.dim}R${C.reset}${formatTokens(d.totalCacheRead)}`);
+      parts2.push(`${C.dim}cacheR${C.reset} ${formatTokens(d.totalCacheRead)}`);
     }
     if (d.totalCacheWrite > 0) {
-      parts2.push(`${C.dim}W${C.reset}${formatTokens(d.totalCacheWrite)}`);
+      parts2.push(`${C.dim}cacheW${C.reset} ${formatTokens(d.totalCacheWrite)}`);
     }
     parts2.push(formatCost(d.totalCost));
 

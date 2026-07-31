@@ -44,9 +44,9 @@ export function loadConfig(): CaitlynAgentConfig {
   const provider = process.env.CAITLYN_PROVIDER;
   const model = process.env.CAITLYN_MODEL;
 
-  // 2. Fall back to config.toml [llm] section
+  // 2. Fall back to config.toml [llm] section — search cwd and ancestors
   if (!provider || !model) {
-    const configPath = path.join(process.cwd(), "config.toml");
+    const configPath = findConfigUpward();
     const llm = readTomlSection(configPath, "llm");
     return {
       provider: provider ?? llm["provider"] ?? "openrouter",
@@ -55,4 +55,24 @@ export function loadConfig(): CaitlynAgentConfig {
   }
 
   return { provider, model };
+}
+
+/**
+ * Find config.toml by searching cwd and its ancestors (like git).
+ * Returns the path if found, or the default cwd path otherwise.
+ */
+function findConfigUpward(): string {
+  let dir = process.cwd();
+  for (let i = 0; i < 10; i++) {
+    const candidate = path.join(dir, "config.toml");
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch {
+      /* not readable */
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return path.join(process.cwd(), "config.toml");
 }

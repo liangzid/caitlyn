@@ -33,6 +33,7 @@ import {
 } from "@earendil-works/pi-tui";
 import type { Agent } from "@earendil-works/pi-agent-core";
 import { type LlmCallFn } from "./scanner.js";
+import { loadConfig } from "./config.js";
 import { isDaemonRunning } from "./daemon/index.js";
 import { loadAntibodies, loadAntibodyIndex, buildAntibodyIndex } from "./library.js";
 import { SessionManager } from "./session/session-manager.js";
@@ -199,8 +200,10 @@ export class CaitlynTUI {
 
     const cwd = process.cwd();
     const mgr = sessionMgr ?? SessionManager.continueRecent(cwd);
-    const provider = process.env.CAITLYN_PROVIDER ?? "openrouter";
-    const modelId = process.env.CAITLYN_MODEL ?? "deepseek/deepseek-chat";
+    // Read provider/model from env vars → config.toml → defaults
+    const cfg = loadConfig();
+    const provider = cfg.provider;
+    const modelId = cfg.model;
 
     // Add logo
     const header = new Text(
