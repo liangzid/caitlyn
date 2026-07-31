@@ -17,9 +17,13 @@ import {
   loadAntigens,
   loadAntibodyIndex,
   buildAntibodyIndex,
+  saveAntibodyIndex,
 } from "../library.js";
 import { getProviders, getModels } from "../llm.js";
 import { getContextWindow, getModelDisplay } from "../config/models.js";
+import { detectAgents, isHookInstalled, getWatchDirsForAgents } from "../adapters/registry.js";
+import { isDaemonRunning, getDaemonPid } from "../daemon/index.js";
+import { getWatchInfo } from "../daemon/client.js";
 import {
   C, PAL, fg, paint, badge, bar, gradText,
   selectListTheme, categoryColor, tierColor, verdictMeta,
@@ -40,6 +44,76 @@ function kpiCard(label: string, value: string, color: number, cellWidth = 20): s
   const valueStr = `${fg(color)}${C.bold}${value}${C.reset}`;
   const gap = Math.max(2, cellWidth - visibleWidth(labelStr) - visibleWidth(valueStr));
   return labelStr + " ".repeat(gap) + valueStr;
+}
+
+/**
+ * Guard Status — which agents on this host are detected, whether CAITLYN
+ * hooks protect them, which directories are watched, and daemon state.
+ * Async: queries the daemon HTTP API for live watch info.
+ */
+export async function buildGuardOverlay(): Promise<Component> {
+  const lines: string[] = [];
+
+  // ── Daemon + watcher pills ────────────────────────────────
+  const daemonOn = isDaemonRunning();
+  const daemonPill = daemonOn
+    ? badge(`● DAEMON pid ${getDaemonPid() ?? "?"}`, PAL.ok, PAL.okBg)
+    : badge("○ DAEMON OFFLINE", PAL.faint, PAL.grayBg);
+  lines.push(daemonPill);
+
+  const watch = await getWatchInfo();
+  if (daemonOn && watch) {
+    const watchPill = watch.active
+      ? badge(`◉ WATCHING ${watch.dirs.length} DIRS`, PAL.cyan, PAL.cyanBg)
+      : badge("○ NOT WATCHING", PAL.warn, PAL.warnBg);
+    lines.push(`\n${watchPill}`);
+    if (watch.active && watch.dirs.length > 0) {
+      lines.push(`${gradText("WATCHED DIRECTORIES", PAL.cyan, PAL.violet, true)}`);
+      for (const d of watch.dirs) {
+        lines.push(` ${fg(PAL.cyan)}◈${C.reset} ${fg(PAL.text)}${d}${C.reset}`);
+      }
+      const s = watch.stats;
+      if (s) {
+        lines.push(
+          ` ${fg(PAL.faint)}events ${s.totalEvents} · scanned ${s.filesScanned} · blocked ${fg(PAL.danger)}${s.filesBlocked}${C.reset} · flagged ${fg(PAL.warn)}${s.filesFlagged}${C.reset} · allowed ${fg(PAL.ok)}${s.filesAllowed}${C.reset}`,
+        );
+      }
+    }
+  } else {
+    lines.push(
+      `\n${fg(PAL.faint)}daemon offline — run ${paint(" caitlyn daemon start ", PAL.ghost, PAL.grayBg, true)} for fs-watching${C.reset}`,
+    );
+  }
+
+  // ── Detected agents + hook state ──────────────────────────
+  const detected = detectAgents();
+  const watchDirs = getWatchDirsForAgents();
+  const present = detected.filter((d) => d.installed);
+  lines.push("");
+  lines.push(`${gradText("AGENT PROTECTION", PAL.cyan, PAL.violet, true)}`);
+  if (present.length === 0) {
+    lines.push(` ${fg(PAL.faint)}(no known agents detected on this host)${C.reset}`);
+  }
+  for (const d of present) {
+    const hooked = isHookInstalled(d.agent.id);
+    const hookBadge = hooked
+      ? badge("HOOKS ✓", PAL.ok, PAL.okBg)
+      : badge("HOOKS ✗", PAL.warn, PAL.warnBg);
+    const dirs = watchDirs.agentDirs[d.agent.id] ?? [];
+    const dirPart = dirs.length > 0
+      ? ` ${fg(PAL.faint)}watches: ${dirs.join(", ")}${C.reset}`
+      : "";
+    lines.push(
+      ` ${fg(PAL.cyan)}◆${C.reset} ${fg(PAL.text)}${d.agent.id}${C.reset} ${badge(d.agent.integrationMethod, PAL.violet, PAL.violetBg, false)} ${hookBadge}${dirPart}`,
+    );
+  }
+  const exposed = present.filter((d) => !isHookInstalled(d.agent.id));
+  if (exposed.length > 0) {
+    lines.push("");
+    lines.push(`${fg(PAL.warn)}⚠ exposed:${C.reset} ${exposed.map((d) => d.agent.id).join(", ")} — protect with ${paint(" caitlyn install <id> ", PAL.ghost, PAL.grayBg, true)}`);
+  }
+
+  return makeBox("GUARD STATUS", lines, 22);
 }
 
 /**
@@ -116,12 +190,15 @@ export function buildDashboardOverlay(): Component {
 export function buildStatusOverlay(): Component {
   const antibodies = loadAntibodies();
   const antigens = loadAntigens();
-  const index = loadAntibodyIndex() ?? buildAntibodyIndex(antibodies);
+  let index = loadAntibodyIndex() ?? buildAntibodyIndex(antibodies);
 
-  // Resolve forest roots against loaded antibodies; if the persisted index is
-  // stale (roots no longer resolve), fall back to listing every antibody.
-  let roots = index.roots.filter((rid) => antibodies.some((a) => a.config.id === rid));
-  if (roots.length === 0) roots = antibodies.map((a) => a.config.id);
+  // If the persisted index is stale (roots no longer resolve), rebuild it
+  // from the real forest and persist the healed index.
+  if (!index.roots.some((rid) => antibodies.some((a) => a.config.id === rid))) {
+    index = buildAntibodyIndex(antibodies);
+    saveAntibodyIndex(index);
+  }
+  const roots = index.roots;
 
   const lines: string[] = [];
   lines.push(

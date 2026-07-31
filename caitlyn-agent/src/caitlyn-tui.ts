@@ -46,12 +46,13 @@ import {
 import { createAutocompleteProvider } from "./commands/slash-commands.js";
 import { getContextWindow, getModelDisplay } from "./config/models.js";
 import type { MessageEntry } from "./session/session-types.js";
-import { C, PAL, fg, paint, badge, gradLines, gradText, gradColorAt, selectListTheme, estimateTokens, translateLlmError } from "./theme.js";
+import { C, PAL, fg, paint, badge, gradLines, gradText, gradColorAt, selectListTheme, estimateTokens, translateLlmError, randomDefenseQuote } from "./theme.js";
 import {
   buildDashboardOverlay,
   buildStatusOverlay,
   buildHistoryOverlay,
   buildModelSelectorOverlay,
+  buildGuardOverlay,
 } from "./components/overlays.js";
 import {
   doScan,
@@ -90,9 +91,35 @@ const LOGO_RAMP = [PAL.cyan, PAL.cyanDeep, PAL.teal, PAL.violetDeep, PAL.violet,
 
 const LOGO_TAGLINES = [
   { text: "AI AGENT IMMUNE SYSTEM", color: PAL.cyan },
-  { text: "CONTINUOUS AGENTS FOR INJECTION THREATS", color: PAL.violet },
-  { text: "VIA LIFELONG YIELDING NEXUS", color: PAL.magenta },
 ];
+
+/**
+ * Backronym expansion: each acronym letter is gradient-highlighted, the rest
+ * of the word is dim — "C`ontinuous `A`gents ... `N`exus" reads CAITLYN.
+ */
+function buildAcronymExpansion(): { content: string; width: number } {
+  const words: Array<{ word: string; key: boolean }> = [
+    { word: "Continuous", key: true },
+    { word: "Agents", key: true },
+    { word: "for", key: false },
+    { word: "Injection", key: true },
+    { word: "Threats", key: true },
+    { word: "via", key: false },
+    { word: "Lifelong", key: true },
+    { word: "Yielding", key: true },
+    { word: "Nexus", key: true },
+  ];
+  let keyIdx = 0;
+  const content = words
+    .map(({ word, key }) => {
+      if (!key) return `${fg(PAL.faint)}${word}${C.reset}`;
+      const c = gradColorAt(LOGO_RAMP, keyIdx / 6);
+      keyIdx++;
+      return `${fg(c)}${C.bold}${word[0]}${C.reset}${fg(PAL.dim)}${word.slice(1)}${C.reset}`;
+    })
+    .join(" ");
+  return { content, width: visibleWidth(content) };
+}
 
 /**
  * Build the glowing CAITLYN emblem: gradient box borders (vertical ramp),
@@ -101,8 +128,9 @@ const LOGO_TAGLINES = [
 function buildLogo(): string {
   const artLines = CAITLYN_ART.split("\n");
   const artW = Math.max(...artLines.map((l) => [...l].length));
+  const expansion = buildAcronymExpansion();
   const pad = 2;
-  const innerW = artW + pad * 2;
+  const innerW = Math.max(artW + pad * 2, expansion.width + pad * 2);
 
   const total = artLines.length + 2 + 1 + LOGO_TAGLINES.length + 1 + 2; // art + spacers + taglines + rule
   let idx = 0;
@@ -124,6 +152,7 @@ function buildLogo(): string {
   for (const tag of LOGO_TAGLINES) {
     out.push(line(` ${paint(tag.text, tag.color, undefined, false)} `, [...tag.text].length + 2));
   }
+  out.push(line(` ${expansion.content} `, expansion.width + 2));
   out.push(`${fg(gradColorAt(LOGO_RAMP, 1))}╚${C.reset}${gradLines("═".repeat(innerW), LOGO_RAMP, false)}${fg(gradColorAt(LOGO_RAMP, 1))}╝${C.reset}`);
   return out.join("\n");
 }
@@ -371,6 +400,15 @@ export class CaitlynTUI {
           });
           return { consume: true };
         }
+        if (data === "\x07") {
+          void (async () => {
+            const overlay = await buildGuardOverlay();
+            tui.showOverlay(overlay, {
+              anchor: "center", width: "70%", maxHeight: "70%",
+            });
+          })();
+          return { consume: true };
+        }
       }
       return undefined;
     });
@@ -569,6 +607,11 @@ export class CaitlynTUI {
       }
       case "/history": {
         this.tui.showOverlay(buildHistoryOverlay(), { anchor: "center", width: "70%", maxHeight: "70%" });
+        break;
+      }
+      case "/guard": {
+        const overlay = await buildGuardOverlay();
+        this.tui.showOverlay(overlay, { anchor: "center", width: "70%", maxHeight: "70%" });
         break;
       }
 
@@ -827,13 +870,16 @@ export class CaitlynTUI {
     const agentChip = this.agent
       ? badge("● READY", PAL.ok, PAL.okBg)
       : badge("○ OFFLINE", PAL.warn, PAL.warnBg);
-    const abChip = badge(`${antibodies.length} ANTIBODIES`, PAL.cyan, PAL.cyanBg);
+    const abChip = badge(`${antibodies.length} Antibodies`, PAL.cyan, PAL.cyanBg);
     const evoChip = badge("EVOLUTION ONLINE", PAL.violet, PAL.violetBg);
+    const quote = randomDefenseQuote();
 
     this.showSystemMessage(
       gradText("◈ CAITLYN DEFENSE ONLINE ◈", PAL.cyan, PAL.magenta, true) + "\n\n" +
       `${agentChip} ${abChip} ${evoChip}\n\n` +
-      `${fg(PAL.faint)}Type to chat · /scan to inspect · /help for commands · Ctrl+C to exit${C.reset}`,
+      `${fg(PAL.faint)}❝ ${quote.text} ❞${C.reset}\n` +
+      `${fg(PAL.faint)}— ${quote.author}${C.reset}\n\n` +
+      `${fg(PAL.faint)}Type to chat · /scan to inspect · /guard for agent protection · /help for commands · Ctrl+C to exit${C.reset}`,
     );
 
     this.editor.disableSubmit = false;

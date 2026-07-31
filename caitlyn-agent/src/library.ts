@@ -273,7 +273,7 @@ export function saveAntibody(entry: AntibodyEntry): void {
   _cachedAntibodies = null; // invalidate cache
   // Rebuild and persist the antibody index so the new antibody is immediately visible
   const all = loadAntibodies();
-  buildAntibodyIndex(all);
+  saveAntibodyIndex(buildAntibodyIndex(all));
 }
 
 export function loadAntigens(): AntigenEntry[] {
@@ -346,8 +346,9 @@ export function buildAntibodyIndex(antibodies: AntibodyEntry[]): AntibodyIndex {
   }
 
   aggregateStats(index);
-  // Auto-persist so list_antibodies always reflects current state
-  saveAntibodyIndex(index);
+  // NOTE: buildAntibodyIndex is a PURE function — it must not persist.
+  // Callers that need the index on disk (saveAntibody, vaccination,
+  // stale-index healing) must call saveAntibodyIndex explicitly.
   return index;
 }
 
@@ -527,7 +528,7 @@ export function persistVaccinatedAntibody(
   // Invalidate caches and rebuild index
   _cachedAntibodies = null;
   const all = loadAntibodies();
-  buildAntibodyIndex(all);
+  saveAntibodyIndex(buildAntibodyIndex(all));
 }
 
 /**

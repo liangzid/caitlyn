@@ -30,7 +30,42 @@
 - PTY 实测: 启动 logo/欢迎横幅/footer 正常; /dashboard /status /help 正常渲染;
   !scan 输出彩色横幅 + 仪表条; Esc 退出 exit=0
 
+* 第二轮：Agent 自我认知修复 + 视觉细节
+
+** 用户反馈
+1. "AB" 缩写不好 → 展开为 Antibodies
+2. Agent 不知道它能发现并保护主机上的 agent（system prompt 自废武功）
+3. logo 标语要让人发现 CAITLYN 是缩写
+4. 启动时随机加载一条攻防名言
+5. 同意 daemon watch 状态页 + 扫描时 footer 实时进度
+
+** 修复
+- footer: AB → Antibodies 胶囊; 扫描时显示 ◐ SCANNING n.ns 动画胶囊（500ms 刷新）
+- system-prompt.ts: 重写 "Agents You Protect" 章节——detect_agents 优先调用、
+  禁止再说 "无法发现 agent"; 工具列表加 detect_agents
+- tools.ts: 新增 detect_agents 工具（detectAgents + isHookInstalled + watch dirs）;
+  list_antibodies 陈旧索引修复
+- logo: 标语改为缩写展开 "C`ontinuous A`gents ... N`exus"，首字母渐变高亮
+- theme.ts: DEFENSE_QUOTES 12 条 + randomDefenseQuote; 欢迎横幅随机展示
+- overlays.ts: 新增 buildGuardOverlay（daemon 状态 + watch 目录 + agent 保护状态 +
+  exposed 警告）; /guard 命令 + Ctrl+G 快捷键 + 帮助页 + 自动补全
+
+** 重大发现：测试污染生产数据
+- 根因: buildAntibodyIndex() 自动持久化到真实 antibodies/index.json，
+  library.test.ts 的 gp/p/c 合成夹具跑一遍测试就把索引写坏
+  → 陈旧索引导致 list_antibodies 返回 "(no antibodies)"、status 显示空森林
+  → LLM 拿不到数据只能编造
+- 修复: buildAntibodyIndex 纯函数化（去掉副作用），持久化改为调用点显式
+  saveAntibodyIndex（saveAntibody / persistVaccinatedAntibody / 陈旧索引治愈路径）
+- vi.mock 探针证实: vitest 原生 ESM 下 mock 无法拦截模块内部自调用，故走根治路线
+
+** 验证
+- tsc 干净; vitest 335/335; build 通过; index.json 跑完测试后 md5 不变
+- detect_agents 实测: 发现 opencode/hermes/pi，hook 状态与 watch 目录正确
+- PTY 实测: 新 logo 缩写展开、随机引言、/guard overlay、扫描进度胶囊全部正常
+- LLM 端到端对话未验证（环境无 deepseek API key，agent 降级为 scan-only）
+
 ** 未来方向（待 grilling）
 - 会话树 /tree 的可视化（当前纯文本缩进）
-- daemon 状态页（watch 目录、hook 状态）
+- daemon watch 状态页（watch 目录、hook 状态）
 - 扫描时 Footer 显示实时进度

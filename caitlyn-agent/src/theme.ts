@@ -207,6 +207,31 @@ export function panelHeader(title: string, width: number, icon = "◈"): string 
   return `${head}${fg(PAL.border)}${rule}${C.reset}`;
 }
 
+// ── Defense Quotes ─────────────────────────────────────────────────
+
+/**
+ * Epigrams on attack and defense, shown at random on TUI startup.
+ */
+export const DEFENSE_QUOTES: Array<{ text: string; author: string }> = [
+  { text: "Trust, but verify.", author: "proverb, popularized by Ronald Reagan" },
+  { text: "The best defense is a good offense.", author: "proverb" },
+  { text: "Security is a process, not a product.", author: "Bruce Schneier" },
+  { text: "Amateurs hack systems, professionals hack people.", author: "Bruce Schneier" },
+  { text: "Never trust user input.", author: "folklore" },
+  { text: "Attack is the secret of defense; defense is the planning of an attack.", author: "Sun Tzu" },
+  { text: "A chain is only as strong as its weakest link.", author: "proverb" },
+  { text: "You can't trust code that you did not totally create yourself.", author: "Ken Thompson" },
+  { text: "Eternal vigilance is the price of liberty.", author: "Wendell Phillips" },
+  { text: "The only truly secure system is powered off, unplugged, locked in a safe, and buried in a concrete bunker.", author: "Gene Spafford" },
+  { text: "Know thy enemy and know yourself; in a hundred battles you will never be in peril.", author: "Sun Tzu" },
+  { text: "The hammer of the defense is forged from the anvil of the attack.", author: "CAITLYN doctrine" },
+];
+
+/** Pick a random defense quote for the startup banner. */
+export function randomDefenseQuote(): { text: string; author: string } {
+  return DEFENSE_QUOTES[Math.floor(Math.random() * DEFENSE_QUOTES.length)];
+}
+
 // ── Token Estimation ──────────────────────────────────────────────
 
 /** Rough token count (4 chars approx 1 token for English, 1 char approx 1 token for CJK). */

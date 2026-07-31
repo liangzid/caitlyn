@@ -62,6 +62,17 @@ export interface TUIHost {
 export async function doScan(self: TUIHost, content: string): Promise<void> {
   self.showSystemMessage(`${fg(PAL.cyan)}◈ ${C.reset}${fg(PAL.dim)}Scanning ${content.length} chars...${C.reset}`);
 
+  // Live progress in the footer status bar (spinner + elapsed seconds)
+  const scanStart = Date.now();
+  self.footer.update({ scanning: true, scanSeconds: 0 });
+  self.footer.invalidate();
+  self.tui.requestRender();
+  const progressTimer = setInterval(() => {
+    self.footer.update({ scanSeconds: (Date.now() - scanStart) / 1000 });
+    self.footer.invalidate();
+    self.tui.requestRender();
+  }, 500);
+
   try {
     const result = await hybridScan({ content, llmCall: self.llmCall });
 
@@ -94,6 +105,10 @@ export async function doScan(self: TUIHost, content: string): Promise<void> {
   } catch (e) {
     const err = e instanceof Error ? e : new Error(String(e));
     self.showSystemMessage(`${C.red}❌ Scan failed:${C.reset} ${translateLlmError(err)}`);
+  } finally {
+    clearInterval(progressTimer);
+    self.footer.update({ scanning: false });
+    self.refreshFooter();
   }
 }
 
@@ -400,11 +415,13 @@ export function showHelp(self: TUIHost): void {
     `  /scan <content>      Security scan for injection attacks`,
     `  /status              Immune library status`,
     `  /dashboard           Defense telemetry dashboard`,
+    `  /guard               Agent protection & watch status`,
     `  /history             Recent scan history`,
     `  /antibody list       List antibody forest`,
     `  /antigen <id>        Show antigen details`,
     `  /vaccinate <pattern> Evolve antibody`,
     ``,
+    `${fg(PAL.faint)}Ctrl+G guard status · Ctrl+D dashboard · Ctrl+S status · Ctrl+H history · Ctrl+P model${C.reset}`,
     section("SESSION"),
     `  /new                 Start new session`,
     `  /resume              Open session picker`,

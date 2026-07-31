@@ -1,15 +1,15 @@
 /**
  * CAITLYN Agent — Tool Definitions
  *
- * 10 tools registered with the pi Agent harness:
+ * 11 tools registered with the pi Agent harness:
  *   caitlyn_scan, list_antibodies, list_antigens, read_antibody,
  *   read_antigen, evaluate_antibody, run_detect_script,
- *   scan_history, dashboard, caitlyn_vaccinate
+ *   scan_history, dashboard, detect_agents, caitlyn_vaccinate
  */
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static } from "@earendil-works/pi-ai";
-import { loadAntibodies, loadAntigens, loadAntibodyIndex, buildAntibodyIndex, saveAntibody, ANTIBODIES_DIR, getCostMonitor, getMemoryBank, getVaccinationPipeline, toEvoAntibody, persistVaccinatedAntibody } from "./library.js";
+import { loadAntibodies, loadAntigens, loadAntibodyIndex, buildAntibodyIndex, saveAntibodyIndex, saveAntibody, ANTIBODIES_DIR, getCostMonitor, getMemoryBank, getVaccinationPipeline, toEvoAntibody, persistVaccinatedAntibody } from "./library.js";
 import { scan, runTier0, type LlmCallFn } from "./scanner.js";
 import { getDashboard, getHistory } from "./history.js";
 import type { AntibodyEntry, AntibodyConfig } from "./schema.js";
@@ -142,7 +142,15 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
       parameters: ListAntibodiesParams,
       async execute(_toolCallId, params: any) {
         const antibodies = loadAntibodies();
-        const index = loadAntibodyIndex() ?? buildAntibodyIndex(antibodies);
+        let index = loadAntibodyIndex() ?? buildAntibodyIndex(antibodies);
+        // If the persisted index is stale (roots/trees no longer resolve),
+        // rebuild it from the real forest and persist the healed index.
+        const rootsResolve = (idx: typeof index) =>
+          idx.roots.some((rid) => antibodies.some((a) => a.config.id === rid));
+        if (!rootsResolve(index)) {
+          index = buildAntibodyIndex(antibodies);
+          saveAntibodyIndex(index);
+        }
         const filter = (params.filter as string | undefined)?.toLowerCase();
         const lines: string[] = [];
         for (const rootId of index.roots) {
@@ -366,7 +374,39 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
       },
     },
 
-    // ── 10. caitlyn_vaccinate ──
+    // ── 10. detect_agents ──
+    {
+      name: "detect_agents",
+      label: "Detect Agents",
+      description:
+        "Detect AI agents installed on this host (claude-code, codex, opencode, openclaw, pi, ...), whether CAITLYN hooks are installed for them, and which directories CAITLYN watches to protect them.",
+      parameters: Type.Object({}),
+      async execute(_toolCallId, _params: any) {
+        const { detectAgents, isHookInstalled, getWatchDirsForAgents } = await import("./adapters/registry.js");
+        const results = detectAgents();
+        const watch = getWatchDirsForAgents();
+        if (results.length === 0) {
+          return textResult("No known agent types detected on this host.");
+        }
+        const lines: string[] = [];
+        lines.push(`Detected agents on this host (${results.length} known types):`);
+        for (const r of results) {
+          const status = r.installed ? "PRESENT" : "not found";
+          const hook = isHookInstalled(r.agent.id) ? "hooks ✓" : "hooks ✗";
+          const dirs = watch.agentDirs[r.agent.id] ?? [];
+          const dirPart = dirs.length > 0 ? ` watches: ${dirs.join(", ")}` : "";
+          lines.push(`  ${r.agent.id} (${status}, ${hook}, integration: ${r.agent.integrationMethod})${dirPart}`);
+          if (r.installed) {
+            lines.push(`    found: ${r.foundPaths.join(", ")}`);
+          }
+        }
+        lines.push("");
+        lines.push("To protect an agent, install its hook: caitlyn install <agent-id> (CLI).");
+        return textResult(lines.join("\n"));
+      },
+    },
+
+    // ── 11. caitlyn_vaccinate ──
     {
       name: "caitlyn_vaccinate",
       label: "Trigger Vaccination",

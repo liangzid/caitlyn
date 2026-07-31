@@ -44,6 +44,10 @@ export const CAITLYN_COMMANDS: CaitlynCommand[] = [
     description: "Recent scan history",
     argumentHint: "[N]",
   },
+  {
+    name: "guard",
+    description: "Agent protection & watch status",
+  },
 
   // ── Antibody Management ─────────────────────────────────────────
   {

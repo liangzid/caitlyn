@@ -37,6 +37,13 @@ function formatCost(cost: number): string {
   return `$${cost.toFixed(2)}`;
 }
 
+/** Animated scanning pill: spinner glyph rotates with elapsed seconds. */
+function scanPill(seconds: number): string {
+  const spin = ["◐", "◓", "◑", "◒"];
+  const glyph = spin[Math.floor(seconds * 2) % spin.length];
+  return badge(`${glyph} SCANNING ${seconds.toFixed(1)}s`, PAL.warn, PAL.warnBg);
+}
+
 // ── Data Interface ────────────────────────────────────────────────
 
 export interface FooterData {
@@ -64,6 +71,10 @@ export interface FooterData {
   daemonStatus: "connected" | "disconnected" | "checking";
   antibodyCount: number;
   sessionName?: string;
+
+  // Live scan progress (set while doScan is running)
+  scanning?: boolean;
+  scanSeconds?: number;
 }
 
 // ── Component ─────────────────────────────────────────────────────
@@ -103,14 +114,16 @@ export class FooterComponent implements Component {
       left1 += `  ${fg(PAL.faint)}◆${C.reset} ${fg(PAL.dim)}${d.sessionName}${C.reset}`;
     }
 
-    // Right: daemon status + antibody count pills
+    // Right: daemon status + antibody count pills (scan progress replaces daemon pill)
     const daemonPill = d.daemonStatus === "connected"
       ? badge("● DAEMON", PAL.ok, PAL.okBg)
       : d.daemonStatus === "checking"
         ? badge("◌ CHECKING", PAL.warn, PAL.warnBg)
         : badge("○ LOCAL", PAL.faint, PAL.grayBg);
-    const abPill = badge(`${d.antibodyCount} AB`, PAL.cyan, PAL.cyanBg);
-    const right1 = `${daemonPill} ${abPill}`;
+    const abPill = badge(`${d.antibodyCount} Antibodies`, PAL.cyan, PAL.cyanBg);
+    const right1 = d.scanning
+      ? `${scanPill(d.scanSeconds ?? 0)} ${abPill}`
+      : `${daemonPill} ${abPill}`;
 
     // ── Line 2 ────────────────────────────────────────────────
     // Left: token telemetry, ordered by priority so narrow widths
