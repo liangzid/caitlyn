@@ -38,6 +38,13 @@ export class CostMonitor {
     } catch { /* file missing or corrupt — start fresh */ }
   }
 
+  /** Append a record snapshot to the JSONL log (later lines win on load). */
+  private persist(record: CostRecord): void {
+    try {
+      fs.appendFileSync(COST_PATH, JSON.stringify(record) + "\n", "utf-8");
+    } catch { /* disk full — memory-only fallback */ }
+  }
+
   computePatternHash(content: string): string {
     const normalized = content.slice(0, 500).replace(/\s+/g, " ").trim().toLowerCase();
     return createHash("sha256").update(normalized).digest("hex").slice(0, 16);
@@ -62,6 +69,8 @@ export class CostMonitor {
       else existing.failureCount++;
       existing.lastSeen = new Date().toISOString();
       existing.resolvedBy = [...new Set([...existing.resolvedBy, ...resolvedBy])];
+      // Persist the updated snapshot so restart does not lose the history.
+      this.persist(existing);
       return existing;
     }
 
@@ -82,10 +91,7 @@ export class CostMonitor {
     };
     this.records.set(hash, record);
 
-    // Persist: append one JSON line
-    try {
-      fs.appendFileSync(COST_PATH, JSON.stringify(record) + "\n", "utf-8");
-    } catch { /* disk full — memory-only fallback */ }
+    this.persist(record);
 
     return record;
   }
@@ -109,6 +115,7 @@ export class CostMonitor {
     if (record) {
       record.vaccinated = true;
       record.vaccineAntibodyId = antibodyId;
+      this.persist(record);
     }
   }
 
