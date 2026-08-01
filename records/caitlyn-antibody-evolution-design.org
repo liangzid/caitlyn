@@ -42,11 +42,21 @@ Stage 1 重新设计疫苗/进化链路。团长明确：现有 evolution 相关
     （生成 deepseek-v4-pro、评审 deepseek-v4-flash）。输入 = 候选 + 确定性验证
     结果 + 库背景；输出结构化评审单（accept/revise/reject + 具体建议）。
     理由：loop engineering 证据表明自我评审容易偏袒自己的产物。
+11. 失败教训记忆（已确认，方案 1）：独立于 DAG 持久化教训库
+    ~/.caitlyn/evolution/lessons.jsonl；每条 = {关联抗原簇/类别, 轮次, 候选摘要,
+    确定性验证结果, 评审结论与建议, 与上轮相比的改动}；循环开始时按抗原簇筛选
+    最近 K 条（10）+ LLM 聚合的"教训摘要"注入生成器；评审者不喂教训，保持独立；
+    教训不进入 DAG 谱系元数据，避免 DAG 膨胀。
+12. 候选晋升（已确认，双通道）：仅适用于 unknown_threat_action = "candidate"
+    产生的泛化候选。
+    - 显式批准：用户/agent 对 candidate 明确 approve → 立即 active。
+    - shadow 观察期：candidate 以影子模式注入扫描（只记录、不拦截）；观察窗口
+      （7 天或累计 N 次扫描，先到为准）内 0 FP 且至少 1 次被确认的可疑命中 →
+      自动晋升；出现 FP 或窗口到期未达标 → 降 dormant（保留供人工复审）。
+    - record 模式永不生成候选；auto 模式无样本时不自动激活。
 
 * 待讨论分支（一次一个，逐个确认）
 
-- Reflexion 式失败教训记忆：存哪、怎么存、如何进入下一轮上下文。
-- 候选晋升/证据机制：candidate 何时自动转 active。
 - DAG 生命周期：库上限、低效抗体退役、重复度控制。
 - 对抗投毒防护：攻击者诱导生成坏抗体的防护。
 - 实现顺序（分几个 commit 落地），设计确认后再动代码。
