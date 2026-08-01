@@ -382,6 +382,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     const confidence = parsed.confidence;
     const latency = Math.round(performance.now() - scanStart) * 1000;
     appendStatsEvent("evolution_self", "scan_latency_us", latency);
+    appendStatsEvent("evolution_self", "scan_tokens", totalTokens);
 
     const result: ScanResult = {
       verdict,
