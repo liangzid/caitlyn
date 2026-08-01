@@ -28,8 +28,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PKG_ROOT = path.resolve(__dirname, "..");
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
-export const ANTIBODIES_DIR = path.join(PROJECT_ROOT, "antibodies");
-export const ANTIGENS_DIR = path.join(PROJECT_ROOT, "antigens");
+/** Library root; CAITLYN_LIBRARY_DIR overrides it for isolated tests. */
+const LIBRARY_ROOT = process.env.CAITLYN_LIBRARY_DIR
+  ? path.resolve(process.env.CAITLYN_LIBRARY_DIR)
+  : PROJECT_ROOT;
+export const ANTIBODIES_DIR = path.join(LIBRARY_ROOT, "antibodies");
+export const ANTIGENS_DIR = path.join(LIBRARY_ROOT, "antigens");
 
 // ── Simple YAML parser imported from yaml-parser.ts ───────────────
 
@@ -186,6 +190,13 @@ const CACHE_TTL_MS = 30_000;
 
 function cacheExpired(): boolean {
   return Date.now() - _cacheTime > CACHE_TTL_MS;
+}
+
+/** Invalidate the antibody/antigen caches (after external edits). */
+export function invalidateLibraryCache(): void {
+  _cachedAntibodies = null;
+  _cachedAntigens = null;
+  _cacheTime = 0;
 }
 
 // ── Load Antibodies ───────────────────────────────────────────────

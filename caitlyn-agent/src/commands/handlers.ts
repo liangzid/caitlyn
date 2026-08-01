@@ -19,6 +19,7 @@ import type { LlmCallFn } from "../scanner.js";
 import { hybridScan } from "../hybrid-scanner.js";
 import {
   buildAntibodyIndex,
+  invalidateLibraryCache,
   loadAntibodies,
   loadAntigens,
   saveAntibody,
@@ -213,6 +214,7 @@ export async function doAntibodyRemove(self: TUIHost, id: string): Promise<void>
   fs.mkdirSync(trashDir, { recursive: true });
   const target = path.join(trashDir, `${id}-${Date.now()}`);
   fs.renameSync(dirPath, target);
+  invalidateLibraryCache();
   const all = loadAntibodies();
   saveAntibodyIndex(buildAntibodyIndex(all));
   self.showSystemMessage(
