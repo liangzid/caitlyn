@@ -13,7 +13,9 @@ import type { DagScorePolicy } from "./dag-types.js";
 import type { AntigenProfile, LoopResult } from "./loop-types.js";
 import { EvolutionLoop } from "./loop.js";
 import { LessonsStore } from "./lessons-store.js";
+import { loadAttackSamples } from "./redteam.js";
 import { ShadowManager } from "./shadow.js";
+import { findSimilarSamples } from "./similar-samples.js";
 import { VerificationSandbox } from "./verifier.js";
 
 export interface EvolutionEngineDeps {
@@ -53,6 +55,7 @@ export class EvolutionEngine {
 
   async run(request: EvolutionRunRequest): Promise<EvolutionRunOutcome> {
     const { config } = this.deps;
+    const enriched = this.enrichProfile(request, config);
     const dag = new AntibodyDagStore(config.evolutionDir, dagPolicyFrom(config));
     dag.load();
     const lessons = new LessonsStore(config.evolutionDir);
@@ -79,10 +82,10 @@ export class EvolutionEngine {
 
     const outcome = await loop.run({
       clusterId: request.clusterId,
-      target: request.target,
-      profile: request.profile,
-      mustDetect: request.mustDetect,
-      benign: request.benign,
+      target: enriched.target,
+      profile: enriched.profile,
+      mustDetect: enriched.mustDetect,
+      benign: enriched.benign,
       dag,
       lessons,
     });
@@ -103,5 +106,42 @@ export class EvolutionEngine {
     }
 
     return { loop: outcome, shadowStarted };
+  }
+
+  /**
+   * Attach a similar-sample cluster (from the real knowledge base) to
+   * the profile as anti-overfitting reference context when the caller
+   * did not provide one.
+   */
+  private enrichProfile(
+    request: EvolutionRunRequest,
+    config: EvolutionConfig,
+  ): EvolutionRunRequest {
+    if (
+      request.mustDetect.length === 0 ||
+      (request.profile.similarSamples && request.profile.similarSamples.length > 0)
+    ) {
+      return request;
+    }
+    try {
+      const pool = loadAttackSamples();
+      const similar = findSimilarSamples(
+        request.mustDetect.join("\n"),
+        pool,
+        config.similarSamples,
+      );
+      if (similar.length > 0) {
+        return {
+          ...request,
+          profile: {
+            ...request.profile,
+            similarSamples: similar.map((s) => s.content),
+          },
+        };
+      }
+    } catch {
+      // Knowledge base unavailable — proceed without the reference cluster.
+    }
+    return request;
   }
 }

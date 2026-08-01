@@ -50,6 +50,7 @@ describe("loadEvolutionConfig", () => {
         "shadow_window_days = 3",
         "shadow_min_scans = 10",
         "lessons_per_cluster = 4",
+        "similar_samples = 2",
         "cooldown_minutes = 15",
         "daily_evolution_limit = 2",
         'evolution_dir = "./evo-state"',
@@ -77,6 +78,7 @@ describe("loadEvolutionConfig", () => {
     expect(cfg.shadowWindowDays).toBe(3);
     expect(cfg.shadowMinScans).toBe(10);
     expect(cfg.lessonsPerCluster).toBe(4);
+    expect(cfg.similarSamples).toBe(2);
     expect(cfg.cooldownMinutes).toBe(15);
     expect(cfg.dailyEvolutionLimit).toBe(2);
     expect(cfg.evolutionDir).toBe(path.resolve(dir, "evo-state"));

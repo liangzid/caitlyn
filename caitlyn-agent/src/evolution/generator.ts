@@ -58,6 +58,11 @@ export function buildGeneratorPrompt(params: {
       ? `\n${lessonLines.join("\n")}\n聚合摘要：${params.lessonSummary || "(无)"}`
       : "(无)";
 
+  const similarText =
+    params.profile.similarSamples && params.profile.similarSamples.length > 0
+      ? params.profile.similarSamples.map((s) => `  - ${s}`).join("\n")
+      : "  (无)";
+
   return [
     `# 目标`,
     params.target,
@@ -68,6 +73,9 @@ export function buildGeneratorPrompt(params: {
     `sample_count: ${params.profile.sampleCount}`,
     `features:`,
     ...params.profile.features.map((f) => `  - ${f}`),
+    ``,
+    `# 相似样本簇（参考上下文，防过拟合；不是硬约束）`,
+    similarText,
     ``,
     `# 当前抗体 DAG（只读背景）`,
     params.dagMeta,

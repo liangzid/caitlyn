@@ -51,6 +51,8 @@ shadow_min_scans = 50
 lessons_per_cluster = 10
 # accept 候选是否再独立评审一次（评审一致性抽查；成本约翻倍）
 consistency_recheck = false
+# 生成器参考的相似样本簇大小（防过拟合参考上下文，非硬约束）
+similar_samples = 3
 cooldown_minutes = 60
 daily_evolution_limit = 10
 # evolution_dir = "./.caitlyn-evolution"

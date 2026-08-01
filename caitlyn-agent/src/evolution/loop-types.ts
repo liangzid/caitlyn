@@ -13,6 +13,8 @@ export interface AntigenProfile {
   category: string;
   /** 提炼后的特征描述（由 daemon 从触发样本生成）。 */
   features: string[];
+  /** 相似样本簇内容（参考上下文，防过拟合，不进入硬约束）。 */
+  similarSamples?: string[];
   sampleCount: number;
 }
 
