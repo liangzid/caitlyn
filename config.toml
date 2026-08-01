@@ -25,6 +25,34 @@ max_survivors = 3
 affinity_recall_weight = 0.7
 fp_tolerance = 0.05
 
+[evolution]
+# 有样本路径的自治等级：record | candidate | auto（默认 auto）
+autonomy = "auto"
+# 无样本路径（未知威胁）的处置：record | candidate | auto（默认 candidate）
+unknown_threat_action = "candidate"
+# 生成器读取 DAG 的粒度：meta | full（默认 meta）
+dag_context = "meta"
+# 生成器/评审模型；缺省继承 [llm].model / [llm].small_model
+# generator_model = "deepseek-v4-pro"
+# reviewer_model = "deepseek-v4-flash"
+candidates_per_run = 3
+max_rounds = 5
+max_tokens_per_run = 40000
+active_cap = 256
+fp_penalty_weight = 5
+score_decay_days = 90
+dormant_grace_days = 30
+retire_inactive_days = 90
+benign_samples = 5
+max_benign_false_positives = 1
+regex_timeout_ms = 200
+shadow_window_days = 7
+shadow_min_scans = 50
+lessons_per_cluster = 10
+cooldown_minutes = 60
+daily_evolution_limit = 10
+# evolution_dir = "./.caitlyn-evolution"
+
 [memory]
 fts5_enabled = true
 semantic_enabled = false
