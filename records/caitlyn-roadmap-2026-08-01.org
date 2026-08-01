@@ -1,0 +1,32 @@
+#+TITLE: CAITLYN 遗留 TODO 与 Roadmap 讨论
+#+AUTHOR: Zi Liang (团长) + Agent
+#+DATE: 2026-08-01
+
+* 背景
+
+修复计划（15 commits）全部完成并推送后，团长要求盘点剩余 TODO 并给出 roadmap。
+
+* 悬置 TODO（团长此前明确挂起）
+
+1. 疫苗接种空转：CostMonitor.record() 无调用点，pipeline.vaccinate() 恒空；
+   CLI `caitlyn vaccinate` 命令缺失（help 有、实现无）；触发回路未接入扫描路径。
+2. 测试相关工作：registry.test.ts 环境敏感失败（codex on PATH）；测试非隔离
+   （会写真实 config.yaml 统计，B5 落盘后显性化）；无集成测试与 CI。
+
+* 新确认的遗留问题（本次 roadmap 讨论补充）
+
+- 双 guard 逻辑：AgentHooksEngine 生产代码未接线（仅测试使用），实际 hook 走 hook-bin 简化逻辑
+- hook-bin 的 post 字段未使用（PostToolUse 输出扫描语义未实现）
+- scanner totalTokens 写死 +1，成本统计失真
+- AgentEval caitlyn_py_defense 是独立实现（verdict "safe"），与 daemon 契约未统一
+- caitlyn_mcp_proxy 参数 schema 未注册、未真正网络转发
+- daemon HTTP 无 body 限制/超时（localhost，低危）
+- parseYaml 对单引号多行标量解析不完整（config prompt 字段未进 schema，暂不影响）
+- /antibody add|remove 仍是 stub；doLogin 不真正持久化 key
+- 环境遗留：本机 9070 旧 daemon 未重启；caitlyn.db / 旧 cost_log 测试数据可清理
+
+* Roadmap 结论
+
+阶段 0 环境收尾 → 阶段 1 悬置 TODO（疫苗链路、测试基建）→ 阶段 2 正确性收尾
+（guard 合一、post 语义、token 统计、eval 统一）→ 阶段 3 研究/产品方向
+（AgentEval 大规模评测、抗体库去重、Guard Sandbox、上下文关联扫描）。
