@@ -11,6 +11,8 @@ import * as path from "node:path";
 export interface CaitlynAgentConfig {
   provider: string;
   model: string;
+  /** 轻量模型（评审/摘要等辅助任务），缺省回退 model。 */
+  smallModel: string;
 }
 
 // ── Evolution (Immune System 2) Config ─────────────────────────────
@@ -135,10 +137,11 @@ export function loadConfig(): CaitlynAgentConfig {
     return {
       provider: provider ?? llm["provider"] ?? "openrouter",
       model: model ?? llm["model"] ?? "deepseek/deepseek-chat",
+      smallModel: llm["small_model"] ?? model ?? llm["model"] ?? "deepseek/deepseek-chat",
     };
   }
 
-  return { provider, model };
+  return { provider, model, smallModel: model };
 }
 
 /**

@@ -15,6 +15,8 @@
  *   caitlyn install <agent>   Inject CAITLYN hooks into an agent's config
  *   caitlyn providers         List available LLM providers
  *   caitlyn vaccinate <pattern>  Submit vaccination pattern to daemon
+ *   caitlyn vaccinate --approve <id>  Explicitly activate a candidate
+ *   caitlyn vaccinate --status       Show the evolution DAG
  */
 
 import { spawnSync } from "node:child_process";
@@ -47,6 +49,11 @@ import {
 import { detectAgents, installAgent, uninstallAgent, isHookInstalled, getWatchDirsForAgents } from "./adapters/registry.js";
 import { isDaemonRunning, startDaemon, stopDaemon, daemonStatus } from "./daemon/index.js";
 import { isDaemonAvailable, daemonScan, getDaemonStatus, daemonWatch, getWatchInfo } from "./daemon/index.js";
+import {
+  approveAntibody,
+  printEvolutionStatus,
+  runVaccination,
+} from "./commands/evolution.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -206,6 +213,33 @@ async function main() {
         console.log(`  ${p}`);
         for (const m of models.slice(0, 5)) console.log(`    - ${m.id}`);
         if (models.length > 5) console.log(`    ... and ${models.length - 5} more`);
+      }
+      process.exit(0);
+    }
+    case "vaccinate": {
+      const sub = args[1];
+      if (sub === "--approve") {
+        const id = args[2];
+        if (!id) {
+          console.log("Usage: caitlyn vaccinate --approve <antibody-id>");
+          process.exit(1);
+        }
+        approveAntibody(id);
+        process.exit(0);
+      }
+      if (sub === "--status") {
+        printEvolutionStatus();
+        process.exit(0);
+      }
+      if (!sub) {
+        console.log("Usage: caitlyn vaccinate <pattern>");
+        process.exit(1);
+      }
+      try {
+        await runVaccination(sub);
+      } catch (err) {
+        console.error(`❌ Vaccination failed: ${err instanceof Error ? err.message : String(err)}`);
+        process.exit(1);
       }
       process.exit(0);
     }
