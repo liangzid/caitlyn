@@ -1,8 +1,34 @@
 /**
  * Tests for scanner.ts — prompt building and response parsing.
  */
-import { describe, it, expect } from "vitest";
-import { buildTier1Prompt, parseTier1Response } from "../src/scanner.js";
+import { describe, it, expect, vi } from "vitest";
+import * as fs from "node:fs";
+import * as path from "node:path";
+
+// Isolate HOME and stub recordScanFeedback so scan() integration tests
+// never touch real ~/.caitlyn state or rewrite antibody configs.
+const { testHomeId } = vi.hoisted(() => ({
+  testHomeId: "caitlyn-scanner-home-" + Date.now().toString(36),
+}));
+
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  const base = actual.tmpdir() + "/" + testHomeId;
+  return { ...actual, homedir: () => base };
+});
+
+vi.mock("../src/library.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/library.js")>();
+  return { ...actual, recordScanFeedback: vi.fn() };
+});
+
+import {
+  buildTier1Prompt,
+  estimateScanTokens,
+  estimateTokens,
+  parseTier1Response,
+  scan,
+} from "../src/scanner.js";
 import type { AntibodyEntry, AntigenEntry } from "../src/schema.js";
 
 // ── Test Helpers ────────────────────────────────────────────────────
@@ -258,5 +284,47 @@ describe("parseTier1Response", () => {
     const result = parseTier1Response("malicious 0.99\nsome extra text");
     expect(result.verdict).toBe("suspicious");
     expect(result.confidence).toBe(0.5);
+  });
+});
+
+describe("token estimation", () => {
+  it("estimates tokens as ceil(length / 4)", () => {
+    expect(estimateTokens("")).toBe(0);
+    expect(estimateTokens("abcd")).toBe(1);
+    expect(estimateTokens("abcdef")).toBe(2);
+  });
+
+  it("sums system, user and output tokens for a scan", () => {
+    const total = estimateScanTokens("a".repeat(100), "b".repeat(100), "c".repeat(20));
+    expect(total).toBe(25 + 25 + 5);
+  });
+});
+
+describe("scan() cost accounting", () => {
+  it("reports the real prompt + output token estimate for Tier 1", async () => {
+    const { systemPrompt, userPrompt } = buildTier1Prompt([], [], "hello");
+    const output = "benign 0.95";
+    const result = await scan({
+      antibodies: [],
+      antigens: [],
+      content: "hello",
+      llmCall: async () => output,
+    });
+    expect(result.tier).toBe(1);
+    expect(result.total_tokens).toBe(estimateScanTokens(systemPrompt, userPrompt, output));
+    expect(result.total_tokens).toBeGreaterThan(1); // no longer hardcoded +1
+  });
+
+  it("reports zero tokens when the LLM call fails (fallback path)", async () => {
+    const result = await scan({
+      antibodies: [],
+      antigens: [],
+      content: "hello",
+      llmCall: async () => {
+        throw new Error("llm down");
+      },
+    });
+    expect(result.tier).toBe(1);
+    expect(result.total_tokens).toBe(0);
   });
 });

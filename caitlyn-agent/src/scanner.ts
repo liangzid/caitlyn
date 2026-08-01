@@ -322,6 +322,20 @@ export interface ScanOptions {
   tier0TimeoutMs?: number;
 }
 
+/** Approximate token count (4 characters per token, like evolution). */
+export function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/** Estimated Tier 1 cost: prompt (system + user) plus the LLM output. */
+export function estimateScanTokens(
+  systemPrompt: string,
+  userPrompt: string,
+  output: string,
+): number {
+  return estimateTokens(systemPrompt) + estimateTokens(userPrompt) + estimateTokens(output);
+}
+
 export async function scan(options: ScanOptions): Promise<ScanResult> {
   const scanStart = performance.now();
   let totalTokens = 0;
@@ -359,7 +373,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
   try {
     const llmOutput = await options.llmCall(systemPrompt, userPrompt);
     const t1End = performance.now();
-    totalTokens += 1; // single-token output
+    totalTokens = estimateScanTokens(systemPrompt, userPrompt, llmOutput);
 
     // Parse LLM output: expected format is "verdict confidence" (e.g., "malicious 0.92")
     const trimmed = llmOutput.trim();
