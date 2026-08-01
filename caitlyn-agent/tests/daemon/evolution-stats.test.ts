@@ -9,7 +9,7 @@ import { EVOLUTION_DEFAULTS, type EvolutionConfig } from "../../src/config.js";
 import { DaemonServer } from "../../src/daemon/server.js";
 import { StatsCollector } from "../../src/evolution/stats-collector.js";
 
-const PORT = 19071;
+const PORT = 19072;
 
 function queuedLlm(...responses: string[]): (s: string, u: string) => Promise<string> {
   const queue = [...responses];
