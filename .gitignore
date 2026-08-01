@@ -6,3 +6,4 @@ __pycache__/
 caitlyn-agent/scan_history.json
 cost_log.jsonl
 memory_bank.jsonl
+*~undo-tree~
