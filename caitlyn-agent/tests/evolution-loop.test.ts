@@ -25,6 +25,7 @@ function makeConfig(overrides: Partial<EvolutionLoopConfig> = {}): EvolutionLoop
     maxTokensPerRun: 1_000_000,
     dagContext: "meta",
     lessonsPerCluster: 10,
+    consistencyRecheck: false,
     autonomy: "auto",
     hasSamples: true,
     maxBenignFalsePositives: 1,
@@ -407,5 +408,45 @@ describe("EvolutionLoop", () => {
 
     expect(dag.getNode("ab-existing")!.status).toBe("active");
     expect(dag.getNode("ab-new-1")!.status).toBe("active");
+  });
+
+  it("approves an accept candidate when the consistency recheck agrees", async () => {
+    const loop = new EvolutionLoop(
+      makeConfig({
+        consistencyRecheck: true,
+        generatorLlm: queuedLlm(GOOD_CANDIDATE),
+        reviewerLlm: queuedLlm(ACCEPT_REVIEW, ACCEPT_REVIEW),
+      }),
+    );
+    const result = await loop.run(makeParams());
+
+    expect(result.approved).toHaveLength(1);
+    expect(result.termination).toBe("accept");
+  });
+
+  it("rejects an accept candidate when the consistency recheck disagrees", async () => {
+    const loop = new EvolutionLoop(
+      makeConfig({
+        consistencyRecheck: true,
+        maxRounds: 1,
+        generatorLlm: queuedLlm(GOOD_CANDIDATE),
+        reviewerLlm: queuedLlm(
+          ACCEPT_REVIEW,
+          JSON.stringify({
+            verdict: "reject",
+            reason: "second opinion",
+            suggestion: "too risky",
+            duplicateOf: null,
+          }),
+        ),
+      }),
+    );
+    const result = await loop.run(makeParams());
+
+    expect(result.approved).toEqual([]);
+    expect(dag.getNode("ab-new-1")).toBeNull();
+    const written = lessons.list();
+    expect(written).toHaveLength(2);
+    expect(written[1].reviewSuggestion).toContain("inconsistent re-review");
   });
 });

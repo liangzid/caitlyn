@@ -65,6 +65,8 @@ export interface EvolutionConfig {
   shadowMinScans: number;
   /** 每抗原簇注入生成器的教训条数上限。 */
   lessonsPerCluster: number;
+  /** 评审一致性抽查：accept 候选是否再独立评审一次（成本翻倍）。 */
+  consistencyRecheck: boolean;
   /** 同一抗原簇触发免疫应答的冷却时间（分钟）。 */
   cooldownMinutes: number;
   /** 每日免疫应答次数上限（防成本攻击）。 */
@@ -93,6 +95,7 @@ export const EVOLUTION_DEFAULTS: EvolutionConfig = {
   shadowWindowDays: 7,
   shadowMinScans: 50,
   lessonsPerCluster: 10,
+  consistencyRecheck: false,
   cooldownMinutes: 60,
   dailyEvolutionLimit: 10,
   evolutionDir: path.join(os.homedir(), ".caitlyn", "evolution"),
@@ -204,6 +207,13 @@ function parseNonNegativeNumber(
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
+function parseBoolean(raw: Record<string, string>, key: string, fallback: boolean): boolean {
+  const value = raw[key];
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return fallback;
+}
+
 /**
  * Load the [evolution] TOML section with safe defaults.
  *
@@ -247,6 +257,7 @@ export function loadEvolutionConfig(configPath?: string): EvolutionConfig {
   cfg.shadowWindowDays = parsePositiveNumber(raw, "shadow_window_days", cfg.shadowWindowDays);
   cfg.shadowMinScans = parsePositiveNumber(raw, "shadow_min_scans", cfg.shadowMinScans);
   cfg.lessonsPerCluster = parsePositiveNumber(raw, "lessons_per_cluster", cfg.lessonsPerCluster);
+  cfg.consistencyRecheck = parseBoolean(raw, "consistency_recheck", cfg.consistencyRecheck);
   cfg.cooldownMinutes = parsePositiveNumber(raw, "cooldown_minutes", cfg.cooldownMinutes);
   cfg.dailyEvolutionLimit = parsePositiveNumber(raw, "daily_evolution_limit", cfg.dailyEvolutionLimit);
 

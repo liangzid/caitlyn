@@ -139,4 +139,27 @@ describe("loadEvolutionConfig", () => {
     expect(cfg.generatorModel).toBeNull();
     expect(cfg.reviewerModel).toBeNull();
   });
+
+  it("parses the consistency_recheck boolean with a safe default", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-evo-cfg-"));
+    const on = writeToml(
+      dir,
+      ["[evolution]", "consistency_recheck = true", ""].join("\n"),
+    );
+    expect(loadEvolutionConfig(on).consistencyRecheck).toBe(true);
+
+    const off = writeToml(
+      dir,
+      ["[evolution]", "consistency_recheck = false", ""].join("\n"),
+    );
+    expect(loadEvolutionConfig(off).consistencyRecheck).toBe(false);
+
+    const bad = writeToml(
+      dir,
+      ["[evolution]", "consistency_recheck = maybe", ""].join("\n"),
+    );
+    expect(loadEvolutionConfig(bad).consistencyRecheck).toBe(
+      EVOLUTION_DEFAULTS.consistencyRecheck,
+    );
+  });
 });

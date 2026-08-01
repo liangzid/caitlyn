@@ -31,6 +31,8 @@ export interface EvolutionLoopConfig {
   maxTokensPerRun: number;
   dagContext: "meta" | "full";
   lessonsPerCluster: number;
+  /** 评审一致性抽查：accept 候选再独立评审一次。 */
+  consistencyRecheck: boolean;
   /** 有样本路径的自治等级（auto 且 hasSamples 才直接 active）。 */
   autonomy: EvolutionAutonomy;
   hasSamples: boolean;
@@ -136,6 +138,30 @@ export class EvolutionLoop {
           verification.mustDetectPassed &&
           verification.falsePositiveCount <= this.config.maxBenignFalsePositives;
         if (hardPass && review.sheet.verdict === "accept") {
+          if (this.config.consistencyRecheck) {
+            const second = await this.reviewCandidate(draft, verification, params.dag);
+            result.tokensUsed += estimateTokens(second.prompt + second.output);
+            if (second.sheet.verdict !== "accept") {
+              params.lessons.append({
+                clusterId: params.clusterId,
+                round,
+                source: "review",
+                candidateId: draft.id,
+                candidateSummary: `${draft.name}: ${draft.description}`,
+                verification: {
+                  mustDetectPassed: verification.mustDetectPassed,
+                  falsePositiveCount: verification.falsePositiveCount,
+                  benignSampleCount: verification.benignSampleCount,
+                },
+                reviewVerdict: "reject",
+                reviewSuggestion:
+                  `inconsistent re-review: first=accept, second=${second.sheet.verdict}`,
+                changeSinceLastRound: "",
+              });
+              result.lessonsWritten += 1;
+              continue;
+            }
+          }
           result.approved.push({ draft, verification, review: review.sheet });
         }
       }

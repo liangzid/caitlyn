@@ -49,6 +49,8 @@ regex_timeout_ms = 200
 shadow_window_days = 7
 shadow_min_scans = 50
 lessons_per_cluster = 10
+# accept 候选是否再独立评审一次（评审一致性抽查；成本约翻倍）
+consistency_recheck = false
 cooldown_minutes = 60
 daily_evolution_limit = 10
 # evolution_dir = "./.caitlyn-evolution"

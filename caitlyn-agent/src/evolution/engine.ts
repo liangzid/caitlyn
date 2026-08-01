@@ -70,6 +70,7 @@ export class EvolutionEngine {
       maxTokensPerRun: config.maxTokensPerRun,
       dagContext: config.dagContext,
       lessonsPerCluster: config.lessonsPerCluster,
+      consistencyRecheck: config.consistencyRecheck,
       autonomy: config.autonomy,
       hasSamples: request.hasSamples,
       verifier,
