@@ -3,7 +3,7 @@
  *
  * Fast heuristic/regex-based detection of jailbreak attempts.
  * Reads content from stdin.
- * Outputs a single JSON line to stdout: {"verdict":"malicious"|"benign","confidence":0.0-1.0,"reason":"..."}
+ * Outputs a single JSON line to stdout: {"verdict":"malicious"|"suspicious"|"benign","confidence":0.0-1.0,"reason":"..."}
  */
 
 import { readFileSync } from "node:fs";
@@ -94,7 +94,8 @@ if (finalConfidence >= 0.6) {
     : `Heuristic flags: ${flags.join(", ")}`;
   console.log(JSON.stringify({ verdict: "malicious", confidence: finalConfidence, reason }));
 } else if (finalConfidence > 0.3) {
-  console.log(JSON.stringify({ verdict: "benign", confidence: finalConfidence, reason: `Weak signals: ${flags.join(", ")}` }));
+  // Weak signal — report as suspicious so guards can flag it
+  console.log(JSON.stringify({ verdict: "suspicious", confidence: finalConfidence, reason: `Weak signals: ${flags.join(", ")}` }));
 } else {
   console.log(JSON.stringify({ verdict: "benign", confidence: 0, reason: null }));
 }

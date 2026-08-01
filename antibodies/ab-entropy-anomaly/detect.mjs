@@ -6,7 +6,7 @@
  * or suspicious content. Checks entropy, character distribution,
  * invisible characters, and encoding patterns.
  * Reads content from stdin.
- * Outputs a single JSON line to stdout: {"verdict":"malicious"|"benign","confidence":0.0-1.0,"reason":"..."}
+ * Outputs a single JSON line to stdout: {"verdict":"malicious"|"suspicious"|"benign","confidence":0.0-1.0,"reason":"..."}
  */
 import { readFileSync } from "node:fs";
 const content = readFileSync(0, "utf-8");
@@ -38,7 +38,8 @@ if (homoglyphMatches.length > 0) {
     flags.push(`homoglyph-chars:${homoglyphMatches.length}`);
 }
 // 3. Entropy-like: high ratio of unique chars to total length (>0.3)
-if (content.length > 0) {
+//    Only meaningful for longer text — short sentences trip it trivially.
+if (content.length >= 64) {
     const uniqueChars = new Set(content).size;
     if (uniqueChars / content.length > 0.3) {
         heuristicScore += 0.3;
@@ -91,8 +92,8 @@ if (finalConfidence >= 0.55) {
     console.log(JSON.stringify({ verdict: "malicious", confidence: finalConfidence, reason }));
 }
 else if (finalConfidence > 0.3) {
-    // Low confidence — let Tier 1 decide
-    console.log(JSON.stringify({ verdict: "benign", confidence: finalConfidence, reason: `Weak signals: ${flags.join(", ")}` }));
+    // Weak signal — report as suspicious so guards can flag it
+    console.log(JSON.stringify({ verdict: "suspicious", confidence: finalConfidence, reason: `Weak signals: ${flags.join(", ")}` }));
 }
 else {
     console.log(JSON.stringify({ verdict: "benign", confidence: 0, reason: null }));

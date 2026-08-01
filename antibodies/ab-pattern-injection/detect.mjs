@@ -5,7 +5,7 @@
  * Fast-path signature matcher checking known injection patterns
  * from Prompt Guard, PINT, and Rebuff datasets.
  * Reads content from stdin.
- * Outputs a single JSON line to stdout: {"verdict":"malicious"|"benign","confidence":0.0-1.0,"reason":"..."}
+ * Outputs a single JSON line to stdout: {"verdict":"malicious"|"suspicious"|"benign","confidence":0.0-1.0,"reason":"..."}
  */
 import { readFileSync } from "node:fs";
 const content = readFileSync(0, "utf-8");
@@ -72,8 +72,8 @@ if (finalConfidence >= 0.6) {
     console.log(JSON.stringify({ verdict: "malicious", confidence: finalConfidence, reason }));
 }
 else if (finalConfidence > 0.3) {
-    // Low confidence — let Tier 1 decide
-    console.log(JSON.stringify({ verdict: "benign", confidence: finalConfidence, reason: `Weak signals: ${flags.join(", ")}` }));
+    // Weak signal — report as suspicious so guards can flag it
+    console.log(JSON.stringify({ verdict: "suspicious", confidence: finalConfidence, reason: `Weak signals: ${flags.join(", ")}` }));
 }
 else {
     console.log(JSON.stringify({ verdict: "benign", confidence: 0, reason: null }));
