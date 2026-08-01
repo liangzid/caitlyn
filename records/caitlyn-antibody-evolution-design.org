@@ -75,6 +75,75 @@ Stage 1 重新设计疫苗/进化链路。团长明确：现有 evolution 相关
       退役；单纯低分不挤占安全抗体。
     - 第二版：评审一致性抽查（同输入重评比对）、主动红队演练。
 
-* 待讨论分支（一次一个，逐个确认）
+* 实现计划（已确认）
 
-- 实现顺序（分几个 commit 落地），设计确认后再动代码。
+命名决定：全部使用 evolution。目录沿用 src/evolution/（重写，不用 immune）；
+配置段 [evolution]；CLI 命令沿用 caitlyn vaccinate（原 help 中缺失的命令，
+与免疫接种叙事一致）。
+
+实现顺序（8 个 commit，每单元一个 commit 并配足够 unit tests）：
+
+1. C1 feat(evolution): config schema + 默认值
+   - EvolutionConfig：autonomy / unknown_threat_action / dag_context / generator_model /
+     reviewer_model / candidates_per_run / max_rounds / max_tokens_per_run / active_cap /
+     fp_penalty_weight / score_decay_days / dormant_grace_days / retire_inactive_days /
+     benign_samples / max_benign_false_positives / regex_timeout_ms / shadow_window_days /
+     shadow_min_scans / lessons_per_cluster / cooldown_minutes / daily_evolution_limit /
+     evolution_dir。
+   - 默认值：autonomy=auto, unknown_threat_action=candidate, dag_context=meta,
+     generator=llm.model, reviewer=llm.small_model, candidates_per_run=3, max_rounds=5,
+     max_tokens_per_run=40000, active_cap=256, fp_penalty_weight=5, score_decay_days=90,
+     dormant_grace_days=30, retire_inactive_days=90, benign_samples=5,
+     max_benign_false_positives=1, regex_timeout_ms=200, shadow_window_days=7,
+     shadow_min_scans=50, lessons_per_cluster=10, cooldown_minutes=60,
+     daily_evolution_limit=10, evolution_dir=~/.caitlyn/evolution。
+   - config.toml 补 [evolution] 示例段；旧 [vaccination] 保留不动。
+   - unit tests：临时 TOML 验证默认值、覆盖、非法枚举回退、路径缺省。
+2. C2 feat(evolution): antibody DAG store
+   - 节点/血缘（parent_id）/evidence（hits/FP/lastUsed）/score=hits-5*FP+时间衰减；
+     active 上限 256 超出降 score 最低者 dormant；score<0 或 90 天无命中且有覆盖后代
+     → dormant；dormant 30 天无人恢复 → archive（append-only 归档，不丢数据）；
+     L6 退役保护（有后代覆盖才允许因排名退役）。
+   - 持久化到 evolution_dir（nodes.json + edges 由 parent_id 推导或单独边表）。
+   - unit tests：CRUD、评分、上限淘汰、退役、归档、恢复、血缘查询。
+3. C3 feat(evolution): lessons store
+   - lessons.jsonl append-only；schema 校验；来源白名单（verification | review）；
+     原始外部文本禁止写入；按抗原簇筛选最近 K 条 + LLM 聚合摘要读取接口。
+   - unit tests：写入、非法来源拒绝、schema 校验、按簇筛选、摘要输入构造。
+4. C4 feat(stats): events collector + EWMA/p99 基线 + 异常触发
+   - 事件产生端无状态追加 ~/.caitlyn/stats/events.jsonl；daemon 聚合（StatsCollector）；
+     EWMA 基线 + p99 异常判定；baseline.json 定期持久化；冷却期与每日上限（L5）；
+     信号源四层（agent_behavior / filesystem / os_network / immune_self）。
+   - unit tests：事件追加、EWMA 计算、p99、异常判定、基线持久化、冷却、日限。
+5. C5 feat(evolution): deterministic verification sandbox
+   - 抗原簇必须全中；良性样本 FP<=1；正则签名验证带超时与危险模式拒绝（L2）。
+   - unit tests：全中/漏检/FP 判定、正则超时、危险模式拒绝（ReDoS）。
+6. C6 feat(evolution): LLM generate-review loop
+   - state={目标, 抗原画像, DAG 谱系, 候选历史, 失败教训}；生成器 prompt
+     （全 DAG meta/抗原特征/教训摘要/签名清单，L1 数据边界）；
+     评审 JSON schema（accept/revise/reject + 理由 + 重复性，L3）；预算与轮数终止
+     （L5）；生成后先确定性验证再评审；revise 建议进下一轮；reject/无进展/预算耗尽
+     终止并写教训。
+   - unit tests：loop 状态流转、预算/轮数终止、评审单解析、教训自动写入。
+7. C7 feat(evolution): candidate shadow mode + 双通道晋升
+   - candidate 注入扫描（只记录不拦截）；观察窗口 7 天或 N 次扫描；0 FP 且 >=1 被确认
+     可疑命中 → active；FP 或窗口到期未达标 → dormant；显式 approve → active。
+   - unit tests：shadow 记录、晋升判定、降级判定、approve。
+8. C8 chore(evolution): 接线与清理
+   - CLI caitlyn vaccinate 实现（显式触发）；daemon StatsCollector 挂入；扫描路径
+     shadow 注入点；删除旧 GA 文件（affinity/shm/memory-bank/cost-monitor/pipeline/
+     validation-set 旧实现）；npm run build + 全量 test 通过。
+
+测试要求（团长明确）：每一部分都要经过足够 unit tests 保证正确性；新测试必须隔离
+（临时目录注入路径），不得写真实 config.yaml / 库文件 / 项目根 jsonl。
+
+* 实现中可能触及的既有代码
+
+- config.ts 目前只读 [llm]；需扩展 [evolution] 段读取。
+- library.ts / schema.ts 定义抗体 config.yaml 结构（已有 parent_id，DAG 血缘可复用）。
+- hybrid-scanner.ts / scanner.ts 为 Tier0/1 扫描入口；shadow 注入点在扫描结果收集处。
+- daemon/server.ts 为 TS HTTP daemon（/v1/scan、/v1/watch、/v1/status）；StatsCollector
+  作为 daemon 一部分挂入。
+- cli.ts 的 help 已列 caitlyn vaccinate 但无实现；C8 补 case。
+- 旧 evolution/ 文件（affinity/cost-monitor/memory-bank/pipeline/shm-engine/
+  validation-set）整体由新实现替换。
