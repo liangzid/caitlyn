@@ -53,6 +53,7 @@ import {
   approveAntibody,
   printEvolutionStatus,
   runVaccination,
+  runRedTeamCommand,
 } from "./commands/evolution.js";
 
 const args = process.argv.slice(2);
@@ -229,6 +230,15 @@ async function main() {
       }
       if (sub === "--status") {
         printEvolutionStatus();
+        process.exit(0);
+      }
+      if (sub === "--redteam") {
+        try {
+          await runRedTeamCommand(args[2]);
+        } catch (err) {
+          console.error(`❌ Red-team drill failed: ${err instanceof Error ? err.message : String(err)}`);
+          process.exit(1);
+        }
         process.exit(0);
       }
       if (!sub) {

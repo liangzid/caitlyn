@@ -18,8 +18,10 @@ import type { LlmCallFn } from "../scanner.js";
 import { AntibodyDagStore } from "../evolution/dag-store.js";
 import { dagPolicyFrom, EvolutionEngine } from "../evolution/engine.js";
 import { buildClusterId, extractAntigenFeatures } from "../evolution/features.js";
+import { loadAttackSamples, runRedTeam } from "../evolution/redteam.js";
 import { ShadowManager } from "../evolution/shadow.js";
 import { loadHistory } from "../history.js";
+import { loadAntibodies } from "../library.js";
 
 /** Build an LLM call bound to a specific model (generator or reviewer). */
 export function makeModelLlmCall(model: Model<any>): LlmCallFn {
@@ -141,5 +143,36 @@ export function printEvolutionStatus(configOverride?: EvolutionConfig): void {
       `  ${node.id} [${node.status}] tier${node.tier} ` +
         `score=${dag.computeScore(node).toFixed(2)} hits=${node.evidence.hits}`,
     );
+  }
+}
+
+/** `caitlyn vaccinate --redteam [category]` — active red-team drill. */
+export async function runRedTeamCommand(categoryFilter?: string): Promise<void> {
+  const allSamples = loadAttackSamples();
+  const samples = categoryFilter
+    ? allSamples.filter((s) => s.category === categoryFilter)
+    : allSamples;
+  if (samples.length === 0) {
+    console.log(
+      categoryFilter
+        ? `No attack samples for category "${categoryFilter}".`
+        : "No attack samples found.",
+    );
+    return;
+  }
+  console.log(
+    `🛡️  Red-team drill: ${samples.length} real attack samples ` +
+    `(category: ${categoryFilter ?? "all"})`,
+  );
+  const report = await runRedTeam(samples, loadAntibodies());
+  console.log(`Detection rate: ${(report.detectionRate * 100).toFixed(1)}% (${report.detected}/${report.total})`);
+  for (const c of report.byCategory) {
+    console.log(
+      `  ${c.category}: ${c.detected}/${c.total} ` +
+      `(${(c.detectionRate * 100).toFixed(1)}%)`,
+    );
+  }
+  if (report.missedSampleIds.length > 0) {
+    console.log(`Missed: ${report.missedSampleIds.join(", ")}${report.truncated ? ", …" : ""}`);
   }
 }
