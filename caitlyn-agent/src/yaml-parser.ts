@@ -73,10 +73,57 @@ function tokenize(text: string): Token[] {
   let mlStyle: "|" | ">" | null = null;
   let mlBaseIndent = -1; // -1 = unknown, set by first content line
 
+  // Multi-line quoted scalar state (key: 'line one
+  //                            line two')
+  let qKey: string | null = null;
+  let qIndent = 0;
+  let qQuote: "'" | '"' | null = null;
+  let qBuf = "";
+  let qLastWasBlank = false;
+
   for (const rawLine of rawLines) {
     const trimmedStart = rawLine.trimStart();
     const indent = rawLine.length - trimmedStart.length;
     const trimmed = trimmedStart;
+
+    // ── Inside a multi-line quoted scalar ──
+    if (qKey !== null) {
+      if (trimmed === "") {
+        qBuf += "\n";
+        qLastWasBlank = true;
+        continue;
+      }
+      if (indent > qIndent) {
+        // Continuation line; a trailing quote closes the scalar.
+        if (trimmed.endsWith(qQuote) && trimmed.length > 1) {
+          const content = trimmed.slice(0, -1);
+          if (!qLastWasBlank && qBuf !== "") qBuf += " ";
+          qBuf += content;
+          tokens.push({
+            indent: qIndent,
+            kind: "key-scalar",
+            key: qKey,
+            value: qBuf,
+          });
+          qKey = null;
+          qQuote = null;
+          qBuf = "";
+          qLastWasBlank = false;
+          continue;
+        }
+        if (!qLastWasBlank && qBuf !== "") qBuf += " ";
+        qBuf += trimmed;
+        qLastWasBlank = false;
+        continue;
+      }
+      // Dedented non-blank line: scalar was unterminated — emit what we have.
+      tokens.push({ indent: qIndent, kind: "key-scalar", key: qKey, value: qBuf });
+      qKey = null;
+      qQuote = null;
+      qBuf = "";
+      qLastWasBlank = false;
+      // Fall through to process current line.
+    }
 
     // ── Inside a multi-line block ──
     if (mlKey !== null) {
@@ -157,7 +204,17 @@ function tokenize(text: string): Token[] {
       if (rawValue === "") {
         tokens.push({ indent, kind: "key-open", key, value: OPEN_MAPPING });
       } else {
-        tokens.push({ indent, kind: "key-scalar", key, value: coerceValue(rawValue) });
+        const quote = startsUnterminatedQuote(rawValue);
+        if (quote) {
+          // Start a multi-line quoted scalar; first line content follows.
+          qKey = key;
+          qIndent = indent;
+          qQuote = quote;
+          qBuf = rawValue.slice(1);
+          qLastWasBlank = false;
+        } else {
+          tokens.push({ indent, kind: "key-scalar", key, value: coerceValue(rawValue) });
+        }
       }
       continue;
     }
@@ -169,8 +226,20 @@ function tokenize(text: string): Token[] {
   if (mlKey !== null) {
     tokens.push({ indent: mlIndent, kind: "key-scalar", key: mlKey, value: mlBuf });
   }
+  if (qKey !== null) {
+    tokens.push({ indent: qIndent, kind: "key-scalar", key: qKey, value: qBuf });
+  }
 
   return tokens;
+}
+
+/** Detect an opening quote that is not closed on the same line. */
+function startsUnterminatedQuote(raw: string): "'" | '"' | null {
+  if (raw.length < 2) return null;
+  const first = raw[0];
+  if (first !== "'" && first !== '"') return null;
+  if (raw.endsWith(first)) return null; // closed on the same line
+  return first;
 }
 
 // ── Phase 2: build tree ──────────────────────────────────────────────

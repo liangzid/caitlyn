@@ -116,6 +116,46 @@ describe("parseYaml", () => {
     expect(result).toEqual({ name: "hello world", desc: "single quoted" });
   });
 
+  it("parses single-quoted multi-line scalars with folding", () => {
+    const raw = [
+      "prompt: 'line one",
+      "  line two",
+      "  line three'",
+    ].join("\n");
+    const result = parseYaml(raw);
+    expect(result.prompt).toBe("line one line two line three");
+  });
+
+  it("keeps blank lines inside single-quoted multi-line scalars", () => {
+    const raw = [
+      "prompt: 'para one",
+      "",
+      "  para two'",
+    ].join("\n");
+    const result = parseYaml(raw);
+    expect(result.prompt).toBe("para one\npara two");
+  });
+
+  it("parses double-quoted multi-line scalars", () => {
+    const raw = [
+      'prompt: "first',
+      '  second"',
+    ].join("\n");
+    const result = parseYaml(raw);
+    expect(result.prompt).toBe("first second");
+  });
+
+  it("keeps multi-line quoted scalars out of sibling keys", () => {
+    const raw = [
+      "prompt: 'multi",
+      "  line'",
+      "threshold: 0.6",
+    ].join("\n");
+    const result = parseYaml(raw);
+    expect(result.prompt).toBe("multi line");
+    expect(result.threshold).toBe(0.6);
+  });
+
   it("parses numbers correctly", () => {
     const result = parseYaml("threshold: 0.75\ntier: 1\ngeneration: 0\nnegative: -5");
     expect(result).toEqual({
