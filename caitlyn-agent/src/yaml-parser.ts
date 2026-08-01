@@ -95,7 +95,7 @@ function tokenize(text: string): Token[] {
       }
       if (indent > qIndent) {
         // Continuation line; a trailing quote closes the scalar.
-        if (trimmed.endsWith(qQuote) && trimmed.length > 1) {
+        if (qQuote !== null && trimmed.endsWith(qQuote) && trimmed.length > 1) {
           const content = trimmed.slice(0, -1);
           if (!qLastWasBlank && qBuf !== "") qBuf += " ";
           qBuf += content;
