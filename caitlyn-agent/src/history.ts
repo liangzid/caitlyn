@@ -157,7 +157,9 @@ export async function logScan(
 /** Get recent scan history entries. */
 export function getHistory(limit: number = 20): ScanLogEntry[] {
   const entries = loadHistory();
-  return entries.slice(-limit).reverse();
+  // Guard against NaN (e.g., `history abc`), zero, and negative limits.
+  const n = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 20;
+  return entries.slice(-n).reverse();
 }
 
 /** Compute aggregated dashboard statistics. */
