@@ -201,6 +201,8 @@ export function loadAntibodies(): AntibodyEntry[] {
   for (const dirName of fs.readdirSync(ANTIBODIES_DIR)) {
     const dirPath = path.join(ANTIBODIES_DIR, dirName);
     if (!fs.statSync(dirPath).isDirectory()) continue;
+    // Skip hidden/trash directories (e.g. .trash for recoverable removals).
+    if (dirName.startsWith(".")) continue;
 
     const configPath = path.join(dirPath, "config.yaml");
     const readmePath = path.join(dirPath, "README.md");
@@ -297,6 +299,7 @@ export function loadAntigens(): AntigenEntry[] {
   for (const dirName of fs.readdirSync(ANTIGENS_DIR)) {
     const dirPath = path.join(ANTIGENS_DIR, dirName);
     if (!fs.statSync(dirPath).isDirectory()) continue;
+    if (dirName.startsWith(".")) continue;
 
     const configPath = path.join(dirPath, "config.yaml");
     const readmePath = path.join(dirPath, "README.md");

@@ -167,7 +167,7 @@ export const CAITLYN_COMMANDS: CaitlynCommand[] = [
   {
     name: "login",
     description: "Configure auth",
-    argumentHint: "<provider>",
+    argumentHint: "<provider> [api-key]",
     getArgumentCompletions(): AutocompleteItem[] | null {
       return getProviders().map((p) => ({
         value: p,

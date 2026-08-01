@@ -18,8 +18,11 @@ import type { Agent } from "@earendil-works/pi-agent-core";
 import type { LlmCallFn } from "../scanner.js";
 import { hybridScan } from "../hybrid-scanner.js";
 import {
+  buildAntibodyIndex,
   loadAntibodies,
   loadAntigens,
+  saveAntibody,
+  saveAntibodyIndex,
   ANTIBODIES_DIR,
 } from "../library.js";
 import { loadEvolutionConfig } from "../config.js";
@@ -27,11 +30,11 @@ import { EvolutionEngine } from "../evolution/engine.js";
 import { buildClusterId, extractAntigenFeatures } from "../evolution/features.js";
 import { loadHistory } from "../history.js";
 import { SessionManager } from "../session/session-manager.js";
-import type { ScriptResult } from "../schema.js";
+import type { AntibodyEntry, ScriptResult } from "../schema.js";
 import type { MessageEntry, SessionInfoEntry } from "../session/session-types.js";
 import { getContextWindow, getModelDisplay } from "../config/models.js";
 import { getProviders, getModels } from "../llm.js";
-import { listConfiguredProviders } from "../config/credentials.js";
+import { listConfiguredProviders, persistApiKey } from "../config/credentials.js";
 import { C, PAL, fg, paint, badge, bar, gradText, selectListTheme, estimateTokens, translateLlmError, verdictMeta, categoryColor, tierColor } from "../theme.js";
 import { buildSessionPickerOverlay } from "../components/overlays.js";
 import type { FooterComponent } from "../components/footer.js";
@@ -125,18 +128,95 @@ export async function doAntibodyList(self: TUIHost): Promise<void> {
 }
 
 export async function doAntibodyAdd(self: TUIHost, id: string): Promise<void> {
+  await doAntibodyAddFull(self, id, "injection", 0);
+}
+
+const ADD_CATEGORIES = ["injection", "jailbreak", "poisoning", "exfiltration"] as const;
+
+/** Minimal Tier 0 detector script (empty detector — matches nothing). */
+const TIER0_DETECT_TEMPLATE = [
+  "// detect.ts — created via CAITLYN TUI /antibody add",
+  "// Reads content from stdin and outputs one JSON verdict line.",
+  'import { readFileSync } from "node:fs";',
+  'const content = readFileSync(0, "utf-8");',
+  'console.log(JSON.stringify({ verdict: "benign", confidence: 0, reason: null }));',
+  "",
+].join("\n");
+
+export async function doAntibodyAddFull(
+  self: TUIHost,
+  id: string,
+  category: string,
+  tier: number,
+): Promise<void> {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) {
+    self.showSystemMessage(`${C.red}Invalid antibody id:${C.reset} use lowercase letters, digits and dashes.`);
+    return;
+  }
+  if (!(ADD_CATEGORIES as readonly string[]).includes(category)) {
+    self.showSystemMessage(`${C.red}Invalid category:${C.reset} ${ADD_CATEGORIES.join(" | ")}`);
+    return;
+  }
+  if (tier !== 0 && tier !== 1 && tier !== 2) {
+    self.showSystemMessage(`${C.red}Invalid tier:${C.reset} 0 | 1 | 2`);
+    return;
+  }
+  const dirPath = path.join(ANTIBODIES_DIR, id);
+  if (fs.existsSync(dirPath)) {
+    self.showSystemMessage(`${C.yellow}Antibody "${id}" already exists.${C.reset}`);
+    return;
+  }
+
+  const entry: AntibodyEntry = {
+    config: {
+      id,
+      name: id,
+      description: `Created via CAITLYN TUI (${category}, tier ${tier})`,
+      category: category as AntibodyEntry["config"]["category"],
+      tier: tier as 0 | 1 | 2,
+      threshold: 0.6,
+      affinity_score: 0,
+      created_at: new Date().toISOString(),
+      parent_id: null,
+      generation: 0,
+      deps: [],
+      signatures: [],
+      stats: {
+        total_scans: 0,
+        true_positives: 0,
+        false_positives: 0,
+        avg_latency_us: 0,
+      },
+    },
+    readme: `# ${id}\n\nCreated via CAITLYN TUI /antibody add.\n`,
+    scriptPath: null,
+    folderPath: dirPath,
+  };
+  saveAntibody(entry);
+  fs.writeFileSync(path.join(dirPath, "README.md"), entry.readme, "utf-8");
+  if (tier === 0) {
+    fs.writeFileSync(path.join(dirPath, "detect.ts"), TIER0_DETECT_TEMPLATE, "utf-8");
+  }
   self.showSystemMessage(
-    `Antibody "${id}" creation via TUI coming soon. Create folders directly in antibodies/<id>/ with config.yaml + README.md + detect.ts`,
+    `${C.green}✅ Antibody "${id}" created${C.reset} (${category}, tier ${tier}).\n` +
+    `${C.dim}Run "npm run build" in caitlyn-agent/ to precompile detect.mjs.${C.reset}`,
   );
 }
 
 export async function doAntibodyRemove(self: TUIHost, id: string): Promise<void> {
-  const antibodies = loadAntibodies();
-  const ab = antibodies.find((a) => a.config.id === id);
-  if (!ab) { self.showSystemMessage(`Antibody "${id}" not found.`); return; }
+  const dirPath = path.join(ANTIBODIES_DIR, id);
+  if (!fs.existsSync(dirPath)) {
+    self.showSystemMessage(`Antibody "${id}" not found.`);
+    return;
+  }
+  const trashDir = path.join(ANTIBODIES_DIR, ".trash");
+  fs.mkdirSync(trashDir, { recursive: true });
+  const target = path.join(trashDir, `${id}-${Date.now()}`);
+  fs.renameSync(dirPath, target);
+  const all = loadAntibodies();
+  saveAntibodyIndex(buildAntibodyIndex(all));
   self.showSystemMessage(
-    `${C.yellow}Removing antibody "${id}" [${ab.config.category}]${C.reset}\n` +
-    `${C.dim}Manual removal required: delete antibodies/${id}/${C.reset}`,
+    `${C.green}✅ Antibody "${id}" moved to ${C.reset}antibodies/.trash/ (recoverable).`,
   );
 }
 
@@ -398,7 +478,10 @@ export async function doModelSwitch(self: TUIHost, args: string): Promise<void> 
   self.showSystemMessage(`${C.green}Model switched to:${C.reset} ${provider}/${modelId}`);
 }
 
-export async function doLogin(self: TUIHost, provider: string): Promise<void> {
+export async function doLogin(self: TUIHost, argLine: string): Promise<void> {
+  const parts = argLine.trim().split(/\s+/).filter(Boolean);
+  const provider = parts[0];
+  const apiKey = parts.slice(1).join(" ").trim();
   if (!provider) {
     const configured = listConfiguredProviders();
     if (configured.length === 0) {
@@ -413,8 +496,17 @@ export async function doLogin(self: TUIHost, provider: string): Promise<void> {
     }
     return;
   }
+  if (!apiKey) {
+    self.showSystemMessage(
+      `Usage: /login <provider> <api-key>\n` +
+      `  e.g. /login deepseek sk-...\n` +
+      `The key is persisted to ~/.caitlyn/auth.json (0600).`,
+    );
+    return;
+  }
+  persistApiKey(provider, apiKey);
   self.showSystemMessage(
-    `${C.dim}To configure ${provider}, set the appropriate environment variable or add the key to ~/.caitlyn/auth.json${C.reset}`,
+    `${C.green}✅ API key saved for ${provider}${C.reset} (persisted to ~/.caitlyn/auth.json)`,
   );
 }
 

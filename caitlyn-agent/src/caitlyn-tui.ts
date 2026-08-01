@@ -57,7 +57,7 @@ import {
 import {
   doScan,
   doAntibodyList,
-  doAntibodyAdd,
+  doAntibodyAddFull,
   doAntibodyRemove,
   doAntigenShow,
   doVaccinate,
@@ -618,11 +618,19 @@ export class CaitlynTUI {
       // ── Antibody Management ────────────────────────────────
       case "/antibody": {
         const subCmd = parts[1]?.toLowerCase();
-        const abId = parts[2];
         if (subCmd === "list") { await doAntibodyList(this); }
-        else if (subCmd === "add" && abId) { await doAntibodyAdd(this, abId); }
-        else if (subCmd === "remove" && abId) { await doAntibodyRemove(this, abId); }
-        else { this.showSystemMessage("Usage: /antibody list | add <id> | remove <id>"); }
+        else if (subCmd === "add") {
+          const abId = parts[2];
+          const category = parts[3]?.toLowerCase() ?? "injection";
+          const tier = parts[4] !== undefined ? parseInt(parts[4], 10) : 0;
+          if (!abId) {
+            this.showSystemMessage("Usage: /antibody add <id> [category] [tier]");
+            break;
+          }
+          await doAntibodyAddFull(this, abId, category, Number.isNaN(tier) ? 0 : tier);
+        }
+        else if (subCmd === "remove" && parts[2]) { await doAntibodyRemove(this, parts[2]); }
+        else { this.showSystemMessage("Usage: /antibody list | add <id> [category] [tier] | remove <id>"); }
         break;
       }
       case "/antigen": {
