@@ -20,13 +20,12 @@ import { hybridScan } from "../hybrid-scanner.js";
 import {
   loadAntibodies,
   loadAntigens,
-  getCostMonitor,
-  getMemoryBank,
-  getVaccinationPipeline,
-  toEvoAntibody,
-  persistVaccinatedAntibody,
   ANTIBODIES_DIR,
 } from "../library.js";
+import { loadEvolutionConfig } from "../config.js";
+import { EvolutionEngine } from "../evolution/engine.js";
+import { buildClusterId, extractAntigenFeatures } from "../evolution/features.js";
+import { loadHistory } from "../history.js";
 import { SessionManager } from "../session/session-manager.js";
 import type { ScriptResult } from "../schema.js";
 import type { MessageEntry, SessionInfoEntry } from "../session/session-types.js";
@@ -155,40 +154,50 @@ export async function doAntigenShow(self: TUIHost, id: string): Promise<void> {
 }
 
 export async function doVaccinate(self: TUIHost, pattern: string): Promise<void> {
-  const antibodies = loadAntibodies();
-  const parent = antibodies.find((a) => a.config.category === "injection") ?? antibodies[0];
-  if (!parent) {
-    self.showSystemMessage(`${C.yellow}No antibodies loaded to use as parent.${C.reset}`);
-    return;
-  }
+  const config = loadEvolutionConfig();
+  const engine = new EvolutionEngine({
+    config,
+    generatorLlm: self.llmCall,
+    reviewerLlm: self.llmCall,
+  });
+  const clusterId = buildClusterId(pattern);
+  const benign = loadHistory()
+    .filter((h) => h.verdict === "benign")
+    .slice(0, config.benignSamples)
+    .map((h) => h.content_preview);
 
-  const costMonitor = getCostMonitor();
-  const memoryBank = getMemoryBank();
-  const pipeline = getVaccinationPipeline();
-  const parentEvo = toEvoAntibody(parent);
-  const patternHash = costMonitor.computePatternHash(pattern);
-  const valsetDir = path.join(path.dirname(ANTIBODIES_DIR), "valsets");
-
-  self.showSystemMessage(`${C.cyan}💉 Running vaccination pipeline...${C.reset}`);
+  self.showSystemMessage(`${C.cyan}💉 Running immune System 2 loop...${C.reset}`);
 
   try {
-    const results = await pipeline.vaccinate(
-      patternHash, [parentEvo], costMonitor, memoryBank,
-      self.llmCall, valsetDir,
-    );
-
-    if (results.length === 0) {
-      self.showSystemMessage(`${C.yellow}Vaccination completed but no antibodies survived affinity maturation.${C.reset}`);
+    const outcome = await engine.run({
+      clusterId,
+      target: `user-requested vaccination for cluster ${clusterId}`,
+      profile: {
+        clusterId,
+        category: "unknown",
+        features: extractAntigenFeatures([pattern]),
+        sampleCount: 1,
+      },
+      mustDetect: [pattern],
+      benign,
+      hasSamples: true,
+    });
+    const { loop } = outcome;
+    if (loop.approved.length === 0) {
+      self.showSystemMessage(
+        `${C.yellow}Vaccination finished: ${loop.termination} (${loop.rounds} rounds). No antibody accepted.${C.reset}`,
+      );
       return;
     }
 
-    for (const r of results) {
-      persistVaccinatedAntibody(r.antibody, r.memoryEntries);
-      costMonitor.markVaccinated(patternHash, r.antibody.id);
-    }
-
-    const names = results.map((r) => `${r.antibody.name} (score=${r.affinityScore.toFixed(2)})`).join(", ");
-    self.showSystemMessage(`${C.green}💉 Vaccination complete:${C.reset} ${results.length} antibody(s) — ${names}`);
+    const names = loop.approved.map((vc) => vc.draft.name).join(", ");
+    const shadowNote =
+      outcome.shadowStarted.length > 0
+        ? ` Shadow observation: ${outcome.shadowStarted.join(", ")}`
+        : "";
+    self.showSystemMessage(
+      `${C.green}💉 Vaccination complete:${C.reset} ${loop.approved.length} antibody(s) — ${names}${shadowNote}`,
+    );
     self.refreshFooter();
   } catch (err) {
     self.showSystemMessage(`${C.red}❌ Vaccination failed:${C.reset} ${err instanceof Error ? err.message : String(err)}`);

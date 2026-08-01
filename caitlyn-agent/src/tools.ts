@@ -9,11 +9,14 @@
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static } from "@earendil-works/pi-ai";
-import { loadAntibodies, loadAntigens, loadAntibodyIndex, buildAntibodyIndex, saveAntibodyIndex, saveAntibody, ANTIBODIES_DIR, getCostMonitor, getMemoryBank, getVaccinationPipeline, toEvoAntibody, persistVaccinatedAntibody } from "./library.js";
+import { loadAntibodies, loadAntigens, loadAntibodyIndex, buildAntibodyIndex, saveAntibodyIndex, saveAntibody, ANTIBODIES_DIR } from "./library.js";
 import { scan, runTier0, type LlmCallFn } from "./scanner.js";
-import { getDashboard, getHistory } from "./history.js";
+import { getDashboard, getHistory, loadHistory } from "./history.js";
 import type { AntibodyEntry, AntibodyConfig } from "./schema.js";
 import * as path from "node:path";
+import { loadEvolutionConfig } from "./config.js";
+import { EvolutionEngine } from "./evolution/engine.js";
+import { buildClusterId, extractAntigenFeatures } from "./evolution/features.js";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -410,58 +413,52 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
     {
       name: "caitlyn_vaccinate",
       label: "Trigger Vaccination",
-      description: "Evolve a new antibody variant for a threat pattern using LLM-guided mutation.",
+      description: "Evolve new antibodies via the immune System 2 loop (LLM synthesis + deterministic verification + independent review).",
       parameters: Type.Object({
         pattern: Type.String({ description: "Threat pattern or attack description to evolve defense against" }),
-        parent_id: Type.Optional(Type.String({ description: "Parent antibody ID to mutate from" })),
       }),
       async execute(_toolCallId, params: any) {
-        const antibodies = loadAntibodies();
-        const parent = params.parent_id
-          ? antibodies.find((a) => a.config.id === params.parent_id)
-          : antibodies.find((a) => a.config.category === "injection" && a.config.tier === 0) ?? antibodies[0];
-
-        if (!parent) return textResult("No parent antibody available for vaccination.");
-
-        const costMonitor = getCostMonitor();
-        const memoryBank = getMemoryBank();
-        const pipeline = getVaccinationPipeline();
-
-        // Record the pattern in cost monitor to establish a baseline
-        const patternHash = costMonitor.computePatternHash(params.pattern);
-        const parentEvo = toEvoAntibody(parent);
-
-        // Run the full vaccination pipeline
-        const valsetDir = path.join(path.dirname(path.dirname(ANTIBODIES_DIR)), "valsets");
-        const results = await pipeline.vaccinate(
-          patternHash,
-          [parentEvo],
-          costMonitor,
-          memoryBank,
-          llmCall,
-          valsetDir,
-        );
-
-        if (results.length === 0) {
+        const config = loadEvolutionConfig();
+        const engine = new EvolutionEngine({
+          config,
+          generatorLlm: llmCall,
+          reviewerLlm: llmCall,
+        });
+        const clusterId = buildClusterId(params.pattern);
+        const benign = loadHistory()
+          .filter((h) => h.verdict === "benign")
+          .slice(0, config.benignSamples)
+          .map((h) => h.content_preview);
+        const outcome = await engine.run({
+          clusterId,
+          target: `agent-requested vaccination for cluster ${clusterId}`,
+          profile: {
+            clusterId,
+            category: "unknown",
+            features: extractAntigenFeatures([params.pattern]),
+            sampleCount: 1,
+          },
+          mustDetect: [params.pattern],
+          benign,
+          hasSamples: true,
+        });
+        const { loop } = outcome;
+        if (loop.approved.length === 0) {
           return textResult(
-            "Vaccination pipeline completed but no antibodies survived affinity maturation.\n" +
-            "Try with a different parent antibody or more attack samples.",
+            `Vaccination loop finished: ${loop.termination} (${loop.rounds} rounds, ` +
+            `~${loop.tokensUsed} tokens). No antibody accepted.`,
           );
         }
-
-        // Persist surviving antibodies
-        const saved: string[] = [];
-        for (const result of results) {
-          persistVaccinatedAntibody(result.antibody, result.memoryEntries);
-          costMonitor.markVaccinated(patternHash, result.antibody.id);
-          saved.push(
-            `  ${result.antibody.id}: ${result.antibody.name} ` +
-            `(score=${result.affinityScore.toFixed(2)}, precision=${result.precision.toFixed(2)}, recall=${result.recall.toFixed(2)})`,
-          );
-        }
-
+        const lines = loop.approved.map(
+          (vc) => `  ${vc.draft.id}: ${vc.draft.name} (${vc.draft.signatures.length} signatures)`,
+        );
+        const shadowNote =
+          outcome.shadowStarted.length > 0
+            ? `\nShadow observation started: ${outcome.shadowStarted.join(", ")}`
+            : "";
         return textResult(
-          `💉 Vaccination complete — ${results.length} antibody(ies) persisted:\n${saved.join("\n")}`,
+          `💉 Vaccination complete — ${loop.approved.length} antibody(ies):\n` +
+          `${lines.join("\n")}${shadowNote}`,
         );
       },
     },

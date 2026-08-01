@@ -1,6 +1,6 @@
 /**
  * Tests for library.ts — antibody loading, index building, persistence,
- * evolution singletons, and feedback.
+ * and scan feedback.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
@@ -11,23 +11,13 @@ import type {
   AntibodyConfig,
   AntibodyIndex,
 } from "../src/schema.js";
-import type { Antibody as EvoAntibody } from "../src/evolution/types.js";
-
-// ── Dynamic imports to control module init ──────────────────────────
-
-// We import the library functions. For tests that need fresh singletons,
-// we use vi.resetModules().
-
 import {
   buildAntibodyIndex,
-  toEvoAntibody,
   validateAntibodyConfig,
   validateAntigenConfig,
   loadAntibodyIndex,
   saveAntibodyIndex,
   loadAntibodies,
-  getMemoryBank,
-  getCostMonitor,
   recordScanFeedback,
   ANTIBODIES_DIR,
 } from "../src/library.js";
@@ -228,56 +218,6 @@ describe("buildAntibodyIndex", () => {
   });
 });
 
-describe("toEvoAntibody", () => {
-  it("converts AntibodyEntry to EvoAntibody with all fields mapped", () => {
-    const entry = makeAntibodyEntry({
-      id: "ab-evo",
-      name: "Evo Antibody",
-      description: "An evolution-ready antibody",
-      category: "jailbreak",
-      tier: 2,
-      threshold: 0.85,
-      stats: {
-        total_scans: 42,
-        true_positives: 30,
-        false_positives: 5,
-        avg_latency_us: 1500,
-      },
-    });
-    entry.readme = "# Prompt\n\nDetect jailbreak attempts.";
-
-    const evo = toEvoAntibody(entry);
-
-    expect(evo.id).toBe("ab-evo");
-    expect(evo.name).toBe("Evo Antibody");
-    expect(evo.description).toBe("An evolution-ready antibody");
-    expect(evo.category).toBe("jailbreak");
-    expect(evo.tier).toBe(2);
-    expect(evo.prompt).toBe("# Prompt\n\nDetect jailbreak attempts.");
-    expect(evo.threshold).toBe(0.85);
-    expect(evo.status).toBe("active");
-    expect(evo.stats.totalScans).toBe(42);
-    expect(evo.stats.truePositives).toBe(30);
-    expect(evo.stats.falsePositives).toBe(5);
-    expect(evo.stats.avgLatencyUs).toBe(1500);
-  });
-
-  it("handles missing optional fields with defaults", () => {
-    const minimal = makeAntibodyEntry({
-      id: "minimal",
-      description: "",
-      threshold: 0,
-    });
-    minimal.config.stats = { total_scans: 0, true_positives: 0, false_positives: 0, avg_latency_us: 0 };
-    minimal.config.description = undefined as unknown as string;
-    minimal.config.threshold = undefined as unknown as number;
-
-    const evo = toEvoAntibody(minimal);
-    expect(evo.description).toBe("");
-    expect(evo.threshold).toBe(0.7); // default threshold
-  });
-});
-
 describe("loadAntibodies", () => {
   it("returns entries from the antibodies/ directory", () => {
     // The real antibodies directory exists in the project.
@@ -370,36 +310,6 @@ describe("index persistence", () => {
       expect(Array.isArray(result.roots)).toBe(true);
       expect(typeof result.trees).toBe("object");
     }
-  });
-});
-
-describe("getMemoryBank singleton", () => {
-  it("returns the same instance on repeated calls", () => {
-    const bank1 = getMemoryBank();
-    const bank2 = getMemoryBank();
-    expect(bank1).toBe(bank2);
-  });
-
-  it("returns a MemoryBank instance", () => {
-    const bank = getMemoryBank();
-    expect(bank).toBeTruthy();
-    expect(typeof bank.add).toBe("function");
-    expect(typeof bank.check).toBe("function");
-  });
-});
-
-describe("getCostMonitor singleton", () => {
-  it("returns the same instance on repeated calls", () => {
-    const cm1 = getCostMonitor();
-    const cm2 = getCostMonitor();
-    expect(cm1).toBe(cm2);
-  });
-
-  it("returns a CostMonitor instance", () => {
-    const cm = getCostMonitor();
-    expect(cm).toBeTruthy();
-    expect(typeof cm.record).toBe("function");
-    expect(typeof cm.computePatternHash).toBe("function");
   });
 });
 

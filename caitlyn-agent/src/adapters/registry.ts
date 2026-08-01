@@ -548,7 +548,9 @@ export function getWatchDirsForAgents(agentIds?: string[]): {
     // Only consider agents that are installed
     if (!r.installed) continue;
 
-    const dirs = (r.agent.detect.dirPaths || []).map((d) => expandPath(d).replace(/\/+$/, ""));
+    const dirs = (r.agent.detect.dirPaths || [])
+      .map((d) => expandPath(d).replace(/\/+$/, ""))
+      .filter((d) => fs.existsSync(d));
     if (dirs.length > 0) {
       agentDirs[r.agent.id] = dirs;
     }
