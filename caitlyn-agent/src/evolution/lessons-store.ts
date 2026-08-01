@@ -88,7 +88,9 @@ export class LessonsStore {
    * with unknown fields, or with invalid shape.
    * KEYPOINT-REVIEW: 这是 L4 教训库投毒防护的第一道闸：schema 白名单 + 来源白名单。
    */
-  append(lesson: Omit<EvolutionLesson, "id">): EvolutionLesson {
+  append(
+    lesson: Omit<EvolutionLesson, "id" | "createdAt"> & { createdAt?: string },
+  ): EvolutionLesson {
     const full: EvolutionLesson = {
       ...lesson,
       id: randomUUID(),
