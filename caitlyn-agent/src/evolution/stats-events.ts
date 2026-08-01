@@ -6,6 +6,7 @@
  * aggregated by the daemon-side StatsCollector.
  */
 
+import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { StatsCollector, type StatsEventSource } from "./stats-collector.js";
@@ -30,5 +31,23 @@ export function appendStatsEvent(
     });
   } catch {
     // Disk issues or permission problems — scanning continues unaffected.
+  }
+}
+
+/** Append an anomaly trigger record to triggers.jsonl (audit artifact). */
+export function appendTriggerRecord(trigger: {
+  source: string;
+  metric: string;
+  value: number;
+  baselineEwma: number;
+  baselineP99: number;
+  at: string;
+}, statsDir: string = DEFAULT_STATS_DIR): void {
+  try {
+    const file = path.join(statsDir, "triggers.jsonl");
+    fs.mkdirSync(statsDir, { recursive: true });
+    fs.appendFileSync(file, `${JSON.stringify(trigger)}\n`, "utf-8");
+  } catch {
+    // Disk issues — the trigger is still visible in the collector state.
   }
 }

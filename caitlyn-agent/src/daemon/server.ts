@@ -14,17 +14,30 @@
  */
 
 import * as http from "node:http";
+import * as os from "node:os";
+import * as path from "node:path";
 import { hybridScan } from "../hybrid-scanner.js";
 import { loadAntibodies, loadAntigens } from "../library.js";
 import { FSWatcher } from "../guard/fs-watcher.js";
 import { createUnavailableLlmCall, type LlmCallFn } from "../scanner.js";
 import type { ScanResult } from "../schema.js";
+import { loadEvolutionConfig, type EvolutionConfig } from "../config.js";
+import { EvolutionEngine } from "../evolution/engine.js";
+import { appendTriggerRecord } from "../evolution/stats-events.js";
+import {
+  StatsCollector,
+  type AnomalyTrigger,
+} from "../evolution/stats-collector.js";
 
 // ── Types ───────────────────────────────────────────────────────────
 
 export interface DaemonConfig {
   port: number;
   host: string;
+  /** 统计目录；缺省 ~/.caitlyn/stats。测试可注入。 */
+  statsDir?: string;
+  /** evolution 配置覆盖；缺省从 config.toml 读取。 */
+  evolutionConfig?: EvolutionConfig;
 }
 
 export interface DaemonStatus {
@@ -53,6 +66,11 @@ export class DaemonServer {
   private config: DaemonConfig;
   private startTime: number = 0;
   private llmCall: LlmCallFn | null = null;
+  private generatorLlm: LlmCallFn | null = null;
+  private reviewerLlm: LlmCallFn | null = null;
+  private statsCollector: StatsCollector;
+  private evolutionConfig: EvolutionConfig;
+  private statsTimer: NodeJS.Timeout | null = null;
 
   // Stats
   private scansTotal = 0;
@@ -65,11 +83,25 @@ export class DaemonServer {
   private watchDirs: string[] = [];
 
   constructor(config: Partial<DaemonConfig> = {}) {
-    this.config = { port: 9070, host: "127.0.0.1", ...config };
+    this.config = {
+      port: 9070,
+      host: "127.0.0.1",
+      statsDir: path.join(os.homedir(), ".caitlyn", "stats"),
+      ...config,
+    };
+    this.evolutionConfig = config.evolutionConfig ?? loadEvolutionConfig();
+    this.statsCollector = new StatsCollector(this.config.statsDir!);
+    this.statsCollector.load();
   }
 
   setLlmCall(fn: LlmCallFn): void {
     this.llmCall = fn;
+  }
+
+  /** Generator/reviewer pair for the immune loop (daemon entry point). */
+  setEvolutionLlmPair(generator: LlmCallFn, reviewer: LlmCallFn): void {
+    this.generatorLlm = generator;
+    this.reviewerLlm = reviewer;
   }
 
   async start(): Promise<void> {
@@ -78,12 +110,19 @@ export class DaemonServer {
       this.server.on("error", reject);
       this.server.listen(this.config.port, this.config.host, () => {
         this.startTime = Date.now();
+        this.statsTimer = setInterval(() => {
+          this.collectStats().catch(() => {});
+        }, 60_000);
         resolve();
       });
     });
   }
 
   async stop(): Promise<void> {
+    if (this.statsTimer) {
+      clearInterval(this.statsTimer);
+      this.statsTimer = null;
+    }
     return new Promise((resolve) => {
       if (this.watcher) {
         this.watcher.stop().catch(() => {});
@@ -99,6 +138,69 @@ export class DaemonServer {
 
   getPort(): number {
     return this.config.port;
+  }
+
+  /**
+   * Aggregate new stats events and run an immune response for each
+   * anomaly trigger. Public for tests and manual daemon status checks.
+   */
+  async collectStats(): Promise<AnomalyTrigger[]> {
+    const triggers = this.statsCollector.collect();
+    for (const trigger of triggers) {
+      appendTriggerRecord(trigger, this.config.statsDir!);
+      console.error(
+        `[daemon] ⚠️ anomaly: ${trigger.metric}=${trigger.value} ` +
+          `(p99 ${trigger.baselineP99}, ewma ${trigger.baselineEwma})`,
+      );
+      await this.runImmuneResponse(trigger);
+    }
+    return triggers;
+  }
+
+  /** Run the evolution loop for a statistics-only trigger (unknown path). */
+  private async runImmuneResponse(trigger: AnomalyTrigger): Promise<void> {
+    const generator = this.generatorLlm ?? this.llmCall;
+    const reviewer = this.reviewerLlm ?? this.llmCall;
+    if (!generator || !reviewer) {
+      console.error("[daemon] no LLM available — immune response skipped (record kept).");
+      return;
+    }
+    const engine = new EvolutionEngine({
+      config: this.evolutionConfig,
+      generatorLlm: generator,
+      reviewerLlm: reviewer,
+    });
+    const clusterId = `stats:${trigger.metric}`;
+    try {
+      const outcome = await engine.run({
+        clusterId,
+        target: `statistical anomaly: ${trigger.metric} value ${trigger.value} ` +
+          `(baseline p99 ${trigger.baselineP99}, ewma ${trigger.baselineEwma})`,
+        profile: {
+          clusterId,
+          category: "unknown",
+          features: [
+            `source=${trigger.source}`,
+            `metric=${trigger.metric}`,
+            `value=${trigger.value}`,
+            `baseline_p99=${trigger.baselineP99}`,
+            `baseline_ewma=${trigger.baselineEwma}`,
+          ],
+          sampleCount: 1,
+        },
+        mustDetect: [],
+        benign: [],
+        hasSamples: false,
+      });
+      console.error(
+        `[daemon] immune response done: ${outcome.loop.termination}, ` +
+          `${outcome.loop.approved.length} approved, shadow: ${outcome.shadowStarted.join(",")}`,
+      );
+    } catch (err) {
+      console.error(
+        `[daemon] immune response failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   // ── Request Handler ────────────────────────────────────────────

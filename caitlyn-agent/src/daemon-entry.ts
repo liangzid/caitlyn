@@ -21,6 +21,7 @@ const portArg = args.indexOf("--port");
 const port = portArg >= 0 ? parseInt(args[portArg + 1], 10) || 9070 : 9070;
 
 const server = new DaemonServer({ port });
+const daemonConfig = loadConfig();
 
 // ── LLM Setup ────────────────────────────────────────────────────────
 
@@ -35,7 +36,7 @@ function hasAnyApiKey(): boolean {
   return candidates.some((k) => process.env[k]);
 }
 
-function makeDaemonLlmCall(): LlmCallFn | null {
+function makeDaemonLlmCall(modelId?: string): LlmCallFn | null {
   const config = loadConfig();
   const credentialEnv = getCredentialEnv(config.provider);
   if (!hasAnyApiKey() && !credentialEnv) {
@@ -43,8 +44,12 @@ function makeDaemonLlmCall(): LlmCallFn | null {
     return null;
   }
   try {
-    const model = resolveModel(config);
-    console.error(`[daemon] LLM provider: ${config.provider} / ${config.model}`);
+    const model = resolveModel({
+      provider: config.provider,
+      model: modelId ?? config.model,
+      smallModel: config.smallModel,
+    });
+    console.error(`[daemon] LLM provider: ${config.provider} / ${model.id}`);
     return async (systemPrompt: string, userPrompt: string) => {
       const ctx = {
         systemPrompt,
@@ -69,7 +74,10 @@ function makeDaemonLlmCall(): LlmCallFn | null {
 }
 
 const llmCall = makeDaemonLlmCall();
+const generatorLlm = makeDaemonLlmCall();
+const reviewerLlm = makeDaemonLlmCall(daemonConfig.smallModel);
 if (llmCall) server.setLlmCall(llmCall);
+if (generatorLlm && reviewerLlm) server.setEvolutionLlmPair(generatorLlm, reviewerLlm);
 
 // ── Lifecycle ────────────────────────────────────────────────────────
 
