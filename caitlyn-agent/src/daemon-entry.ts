@@ -14,7 +14,7 @@ import { loadConfig } from "./config.js";
 import { resolveModel } from "./llm.js";
 import { complete } from "@earendil-works/pi-ai/compat";
 import type { LlmCallFn } from "./scanner.js";
-import { getCredentialEnv } from "./config/credentials.js";
+import { checkProviderAuth, getCredentialEnv } from "./config/credentials.js";
 
 const args = process.argv.slice(2);
 const portArg = args.indexOf("--port");
@@ -25,22 +25,14 @@ const daemonConfig = loadConfig();
 
 // ── LLM Setup ────────────────────────────────────────────────────────
 
-function hasAnyApiKey(): boolean {
-  const candidates = [
-    "DEEPSEEK_API_KEY",
-    "OPENROUTER_API_KEY",
-    "OPENAI_API_KEY",
-    "ANTHROPIC_API_KEY",
-    "GROQ_API_KEY",
-  ];
-  return candidates.some((k) => process.env[k]);
-}
-
 function makeDaemonLlmCall(modelId?: string): LlmCallFn | null {
   const config = loadConfig();
   const credentialEnv = getCredentialEnv(config.provider);
-  if (!hasAnyApiKey() && !credentialEnv) {
-    console.error("[daemon] No API key found (DEEPSEEK_API_KEY etc.). Tier 1 disabled — Tier 0 only.");
+  const auth = checkProviderAuth(config.provider);
+  if (!auth.runtime && !auth.persisted && !auth.env) {
+    console.error(
+      `[daemon] No API key for provider "${config.provider}". Tier 1 disabled — Tier 0 only.`,
+    );
     return null;
   }
   try {
