@@ -29,11 +29,21 @@ const __dirname = path.dirname(__filename);
 const PKG_ROOT = path.resolve(__dirname, "..");
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
 /** Library root; CAITLYN_LIBRARY_DIR overrides it for isolated tests. */
-const LIBRARY_ROOT = process.env.CAITLYN_LIBRARY_DIR
-  ? path.resolve(process.env.CAITLYN_LIBRARY_DIR)
-  : PROJECT_ROOT;
-export const ANTIBODIES_DIR = path.join(LIBRARY_ROOT, "antibodies");
-export const ANTIGENS_DIR = path.join(LIBRARY_ROOT, "antigens");
+function libraryRoot(): string {
+  return process.env.CAITLYN_LIBRARY_DIR
+    ? path.resolve(process.env.CAITLYN_LIBRARY_DIR)
+    : PROJECT_ROOT;
+}
+
+/** Antibody library directory (resolved per call so tests can redirect). */
+export function antibodiesDir(): string {
+  return path.join(libraryRoot(), "antibodies");
+}
+
+/** Antigen library directory (resolved per call so tests can redirect). */
+export function antigensDir(): string {
+  return path.join(libraryRoot(), "antigens");
+}
 
 // ── Simple YAML parser imported from yaml-parser.ts ───────────────
 
@@ -203,14 +213,15 @@ export function invalidateLibraryCache(): void {
 
 export function loadAntibodies(): AntibodyEntry[] {
   if (!cacheExpired() && _cachedAntibodies) return _cachedAntibodies;
-  if (!fs.existsSync(ANTIBODIES_DIR)) {
-    console.warn(`⚠️  Antibodies directory not found: ${ANTIBODIES_DIR}`);
+  const dir = antibodiesDir();
+  if (!fs.existsSync(dir)) {
+    console.warn(`⚠️  Antibodies directory not found: ${dir}`);
     return [];
   }
   const entries: AntibodyEntry[] = [];
 
-  for (const dirName of fs.readdirSync(ANTIBODIES_DIR)) {
-    const dirPath = path.join(ANTIBODIES_DIR, dirName);
+  for (const dirName of fs.readdirSync(dir)) {
+    const dirPath = path.join(dir, dirName);
     if (!fs.statSync(dirPath).isDirectory()) continue;
     // Skip hidden/trash directories (e.g. .trash for recoverable removals).
     if (dirName.startsWith(".")) continue;
@@ -262,6 +273,12 @@ function yamlEscape(value: unknown): string {
 }
 
 export function saveAntibody(entry: AntibodyEntry): void {
+  if (process.env.CAITLYN_TEST_TRACE) {
+    fs.appendFileSync(
+      "/tmp/caitlyn-trace.log",
+      `[saveAntibody pid=${process.pid} dir=${entry.folderPath}]\n${new Error().stack}\n`,
+    );
+  }
   const dirPath = entry.folderPath;
   fs.mkdirSync(dirPath, { recursive: true });
 
@@ -299,16 +316,17 @@ export function saveAntibody(entry: AntibodyEntry): void {
 
 export function loadAntigens(): AntigenEntry[] {
   if (!cacheExpired() && _cachedAntigens) return _cachedAntigens;
-  if (!fs.existsSync(ANTIGENS_DIR)) {
-    console.warn(`⚠️  Antigens directory not found: ${ANTIGENS_DIR}`);
+  const dir = antigensDir();
+  if (!fs.existsSync(dir)) {
+    console.warn(`⚠️  Antigens directory not found: ${dir}`);
     _cachedAntigens = [];
     _cacheTime = Date.now();
     return [];
   }
   const entries: AntigenEntry[] = [];
 
-  for (const dirName of fs.readdirSync(ANTIGENS_DIR)) {
-    const dirPath = path.join(ANTIGENS_DIR, dirName);
+  for (const dirName of fs.readdirSync(dir)) {
+    const dirPath = path.join(dir, dirName);
     if (!fs.statSync(dirPath).isDirectory()) continue;
     if (dirName.startsWith(".")) continue;
 
@@ -399,16 +417,16 @@ function aggregateStats(index: AntibodyIndex): void {
 // ── Index persistence ─────────────────────────────────────────────
 
 export function saveAntibodyIndex(index: AntibodyIndex): void {
-  fs.mkdirSync(ANTIBODIES_DIR, { recursive: true });
+  fs.mkdirSync(antibodiesDir(), { recursive: true });
   fs.writeFileSync(
-    path.join(ANTIBODIES_DIR, "index.json"),
+    path.join(antibodiesDir(), "index.json"),
     JSON.stringify(index, null, 2),
     "utf-8",
   );
 }
 
 export function loadAntibodyIndex(): AntibodyIndex | null {
-  const p = path.join(ANTIBODIES_DIR, "index.json");
+  const p = path.join(antibodiesDir(), "index.json");
   if (!fs.existsSync(p)) return null;
   try {
     const raw = fs.readFileSync(p, "utf-8");

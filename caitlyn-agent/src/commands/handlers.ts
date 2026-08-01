@@ -19,12 +19,12 @@ import type { LlmCallFn } from "../scanner.js";
 import { hybridScan } from "../hybrid-scanner.js";
 import {
   buildAntibodyIndex,
+  antibodiesDir,
   invalidateLibraryCache,
   loadAntibodies,
   loadAntigens,
   saveAntibody,
   saveAntibodyIndex,
-  ANTIBODIES_DIR,
 } from "../library.js";
 import { loadEvolutionConfig } from "../config.js";
 import { EvolutionEngine } from "../evolution/engine.js";
@@ -162,7 +162,7 @@ export async function doAntibodyAddFull(
     self.showSystemMessage(`${C.red}Invalid tier:${C.reset} 0 | 1 | 2`);
     return;
   }
-  const dirPath = path.join(ANTIBODIES_DIR, id);
+  const dirPath = path.join(antibodiesDir(), id);
   if (fs.existsSync(dirPath)) {
     self.showSystemMessage(`${C.yellow}Antibody "${id}" already exists.${C.reset}`);
     return;
@@ -205,12 +205,12 @@ export async function doAntibodyAddFull(
 }
 
 export async function doAntibodyRemove(self: TUIHost, id: string): Promise<void> {
-  const dirPath = path.join(ANTIBODIES_DIR, id);
+  const dirPath = path.join(antibodiesDir(), id);
   if (!fs.existsSync(dirPath)) {
     self.showSystemMessage(`Antibody "${id}" not found.`);
     return;
   }
-  const trashDir = path.join(ANTIBODIES_DIR, ".trash");
+  const trashDir = path.join(antibodiesDir(), ".trash");
   fs.mkdirSync(trashDir, { recursive: true });
   const target = path.join(trashDir, `${id}-${Date.now()}`);
   fs.renameSync(dirPath, target);

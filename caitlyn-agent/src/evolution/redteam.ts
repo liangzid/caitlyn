@@ -76,6 +76,7 @@ export async function runRedTeam(
   samples: AttackSample[],
   antibodies: AntibodyEntry[],
   tier0TimeoutMs: number = 500,
+  tier0Runner: typeof runTier0 = runTier0,
 ): Promise<RedTeamReport> {
   const tier0Only = antibodies.filter(
     (ab) => ab.config.tier === 0 && ab.scriptPath,
@@ -89,7 +90,7 @@ export async function runRedTeam(
     stats.total += 1;
     perCategory.set(sample.category, stats);
 
-    const { results } = await runTier0(tier0Only, sample.content, tier0TimeoutMs);
+    const { results } = await tier0Runner(tier0Only, sample.content, tier0TimeoutMs);
     const hit = results.some(
       (r) => r.verdict === "malicious" || r.verdict === "suspicious",
     );
