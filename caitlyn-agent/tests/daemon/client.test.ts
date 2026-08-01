@@ -1,7 +1,23 @@
 /**
  * Tests for daemon client.
  */
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+
+// Isolate HOME so the daemon's scan path never writes to the real
+// ~/.caitlyn history/stats directories.
+const { testHomeId } = vi.hoisted(() => ({
+  testHomeId: "caitlyn-dclient-home-" + Date.now().toString(36),
+}));
+
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  const base = actual.tmpdir() + "/" + testHomeId;
+  return { ...actual, homedir: () => base };
+});
+
 import { DaemonServer } from "../../src/daemon/server.js";
 import {
   isDaemonAvailable,
@@ -17,9 +33,10 @@ import type { LlmCallFn } from "../../src/scanner.js";
 let server: DaemonServer;
 const PORT = 19071;
 const mockBenign: LlmCallFn = async () => "0";
+const STATS_DIR = path.join(os.tmpdir(), `${testHomeId}-stats`);
 
 beforeAll(async () => {
-  server = new DaemonServer({ port: PORT });
+  server = new DaemonServer({ port: PORT, statsDir: STATS_DIR });
   server.setLlmCall(mockBenign);
   await server.start();
 
@@ -29,6 +46,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await server.stop();
+  try { fs.rmSync(path.join(os.tmpdir(), testHomeId), { recursive: true, force: true }); } catch { /* ok */ }
 });
 
 // The daemon client uses hardcoded URL http://127.0.0.1:9070.

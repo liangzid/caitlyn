@@ -450,7 +450,7 @@ describe("SessionManager", () => {
       const destDir = tmpSessionDir();
       dirs.push(destDir);
 
-      const forked = SessionManager.forkFrom(source.getSessionFile(), "/dest/cwd");
+      const forked = SessionManager.forkFrom(source.getSessionFile(), "/dest/cwd", destDir);
       expect(forked.getCwd()).toBe("/dest/cwd");
       expect(forked.getEntryCount()).toBe(2);
 

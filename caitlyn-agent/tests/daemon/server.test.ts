@@ -1,24 +1,47 @@
 /**
  * Tests for daemon HTTP server.
  */
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+
+// Isolate HOME and stub recordScanFeedback so real ~/.caitlyn state and
+// antibody configs are never modified by the scan endpoints under test.
+const { testHomeId } = vi.hoisted(() => ({
+  testHomeId: "caitlyn-dserver-home-" + Date.now().toString(36),
+}));
+
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  const base = actual.tmpdir() + "/" + testHomeId;
+  return { ...actual, homedir: () => base };
+});
+
+vi.mock("../../src/library.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/library.js")>();
+  return { ...actual, recordScanFeedback: vi.fn() };
+});
+
 import { DaemonServer } from "../../src/daemon/server.js";
 import type { LlmCallFn } from "../../src/scanner.js";
 
 let server: DaemonServer;
 const PORT = 19070; // non-standard to avoid conflicts
+const STATS_DIR = path.join(os.tmpdir(), `${testHomeId}-stats`);
 
 const mockBenign: LlmCallFn = async () => "0";
 const mockMalicious: LlmCallFn = async () => "malicious 0.95";
 
 beforeAll(async () => {
-  server = new DaemonServer({ port: PORT });
+  server = new DaemonServer({ port: PORT, statsDir: STATS_DIR });
   server.setLlmCall(mockBenign);
   await server.start();
 });
 
 afterAll(async () => {
   await server.stop();
+  try { fs.rmSync(path.join(os.tmpdir(), testHomeId), { recursive: true, force: true }); } catch { /* ok */ }
 });
 
 const BASE = `http://127.0.0.1:${PORT}`;

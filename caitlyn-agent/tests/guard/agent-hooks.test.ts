@@ -1,7 +1,27 @@
 /**
  * Tests for guard/agent-hooks.ts
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import * as fs from "node:fs";
+import * as path from "node:path";
+
+// Isolate HOME and stub recordScanFeedback so real ~/.caitlyn state and
+// antibody configs are never modified by the scanning under test.
+const { testHomeId } = vi.hoisted(() => ({
+  testHomeId: "caitlyn-ahooks-home-" + Date.now().toString(36),
+}));
+
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  const base = actual.tmpdir() + "/" + testHomeId;
+  return { ...actual, homedir: () => base };
+});
+
+vi.mock("../../src/library.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/library.js")>();
+  return { ...actual, recordScanFeedback: vi.fn() };
+});
+
 import {
   AgentHooksEngine,
   createPiAgentHookAdapter,

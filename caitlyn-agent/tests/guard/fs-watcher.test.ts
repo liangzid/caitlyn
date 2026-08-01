@@ -4,10 +4,28 @@
  * Tests the FSWatcher class: file classification, text extraction,
  * scanning, quarantine, and event handling.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+
+// Isolate HOME so scanning never touches the real ~/.caitlyn state, and
+// stub recordScanFeedback so real antibody configs are never rewritten.
+const { testHomeId } = vi.hoisted(() => ({
+  testHomeId: "caitlyn-fsw-home-" + Date.now().toString(36),
+}));
+
+vi.mock("node:os", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:os")>();
+  const base = actual.tmpdir() + "/" + testHomeId;
+  return { ...actual, homedir: () => base };
+});
+
+vi.mock("../../src/library.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/library.js")>();
+  return { ...actual, recordScanFeedback: vi.fn() };
+});
+
 import { FSWatcher } from "../../src/guard/fs-watcher.js";
 import type { LlmCallFn } from "../../src/scanner.js";
 import type { FSWatcherConfig } from "../../src/guard/fs-watcher.js";
@@ -44,6 +62,7 @@ beforeEach(() => {
 
 afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
+  try { fs.rmSync(path.join(os.tmpdir(), testHomeId), { recursive: true, force: true }); } catch { /* ok */ }
 });
 
 function writeFile(relPath: string, content: string): string {

@@ -1,7 +1,7 @@
 /**
  * Tests for daemon lifecycle management.
  */
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -15,10 +15,19 @@ import {
 
 // ── PID File Helpers ────────────────────────────────────────────────
 
-const PID_FILE = path.join(os.tmpdir(), "caitlyn-daemon.pid");
+let pidFile: string;
+
+beforeEach(() => {
+  pidFile = path.join(os.tmpdir(), `caitlyn-daemon-${Date.now()}-${Math.random().toString(36).slice(2)}.pid`);
+  process.env.CAITLYN_PID_FILE = pidFile;
+});
+
+afterEach(() => {
+  delete process.env.CAITLYN_PID_FILE;
+});
 
 function cleanPidFile(): void {
-  try { fs.unlinkSync(PID_FILE); } catch { /* ok */ }
+  try { fs.unlinkSync(pidFile); } catch { /* ok */ }
 }
 
 afterEach(cleanPidFile);
@@ -29,15 +38,15 @@ describe("PID file operations", () => {
   it("writePidFile creates a valid PID file", () => {
     cleanPidFile();
     writePidFile();
-    expect(fs.existsSync(PID_FILE)).toBe(true);
-    const raw = fs.readFileSync(PID_FILE, "utf-8").trim();
+    expect(fs.existsSync(pidFile)).toBe(true);
+    const raw = fs.readFileSync(pidFile, "utf-8").trim();
     expect(parseInt(raw, 10)).toBe(process.pid);
   });
 
   it("removePidFile deletes the PID file", () => {
     writePidFile();
     removePidFile();
-    expect(fs.existsSync(PID_FILE)).toBe(false);
+    expect(fs.existsSync(pidFile)).toBe(false);
   });
 
   it("removePidFile is safe when no file exists", () => {
@@ -61,7 +70,7 @@ describe("daemon status checks", () => {
 
   it("isDaemonRunning returns false for nonexistent PID", () => {
     // Write a PID that doesn't exist (99999 is unlikely to be alive)
-    fs.writeFileSync(PID_FILE, "99999", "utf-8");
+    fs.writeFileSync(pidFile, "99999", "utf-8");
     expect(isDaemonRunning()).toBe(false);
   });
 
@@ -95,13 +104,13 @@ describe("daemon status checks", () => {
 
 describe("invalid PID file handling", () => {
   it("handles garbage in PID file", () => {
-    fs.writeFileSync(PID_FILE, "not-a-number", "utf-8");
+    fs.writeFileSync(pidFile, "not-a-number", "utf-8");
     expect(isDaemonRunning()).toBe(false);
     expect(getDaemonPid()).toBeNull();
   });
 
   it("handles empty PID file", () => {
-    fs.writeFileSync(PID_FILE, "", "utf-8");
+    fs.writeFileSync(pidFile, "", "utf-8");
     expect(isDaemonRunning()).toBe(false);
     expect(getDaemonPid()).toBeNull();
   });
