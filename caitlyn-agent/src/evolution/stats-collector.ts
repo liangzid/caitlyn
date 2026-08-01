@@ -19,6 +19,11 @@ export interface StatsEvent {
   value: number;
   at: string;
   meta?: Record<string, unknown>;
+  /**
+   * Frequency events are aggregated per collect cycle: the count of new
+   * events becomes the observation (e.g. tool calls per minute).
+   */
+  frequency?: boolean;
 }
 
 export interface BaselineModel {
@@ -135,9 +140,19 @@ export class StatsCollector {
     }
 
     const windowStart = now.getTime() - this.config.windowMs;
+    const frequencyCounts = new Map<string, { source: StatsEventSource; count: number }>();
     for (let i = this.state.lastEventIndex; i < events.length; i++) {
       const event = events[i];
       if (!event || !Number.isFinite(event.value)) continue;
+      if (event.frequency === true) {
+        const entry = frequencyCounts.get(event.metric) ?? {
+          source: event.source,
+          count: 0,
+        };
+        entry.count += 1;
+        frequencyCounts.set(event.metric, entry);
+        continue;
+      }
       const baseline = this.baselineFor(event.metric);
       this.pruneWindow(baseline, windowStart);
 
@@ -149,6 +164,24 @@ export class StatsCollector {
       }
 
       this.updateBaseline(baseline, event, now);
+    }
+
+    // Frequency metrics: one aggregated observation per collect cycle.
+    for (const [metric, entry] of frequencyCounts) {
+      const baseline = this.baselineFor(metric);
+      const aggregated: StatsEvent = {
+        source: entry.source,
+        metric,
+        value: entry.count,
+        at: now.toISOString(),
+      };
+      const trigger = this.evaluate(aggregated, baseline, now);
+      if (trigger && this.canTrigger(metric, now)) {
+        this.state.lastTriggerAt[metric] = now.toISOString();
+        this.state.triggersToday.count += 1;
+        triggers.push(trigger);
+      }
+      this.updateBaseline(baseline, aggregated, now);
     }
 
     this.state.lastEventIndex = events.length;

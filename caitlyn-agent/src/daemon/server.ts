@@ -23,6 +23,7 @@ import { createUnavailableLlmCall, type LlmCallFn } from "../scanner.js";
 import type { ScanResult } from "../schema.js";
 import { loadEvolutionConfig, type EvolutionConfig } from "../config.js";
 import { EvolutionEngine } from "../evolution/engine.js";
+import { collectNetworkMetrics } from "../evolution/network-probe.js";
 import { appendTriggerRecord } from "../evolution/stats-events.js";
 import {
   StatsCollector,
@@ -159,6 +160,10 @@ export class DaemonServer {
    * anomaly trigger. Public for tests and manual daemon status checks.
    */
   async collectStats(): Promise<AnomalyTrigger[]> {
+    // OS/network signals: real connection counts from /proc/net.
+    for (const event of collectNetworkMetrics()) {
+      this.statsCollector.appendEvent(event);
+    }
     const triggers = this.statsCollector.collect();
     for (const trigger of triggers) {
       appendTriggerRecord(trigger, this.config.statsDir!);

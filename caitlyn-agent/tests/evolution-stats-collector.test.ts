@@ -189,4 +189,24 @@ describe("StatsCollector", () => {
     expect(restarted.collect(new Date(NOW.getTime() + 2000))).toEqual([]);
     expect(restarted.baselineFor("tool_calls_per_minute").sampleCount).toBe(1);
   });
+
+  it("aggregates frequency events into per-cycle observations", () => {
+    const collector = new StatsCollector(dir, makeConfig());
+    collector.load();
+
+    for (let i = 0; i < 3; i++) {
+      collector.appendEvent(makeEvent({ metric: "calls_per_minute", value: 1, frequency: true }));
+    }
+    expect(collector.collect(new Date(NOW.getTime() + 1000))).toEqual([]);
+    expect(collector.baselineFor("calls_per_minute").sampleCount).toBe(1);
+    expect(collector.baselineFor("calls_per_minute").ewma).toBe(3);
+
+    for (let i = 0; i < 30; i++) {
+      collector.appendEvent(makeEvent({ metric: "calls_per_minute", value: 1, frequency: true }));
+    }
+    const triggers = collector.collect(new Date(NOW.getTime() + 61_000));
+    expect(triggers).toHaveLength(1);
+    expect(triggers[0].metric).toBe("calls_per_minute");
+    expect(triggers[0].value).toBe(30);
+  });
 });
