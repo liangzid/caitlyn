@@ -379,14 +379,15 @@ function readBody(req: http.IncomingMessage, maxBytes: number = MAX_BODY_BYTES):
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let total = 0;
+    let rejected = false;
     req.on("data", (chunk: Buffer) => {
       total += chunk.length;
-      if (total > maxBytes) {
+      if (total > maxBytes && !rejected) {
+        rejected = true;
         reject(new BodyTooLargeError());
-        req.destroy();
         return;
       }
-      chunks.push(chunk);
+      if (!rejected) chunks.push(chunk);
     });
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
     req.on("error", reject);
