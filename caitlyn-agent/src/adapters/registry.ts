@@ -42,6 +42,8 @@ export interface AgentInstall {
   /** For idempotency check: a sentinel value that, if present in the config, means hooks are already installed. */
   idempotencyCheck?: { jsonPath: string; matchValue: unknown };
   tomlPatch?: { section: string; lines: string[] };
+  /** Target file for tomlPatch; defaults to configPath. */
+  tomlPath?: string;
   additionalFiles?: Array<{ relPath: string; content: string }>;
   postInstallMessage?: string;
   /** Files to remove during uninstall (relative to config). */
@@ -315,6 +317,7 @@ export const AGENT_REGISTRY: AgentSignature[] = [
         section: "features",
         lines: ["codex_hooks = true"],
       },
+      tomlPath: "~/.codex/config.toml",
       uninstallFiles: [
         "~/.codex/hooks.json.caitlyn-backup",
         "~/.codex/config.toml.caitlyn-backup",
@@ -464,19 +467,15 @@ def register(ctx):
       npmDependency: "@earendil-works/pi-agent-core",
     },
     install: {
-      configPath: "(in your agent entry point)",
-      mergeStrategy: "copy-file",
-      content: PI_MIDDLEWARE_SOURCE,
-      idempotencyCheck: {
-        jsonPath: "",
-        matchValue: "",
-      },
-      uninstallFiles: [],
+      configPath: "",
+      mergeStrategy: "print-instructions",
       postInstallMessage:
         "pi-coding-agent CAITLYN middleware ready.\n" +
-        "Add this line to your agent entry point:\n" +
+        "Create a caitlyn-middleware.js file next to your agent entry point " +
+        "using the PI_MIDDLEWARE_SOURCE snippet from caitlyn-agent/src/adapters/registry.ts,\n" +
+        "then add this line to your agent entry point:\n" +
         '  import "./caitlyn-middleware.js";\n' +
-        "The middleware calls caitlyn-hook before and after every tool call, same as all other agents.",
+        "The middleware calls caitlyn-hook before and after every tool call.",
     },
   },
 ];
@@ -629,6 +628,15 @@ export function dryRunInstall(agentId: string): DryRunChange[] {
     });
   }
 
+  if (install.tomlPatch) {
+    const tomlTarget = expandPath(install.tomlPath ?? install.configPath);
+    changes.push({
+      filePath: tomlTarget,
+      action: "modify",
+      description: `Append [${install.tomlPatch.section}] to ${tomlTarget}`,
+    });
+  }
+
   if (install.additionalFiles) {
     for (const f of install.additionalFiles) {
       changes.push({
@@ -735,6 +743,15 @@ export function installAgent(agentId: string, dryRun = false): InstallResult {
         break;
       case "print-instructions":
         break;
+    }
+
+    // Apply a TOML patch (e.g., the Codex feature flag) to its target file.
+    // merge-toml already handled it above, so only apply it for other
+    // strategies whose config file is JSON (e.g., Codex hooks.json).
+    if (install.tomlPatch && install.mergeStrategy !== "merge-toml") {
+      const tomlTarget = install.tomlPath ?? install.configPath;
+      mergeTomlConfig(tomlTarget, install.tomlPatch);
+      filesModified.push(expandPath(tomlTarget));
     }
 
     if (install.additionalFiles) {
