@@ -48,3 +48,4 @@ packages = ["src/agent_eval"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]

@@ -23,3 +23,18 @@ jobs:
         run: npm run build
       - name: Run unit tests
         run: npm test
+
+  agent-eval:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: AgentEval
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: pip install pytest
+      - name: Run Python tests
+        run: pytest -q
