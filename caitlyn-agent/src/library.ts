@@ -265,6 +265,15 @@ export function saveAntibody(entry: AntibodyEntry): void {
       for (const d of entry.config.deps) {
         configLines.push(`  - ${yamlEscape(d)}`);
       }
+    } else if (key === "signatures") {
+      // Signatures are objects; serialize as a YAML list so the config
+      // round-trips through the parser instead of becoming a JSON string.
+      configLines.push("signatures:");
+      for (const sig of entry.config.signatures) {
+        configLines.push(`  - pattern: ${yamlEscape(sig.pattern)}`);
+        configLines.push(`    type: ${yamlEscape(sig.type)}`);
+        configLines.push(`    label: ${yamlEscape(sig.label)}`);
+      }
     } else {
       configLines.push(`${key}: ${yamlEscape(value)}`);
     }
@@ -545,14 +554,18 @@ export function recordScanFeedback(
     if (!antibody) continue;
     const stats = antibody.config.stats;
     stats.total_scans = (stats.total_scans ?? 0) + 1;
-    if (verdict === "malicious") stats.true_positives = (stats.true_positives ?? 0) + 1;
-    else if (verdict === "benign" && stats.total_scans > 1) {
-      // Only track FP for non-first scans (first scan may be exploratory)
+    if (verdict === "malicious") {
+      stats.true_positives = (stats.true_positives ?? 0) + 1;
+    } else {
+      // The antibody fired (reported malicious) but the final verdict was
+      // not malicious — count it as a false positive.
+      stats.false_positives = (stats.false_positives ?? 0) + 1;
     }
     // Update rolling average latency
     stats.avg_latency_us = stats.total_scans > 1
       ? (stats.avg_latency_us * (stats.total_scans - 1) + latencyUs) / stats.total_scans
       : latencyUs;
+    // Persist immediately so stats survive the library cache and restarts.
+    saveAntibody(antibody);
   }
 }
-

@@ -376,6 +376,17 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     // Persist to scan history
     await logScan(result, options.content);
 
+    // If Tier 0 fired but the final verdict is not malicious, count the
+    // votes as false positives for those antibodies.
+    if (verdict !== "malicious") {
+      const t0Malicious = t0.results
+        .filter((r) => r.verdict === "malicious")
+        .map((r) => r.antibody_id);
+      if (t0Malicious.length > 0) {
+        recordScanFeedback(t0Malicious, verdict, latency);
+      }
+    }
+
     return result;
   } catch (err) {
     // LLM failed — fall back to Tier 0 results only
@@ -402,6 +413,14 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     };
 
     await logScan(result, options.content);
+    if (fallback.verdict !== "malicious") {
+      const t0Malicious = t0.results
+        .filter((r) => r.verdict === "malicious")
+        .map((r) => r.antibody_id);
+      if (t0Malicious.length > 0) {
+        recordScanFeedback(t0Malicious, fallback.verdict, latency);
+      }
+    }
     return result;
   }
 }
