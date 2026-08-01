@@ -11,7 +11,12 @@ import type { EvolutionAutonomy } from "../config.js";
 import type { LlmCallFn } from "../scanner.js";
 import { AntibodyDagStore } from "./dag-store.js";
 import { createEmptyEvidence, type AntibodyNode } from "./dag-types.js";
-import { buildGeneratorPrompt, parseCandidates, serializeDagMeta } from "./generator.js";
+import {
+  buildGeneratorPrompt,
+  parseCandidates,
+  serializeDagMeta,
+  type ShmTarget,
+} from "./generator.js";
 import { LessonsStore, type EvolutionLesson } from "./lessons-store.js";
 import type {
   AntigenProfile,
@@ -33,6 +38,8 @@ export interface EvolutionLoopConfig {
   lessonsPerCluster: number;
   /** 评审一致性抽查：accept 候选再独立评审一次。 */
   consistencyRecheck: boolean;
+  /** 候选全部失败时基于上轮 revise 候选做定向微调（SHM fallback）。 */
+  shmFallback: boolean;
   /** 有样本路径的自治等级（auto 且 hasSamples 才直接 active）。 */
   autonomy: EvolutionAutonomy;
   hasSamples: boolean;
@@ -84,6 +91,7 @@ export class EvolutionLoop {
       this.config.lessonsPerCluster,
     );
     let lessonSummary = "";
+    let shmTarget: ShmTarget | null = null;
 
     for (let round = 1; round <= this.config.maxRounds; round++) {
       result.rounds = round;
@@ -105,6 +113,10 @@ export class EvolutionLoop {
         lessons: clusterLessons,
         lessonSummary,
         candidatesPerRun: this.config.candidatesPerRun,
+        shmTarget:
+          this.config.shmFallback && shmTarget !== null
+            ? shmTarget
+            : undefined,
       });
       result.tokensUsed += estimateTokens(prompt);
 
@@ -133,6 +145,15 @@ export class EvolutionLoop {
         result.tokensUsed += estimateTokens(review.prompt + review.output);
         this.writeLesson(params, round, draft, verification, review.sheet);
         result.lessonsWritten += 1;
+
+        if (review.sheet.verdict === "revise") {
+          shmTarget = {
+            name: draft.name,
+            description: draft.description,
+            signatures: draft.signatures,
+            suggestion: review.sheet.suggestion,
+          };
+        }
 
         const hardPass =
           verification.mustDetectPassed &&

@@ -69,6 +69,8 @@ export interface EvolutionConfig {
   consistencyRecheck: boolean;
   /** 生成器参考的相似样本簇大小（防过拟合上下文，不进入硬约束）。 */
   similarSamples: number;
+  /** 候选全部失败时，基于上轮 revise 候选做定向微调兜底（SHM）。 */
+  shmFallback: boolean;
   /** 同一抗原簇触发免疫应答的冷却时间（分钟）。 */
   cooldownMinutes: number;
   /** 每日免疫应答次数上限（防成本攻击）。 */
@@ -99,6 +101,7 @@ export const EVOLUTION_DEFAULTS: EvolutionConfig = {
   lessonsPerCluster: 10,
   consistencyRecheck: false,
   similarSamples: 3,
+  shmFallback: true,
   cooldownMinutes: 60,
   dailyEvolutionLimit: 10,
   evolutionDir: path.join(os.homedir(), ".caitlyn", "evolution"),
@@ -262,6 +265,7 @@ export function loadEvolutionConfig(configPath?: string): EvolutionConfig {
   cfg.lessonsPerCluster = parsePositiveNumber(raw, "lessons_per_cluster", cfg.lessonsPerCluster);
   cfg.consistencyRecheck = parseBoolean(raw, "consistency_recheck", cfg.consistencyRecheck);
   cfg.similarSamples = parsePositiveNumber(raw, "similar_samples", cfg.similarSamples);
+  cfg.shmFallback = parseBoolean(raw, "shm_fallback", cfg.shmFallback);
   cfg.cooldownMinutes = parsePositiveNumber(raw, "cooldown_minutes", cfg.cooldownMinutes);
   cfg.dailyEvolutionLimit = parsePositiveNumber(raw, "daily_evolution_limit", cfg.dailyEvolutionLimit);
 

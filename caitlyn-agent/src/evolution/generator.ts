@@ -9,6 +9,14 @@ import type { AntibodyNode } from "./dag-types.js";
 import type { EvolutionLesson } from "./lessons-store.js";
 import type { AntigenProfile, CandidateDraft } from "./loop-types.js";
 
+/** SHM fallback target: the best revise candidate from the last round. */
+export interface ShmTarget {
+  name: string;
+  description: string;
+  signatures: Array<{ pattern: string; type: string; label: string }>;
+  suggestion: string;
+}
+
 /** Serialize DAG nodes to a compact table for the generator. */
 export function serializeDagMeta(
   nodes: AntibodyNode[],
@@ -46,6 +54,7 @@ export function buildGeneratorPrompt(params: {
   lessons: EvolutionLesson[];
   lessonSummary: string;
   candidatesPerRun: number;
+  shmTarget?: ShmTarget;
 }): string {
   const lessonLines = params.lessons.map(
     (l) =>
@@ -62,6 +71,26 @@ export function buildGeneratorPrompt(params: {
     params.profile.similarSamples && params.profile.similarSamples.length > 0
       ? params.profile.similarSamples.map((s) => `  - ${s}`).join("\n")
       : "  (无)";
+
+  const shmText = params.shmTarget
+    ? [
+        `# 定向微调（SHM fallback）`,
+        `上一轮候选未通过。请基于以下候选做最小定向修改（保持签名结构，只按建议调整），不要全新合成：`,
+        "```json",
+        JSON.stringify(
+          {
+            name: params.shmTarget.name,
+            description: params.shmTarget.description,
+            signatures: params.shmTarget.signatures,
+          },
+          null,
+          2,
+        ),
+        "```",
+        `评审建议：${params.shmTarget.suggestion}`,
+        ``,
+      ].join("\n")
+    : "";
 
   return [
     `# 目标`,
@@ -88,6 +117,7 @@ export function buildGeneratorPrompt(params: {
     `# 失败教训（参考，避免重复错误）`,
     lessonsText,
     ``,
+    shmText,
     `# 输出要求`,
     `生成 ${params.candidatesPerRun} 个候选抗体，严格输出一个 JSON 数组，不要输出其他文字：`,
     `[{ "id": "ab-xxx", "name": "...", "description": "...", "category": "...",`,

@@ -26,6 +26,7 @@ function makeConfig(overrides: Partial<EvolutionLoopConfig> = {}): EvolutionLoop
     dagContext: "meta",
     lessonsPerCluster: 10,
     consistencyRecheck: false,
+    shmFallback: true,
     autonomy: "auto",
     hasSamples: true,
     maxBenignFalsePositives: 1,
@@ -448,5 +449,83 @@ describe("EvolutionLoop", () => {
     const written = lessons.list();
     expect(written).toHaveLength(2);
     expect(written[1].reviewSuggestion).toContain("inconsistent re-review");
+  });
+
+  it("injects the SHM fallback target after a revise round", async () => {
+    const generatorPrompts: string[] = [];
+    const loop = new EvolutionLoop(
+      makeConfig({
+        maxRounds: 2,
+        generatorLlm: recordingLlm(
+          generatorPrompts,
+          JSON.stringify([
+            {
+              id: "ab-r1",
+              name: "First Attempt",
+              description: "initial candidate",
+              category: "injection",
+              tier: 0,
+              parentIds: [],
+              signatures: [{ pattern: "ignore all previous", type: "exact", label: "p" }],
+              rationale: "x",
+            },
+          ]),
+          GOOD_CANDIDATE,
+        ),
+        reviewerLlm: queuedLlm(
+          JSON.stringify({
+            verdict: "revise",
+            reason: "too narrow",
+            suggestion: "widen the pattern",
+            duplicateOf: null,
+          }),
+          ACCEPT_REVIEW,
+        ),
+      }),
+    );
+    const result = await loop.run(makeParams());
+
+    expect(result.approved).toHaveLength(1);
+    expect(generatorPrompts[1]).toContain("定向微调（SHM fallback）");
+    expect(generatorPrompts[1]).toContain("widen the pattern");
+    expect(generatorPrompts[1]).toContain("First Attempt");
+  });
+
+  it("does not inject the SHM target when disabled", async () => {
+    const generatorPrompts: string[] = [];
+    const loop = new EvolutionLoop(
+      makeConfig({
+        shmFallback: false,
+        maxRounds: 2,
+        generatorLlm: recordingLlm(
+          generatorPrompts,
+          JSON.stringify([
+            {
+              id: "ab-r1",
+              name: "First Attempt",
+              description: "initial candidate",
+              category: "injection",
+              tier: 0,
+              parentIds: [],
+              signatures: [{ pattern: "ignore all previous", type: "exact", label: "p" }],
+              rationale: "x",
+            },
+          ]),
+          GOOD_CANDIDATE,
+        ),
+        reviewerLlm: queuedLlm(
+          JSON.stringify({
+            verdict: "revise",
+            reason: "too narrow",
+            suggestion: "widen the pattern",
+            duplicateOf: null,
+          }),
+          ACCEPT_REVIEW,
+        ),
+      }),
+    );
+    await loop.run(makeParams());
+
+    expect(generatorPrompts[1]).not.toContain("定向微调（SHM fallback）");
   });
 });

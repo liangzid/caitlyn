@@ -74,6 +74,7 @@ export class EvolutionEngine {
       dagContext: config.dagContext,
       lessonsPerCluster: config.lessonsPerCluster,
       consistencyRecheck: config.consistencyRecheck,
+      shmFallback: config.shmFallback,
       autonomy: config.autonomy,
       hasSamples: request.hasSamples,
       verifier,

@@ -53,6 +53,8 @@ lessons_per_cluster = 10
 consistency_recheck = false
 # 生成器参考的相似样本簇大小（防过拟合参考上下文，非硬约束）
 similar_samples = 3
+# 候选全部失败时是否做定向微调兜底（SHM fallback）
+shm_fallback = true
 cooldown_minutes = 60
 daily_evolution_limit = 10
 # evolution_dir = "./.caitlyn-evolution"
