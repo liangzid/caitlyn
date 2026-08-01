@@ -272,6 +272,48 @@ export class SessionManager {
     });
   }
 
+  /**
+   * Insert a compaction boundary right after a specific entry.
+   *
+   * Unlike appendCompaction (which appends at the end of the log), this
+   * places the boundary between the summarized messages and the kept ones,
+   * so buildSessionContext() continues with the kept messages instead of
+   * dropping them.
+   */
+  insertCompactionAfter(
+    afterEntryId: string,
+    summary: string,
+    firstKeptEntryId: string,
+    tokensBefore: number,
+  ): string {
+    const idx = this.entries.findIndex((e) => e.id === afterEntryId);
+    if (idx === -1) {
+      throw new Error(`Entry ${afterEntryId} not found`);
+    }
+    const entry: CompactionEntry = {
+      id: randomUUID(),
+      parentId: this.entries[idx].id,
+      timestamp: Date.now(),
+      type: "compaction",
+      summary,
+      firstKeptEntryId,
+      tokensBefore,
+    };
+    // Insert after the last summarized entry, before the kept messages.
+    // Skip any compaction entries already sitting at the boundary so the
+    // newest compaction is the "most recent" one for buildSessionContext().
+    let insertIdx = idx + 1;
+    while (
+      insertIdx < this.entries.length &&
+      this.entries[insertIdx].type === "compaction"
+    ) {
+      insertIdx++;
+    }
+    this.entries.splice(insertIdx, 0, entry);
+    this.dirty = true;
+    return entry.id;
+  }
+
   appendBranchSummary(fromId: string, summary: string): string {
     return this.append({ type: "branch_summary", fromId, summary });
   }

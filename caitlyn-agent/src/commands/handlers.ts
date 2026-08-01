@@ -247,6 +247,7 @@ export async function doCompaction(self: TUIHost): Promise<void> {
   const summaryText = oldMsgs
     .map((m) => `[${m.role}]: ${m.content.slice(0, 200)}`)
     .join("\n");
+  const lastSummarizedId = msgs[cutIndex - 1].id;
 
   // Use LLM to summarize if available
   let summary = "";
@@ -261,7 +262,9 @@ export async function doCompaction(self: TUIHost): Promise<void> {
     (sum, m) => sum + estimateTokens(m.content), 0,
   );
 
-  self.sessionMgr.appendCompaction(summary, firstKeptId, tokensBefore);
+  // Insert the compaction boundary after the summarized messages so the
+  // kept half stays in the LLM context (append-at-end would drop it).
+  self.sessionMgr.insertCompactionAfter(lastSummarizedId, summary, firstKeptId, tokensBefore);
   self.sessionMgr.flush();
   self.showSystemMessage(
     `${C.green}Compacted.${C.reset} Summarized ${oldMsgs.length} messages (≈${tokensBefore} tokens).`,
