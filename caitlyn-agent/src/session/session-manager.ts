@@ -145,9 +145,9 @@ export class SessionManager {
   }
 
   /** Fork a session from a source file into a new cwd. */
-  static forkFrom(sourcePath: string, targetCwd: string): SessionManager {
+  static forkFrom(sourcePath: string, targetCwd: string, dir?: string): SessionManager {
     const source = SessionManager.open(sourcePath);
-    const forked = SessionManager.create(targetCwd);
+    const forked = SessionManager.create(targetCwd, dir);
     // Copy all entries with deep clone
     for (const entry of source.entries) {
       forked.entries.push(structuredClone(entry));

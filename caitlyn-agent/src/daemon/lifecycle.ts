@@ -12,9 +12,13 @@ import { spawn } from "node:child_process";
 
 // ── Constants ───────────────────────────────────────────────────────
 
-const PID_FILE = path.join(os.tmpdir(), "caitlyn-daemon.pid");
 const DEFAULT_PORT = 9070;
 const STARTUP_TIMEOUT_MS = 5000;
+
+/** PID file path; CAITLYN_PID_FILE overrides the default for tests. */
+function pidFilePath(): string {
+  return process.env.CAITLYN_PID_FILE || path.join(os.tmpdir(), "caitlyn-daemon.pid");
+}
 
 // ── Public API ──────────────────────────────────────────────────────
 
@@ -96,7 +100,7 @@ export function stopDaemon(): { stopped: boolean; message: string } {
   try {
     process.kill(pid, "SIGTERM");
     // Remove PID file
-    try { fs.unlinkSync(PID_FILE); } catch { /* ok */ }
+    try { fs.unlinkSync(pidFilePath()); } catch { /* ok */ }
     return { stopped: true, message: `Daemon stopped (PID ${pid})` };
   } catch (err) {
     return { stopped: false, message: `Failed to stop daemon: ${String(err)}` };
@@ -120,7 +124,7 @@ export function daemonStatus(): {
 
 function readPid(): number | null {
   try {
-    const raw = fs.readFileSync(PID_FILE, "utf-8").trim();
+    const raw = fs.readFileSync(pidFilePath(), "utf-8").trim();
     const pid = parseInt(raw, 10);
     return isNaN(pid) ? null : pid;
   } catch {
@@ -130,12 +134,12 @@ function readPid(): number | null {
 
 /** Write the current process PID to the PID file. Called by the daemon on startup. */
 export function writePidFile(): void {
-  fs.writeFileSync(PID_FILE, String(process.pid), "utf-8");
+  fs.writeFileSync(pidFilePath(), String(process.pid), "utf-8");
 }
 
 /** Remove the PID file. Called by the daemon on shutdown. */
 export function removePidFile(): void {
-  try { fs.unlinkSync(PID_FILE); } catch { /* ok */ }
+  try { fs.unlinkSync(pidFilePath()); } catch { /* ok */ }
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
