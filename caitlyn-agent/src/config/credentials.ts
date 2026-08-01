@@ -21,6 +21,30 @@ import { getProviders } from "../llm.js";
 const CAITLYN_DIR = path.join(os.homedir(), ".caitlyn");
 const AUTH_FILE = path.join(CAITLYN_DIR, "auth.json");
 
+/** Provider id → environment variable names used for API keys. */
+const PROVIDER_ENV_VARS: Record<string, string[]> = {
+  openrouter: ["OPENROUTER_API_KEY"],
+  openai: ["OPENAI_API_KEY"],
+  anthropic: ["ANTHROPIC_API_KEY"],
+  deepseek: ["DEEPSEEK_API_KEY"],
+  groq: ["GROQ_API_KEY"],
+  google: ["GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"],
+  mistral: ["MISTRAL_API_KEY"],
+  cohere: ["CO_API_KEY"],
+  together: ["TOGETHER_API_KEY"],
+  fireworks: ["FIREWORKS_API_KEY"],
+  xai: ["XAI_API_KEY"],
+  cerebras: ["CEREBRAS_API_KEY"],
+  moonshot: ["MOONSHOT_API_KEY"],
+  opencode: ["OPENCODE_API_KEY"],
+  minimax: ["MINIMAX_API_KEY"],
+  nvidia: ["NVIDIA_API_KEY"],
+  "cloudflare-workers-ai": ["CLOUDFLARE_API_TOKEN"],
+  "amazon-bedrock": ["AWS_ACCESS_KEY_ID"],
+  "github-copilot": ["COPILOT_GITHUB_TOKEN", "GITHUB_TOKEN"],
+  "vercel-ai-gateway": ["AI_GATEWAY_API_KEY"],
+};
+
 // ── Auth Store ────────────────────────────────────────────────────
 
 interface AuthEntry {
@@ -101,32 +125,25 @@ export function checkProviderAuth(provider: string): {
 
 /** Heuristic check for environment API key. */
 function hasEnvApiKey(provider: string): boolean {
-  const envMap: Record<string, string[]> = {
-    openrouter: ["OPENROUTER_API_KEY"],
-    openai: ["OPENAI_API_KEY"],
-    anthropic: ["ANTHROPIC_API_KEY"],
-    deepseek: ["DEEPSEEK_API_KEY"],
-    groq: ["GROQ_API_KEY"],
-    google: ["GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"],
-    mistral: ["MISTRAL_API_KEY"],
-    cohere: ["CO_API_KEY"],
-    together: ["TOGETHER_API_KEY"],
-    fireworks: ["FIREWORKS_API_KEY"],
-    xai: ["XAI_API_KEY"],
-    cerebras: ["CEREBRAS_API_KEY"],
-    moonshot: ["MOONSHOT_API_KEY"],
-    opencode: ["OPENCODE_API_KEY"],
-    minimax: ["MINIMAX_API_KEY"],
-    nvidia: ["NVIDIA_API_KEY"],
-    "cloudflare-workers-ai": ["CLOUDFLARE_API_TOKEN"],
-    "amazon-bedrock": ["AWS_ACCESS_KEY_ID"],
-    "github-copilot": ["COPILOT_GITHUB_TOKEN", "GITHUB_TOKEN"],
-    "vercel-ai-gateway": ["AI_GATEWAY_API_KEY"],
-  };
-
-  const vars = envMap[provider];
+  const vars = PROVIDER_ENV_VARS[provider];
   if (!vars) return false;
   return vars.some((v) => process.env[v]);
+}
+
+/**
+ * Build an env override for a provider from persisted credentials.
+ * Returns undefined when the provider has no persisted key or when any
+ * matching environment variable is already set (env wins).
+ */
+export function getCredentialEnv(
+  provider: string,
+): Record<string, string> | undefined {
+  const vars = PROVIDER_ENV_VARS[provider];
+  if (!vars) return undefined;
+  if (vars.some((v) => process.env[v])) return undefined;
+  const key = getPersistedApiKey(provider);
+  if (!key) return undefined;
+  return { [vars[0]]: key };
 }
 
 /** List all providers with any form of auth configured. */

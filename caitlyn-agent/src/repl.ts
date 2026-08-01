@@ -10,6 +10,7 @@ import { resolveModel } from "./llm.js";
 import { getDashboard, getHistory } from "./history.js";
 import { loadConfig } from "./config.js";
 import { complete } from "@earendil-works/pi-ai/compat";
+import { getCredentialEnv } from "./config/credentials.js";
 
 const BANNER = `
 ┌──────────────────────────────────────────────────┐
@@ -36,7 +37,9 @@ Multi-line: end with a line containing only "." (period)
 let llmCache: LlmCallFn | null = null;
 async function getLlm(): Promise<LlmCallFn> {
   if (llmCache) return llmCache;
-  const model = resolveModel(loadConfig());
+  const config = loadConfig();
+  const model = resolveModel(config);
+  const credentialEnv = getCredentialEnv(config.provider);
   llmCache = async (sp: string, up: string) => {
     const ctx = {
       systemPrompt: sp,
@@ -44,7 +47,7 @@ async function getLlm(): Promise<LlmCallFn> {
         { role: "user" as const, content: [{ type: "text" as const, text: up }], timestamp: Date.now() },
       ],
     };
-    const r = await complete(model, ctx);
+    const r = await complete(model, ctx, credentialEnv ? { env: credentialEnv } : undefined);
     return r.content.filter((c): c is { type: "text"; text: string } => c.type === "text").map(c => c.text).join("");
   };
   return llmCache;

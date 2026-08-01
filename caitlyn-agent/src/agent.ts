@@ -12,6 +12,7 @@ import { CAITLYN_SYSTEM_PROMPT } from "./system-prompt.js";
 import { createCaitlynTools } from "./tools.js";
 import type { LlmCallFn } from "./scanner.js";
 import type { Model } from "@earendil-works/pi-ai";
+import { getCredentialEnv } from "./config/credentials.js";
 
 export interface CaitlynAgentContext {
   agent: Agent;
@@ -23,6 +24,7 @@ export interface CaitlynAgentContext {
 export async function createCaitlynAgent(): Promise<CaitlynAgentContext> {
   const config = loadConfig();
   const model = resolveModel(config);
+  const credentialEnv = getCredentialEnv(config.provider);
   console.log(`🤖 LLM: ${model.provider}/${model.id}`);
 
   const llmCall: LlmCallFn = async (systemPrompt: string, userPrompt: string) => {
@@ -36,7 +38,7 @@ export async function createCaitlynAgent(): Promise<CaitlynAgentContext> {
         },
       ],
     };
-    const response = await complete(model, ctx);
+    const response = await complete(model, ctx, credentialEnv ? { env: credentialEnv } : undefined);
     const textBlocks = response.content.filter(
       (c): c is { type: "text"; text: string } => c.type === "text",
     );

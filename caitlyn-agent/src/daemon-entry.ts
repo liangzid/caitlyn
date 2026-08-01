@@ -14,6 +14,7 @@ import { loadConfig } from "./config.js";
 import { resolveModel } from "./llm.js";
 import { complete } from "@earendil-works/pi-ai/compat";
 import type { LlmCallFn } from "./scanner.js";
+import { getCredentialEnv } from "./config/credentials.js";
 
 const args = process.argv.slice(2);
 const portArg = args.indexOf("--port");
@@ -35,12 +36,13 @@ function hasAnyApiKey(): boolean {
 }
 
 function makeDaemonLlmCall(): LlmCallFn | null {
-  if (!hasAnyApiKey()) {
+  const config = loadConfig();
+  const credentialEnv = getCredentialEnv(config.provider);
+  if (!hasAnyApiKey() && !credentialEnv) {
     console.error("[daemon] No API key found (DEEPSEEK_API_KEY etc.). Tier 1 disabled — Tier 0 only.");
     return null;
   }
   try {
-    const config = loadConfig();
     const model = resolveModel(config);
     console.error(`[daemon] LLM provider: ${config.provider} / ${config.model}`);
     return async (systemPrompt: string, userPrompt: string) => {
@@ -54,7 +56,7 @@ function makeDaemonLlmCall(): LlmCallFn | null {
           },
         ],
       };
-      const response = await complete(model, ctx);
+      const response = await complete(model, ctx, credentialEnv ? { env: credentialEnv } : undefined);
       const textBlocks = response.content.filter(
         (c): c is { type: "text"; text: string } => c.type === "text",
       );
