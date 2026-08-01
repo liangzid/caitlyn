@@ -147,3 +147,44 @@ Stage 1 重新设计疫苗/进化链路。团长明确：现有 evolution 相关
 - cli.ts 的 help 已列 caitlyn vaccinate 但无实现；C8 补 case。
 - 旧 evolution/ 文件（affinity/cost-monitor/memory-bank/pipeline/shm-engine/
   validation-set）整体由新实现替换。
+
+* 实现完成记录（2026-08-01）
+
+按 8 个 commit 全部落地并推送 origin/master，最终 npm run build 通过、
+npm test 全绿（24 个测试文件 / 322 tests）。
+
+** commit 列表
+- 597360b docs(records): record full evolution implementation plan
+- 2cff419 feat(config): add evolution section schema with safe defaults
+- 3859998 feat(evolution): add antibody DAG store with score and retirement
+- f7f3c76 feat(evolution): add append-only lessons store with source whitelist
+- 6739294 feat(evolution): add stats collector with EWMA/p99 anomaly triggers
+- 04b55b2 feat(evolution): add deterministic verification sandbox
+- ac6a7ff feat(evolution): add LLM generate-verify-review loop
+- 06e0a3c feat(evolution): add shadow observation and two-channel promotion
+- b7cf924 feat(evolution): add orchestration engine, feature extraction and scan runtime
+- b135ed2 feat(cli): wire vaccinate command with approval and DAG status
+- 9c100f9 feat(evolution): emit stats events and shadow scans from scanning paths
+- 2c4eaa0 feat(daemon): collect stats and run immune responses on anomalies
+- 7b3eca6 test(daemon): avoid port conflict in stats collection tests
+- 56420f1 refactor(evolution): remove legacy GA pipeline and wire new immune loop everywhere
+
+** 落地的能力
+- CLI：caitlyn vaccinate <pattern>（显式触发）、--approve <id>、--status。
+- daemon：60s 周期 collect stats，统计异常自动触发免疫应答（unknown 路径），
+  triggers.jsonl 持久化"察觉未知"记录；generator=model / reviewer=small_model。
+- 扫描路径：scan() 对 shadow 抗体只记录不拦截；immune_self/filesystem/
+  agent_behavior 三层事件已接（os_network 采集点待环境集成，接口已就绪）。
+- agent 工具 caitlyn_vaccinate 与 TUI /vaccinate 均已切到新 loop。
+
+** 修复的旧问题
+- 疫苗空转 TODO：CostMonitor/pipeline 旧链路整体删除，替换为新免疫 loop。
+- CLI vaccinate 命令缺失：已实现。
+- registry 测试环境敏感失败：getWatchDirsForAgents 只返回真实存在的目录。
+
+** 遗留（第二版）
+- 评审一致性抽查（同输入重评比对）、主动红队演练。
+- 频率型基线（每分钟调用数等）与 os_network 信号采集点。
+- candidate 自动升级（shadow 双通道已实现，人工 approve 已实现）。
+- 测试套件整体隔离（本次新测试全部临时目录注入；旧套件个别仍写真实
+  config.yaml 统计，属测试基建 TODO）。
