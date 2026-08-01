@@ -13,6 +13,9 @@
  *   exit 0 → allow/flag
  *   exit 1 → block
  *
+ * Before hooks block malicious input; post hooks (PostToolUse) can only
+ * flag malicious tool output — the tool has already run.
+ *
  * No LLM dependency — designed for sub-second hook latency.
  */
 
@@ -32,6 +35,14 @@ interface HookInput {
 interface HookOutput {
   action: "allow" | "block" | "flag";
   reason: string;
+}
+
+/** Scan payload cap for hook input (defense against huge outputs). */
+const MAX_SCAN_BYTES = 64 * 1024;
+
+export interface HookDecision {
+  output: HookOutput;
+  exitCode: number;
 }
 
 // ── Main ────────────────────────────────────────────────────────────
@@ -56,49 +67,77 @@ async function main(): Promise<void> {
   }
 
   // Build scan content from hook input
-  const content = buildContent(input!);
+  const decision = await decideHook(input!);
+  respond(decision.output, decision.exitCode);
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Core hook decision logic (exported for tests).
+ * KEYPOINT-REVIEW: post hooks never block — malicious tool output is
+ * flagged because the tool has already executed.
+ */
+export async function decideHook(input: HookInput): Promise<HookDecision> {
+  const content = buildContent(input);
   if (content) {
     appendStatsEvent("agent_behavior", "tool_payload_bytes", content.length, {
-      tool: input!.tool,
+      tool: input.tool,
+      post: input.post === true,
     });
   }
   if (!content || content.trim().length === 0) {
-    respond({ action: "allow", reason: "no scannable content" }, 0);
+    return { output: { action: "allow", reason: "no scannable content" }, exitCode: 0 };
   }
 
-  // Run Tier 0 scan
   const antibodies = loadAntibodies();
-  const tier0Only = antibodies.filter((ab: { config: { tier: number }; scriptPath: string | null }) => ab.config.tier === 0 && ab.scriptPath);
-
+  const tier0Only = antibodies.filter(
+    (ab: { config: { tier: number }; scriptPath: string | null }) =>
+      ab.config.tier === 0 && ab.scriptPath,
+  );
   if (tier0Only.length === 0) {
-    respond({ action: "allow", reason: "no Tier 0 antibodies loaded" }, 0);
+    return { output: { action: "allow", reason: "no Tier 0 antibodies loaded" }, exitCode: 0 };
   }
 
-  const { results, malicious } = await runTier0(tier0Only, content!, 500);
+  const { results, malicious } = await runTier0(
+    tier0Only,
+    content.slice(0, MAX_SCAN_BYTES),
+    500,
+  );
 
   if (malicious) {
     const matched = results
       .filter((r: ScriptResult) => r.verdict === "malicious")
       .map((r: ScriptResult) => r.antibody_id)
       .join(", ");
-    respond({ action: "block", reason: `malicious content detected by: ${matched}` }, 1);
+    if (input.post === true) {
+      return {
+        output: {
+          action: "flag",
+          reason: `post-tool output may be malicious (detected by: ${matched})`,
+        },
+        exitCode: 0,
+      };
+    }
+    return {
+      output: { action: "block", reason: `malicious content detected by: ${matched}` },
+      exitCode: 1,
+    };
   }
 
   const suspicious = results.filter((r: ScriptResult) => r.verdict === "suspicious");
   if (suspicious.length > 0) {
-    respond(
-      {
+    return {
+      output: {
         action: "flag",
         reason: `suspicious content flagged by: ${suspicious.map((r: ScriptResult) => r.antibody_id).join(", ")}`,
       },
-      0,
-    );
+      exitCode: 0,
+    };
   }
 
-  respond({ action: "allow", reason: "content passed Tier 0 scan" }, 0);
+  return { output: { action: "allow", reason: "content passed Tier 0 scan" }, exitCode: 0 };
 }
-
-// ── Helpers ─────────────────────────────────────────────────────────
 
 function buildContent(input: HookInput): string {
   // If explicit content is provided, use it
