@@ -17,7 +17,7 @@ import * as http from "node:http";
 import { hybridScan } from "../hybrid-scanner.js";
 import { loadAntibodies, loadAntigens } from "../library.js";
 import { FSWatcher } from "../guard/fs-watcher.js";
-import type { LlmCallFn } from "../scanner.js";
+import { createUnavailableLlmCall, type LlmCallFn } from "../scanner.js";
 import type { ScanResult } from "../schema.js";
 
 // ── Types ───────────────────────────────────────────────────────────
@@ -163,19 +163,12 @@ export class DaemonServer {
     const content = parsed.content.slice(0, 65536); // 64KB max
 
     let result: ScanResult;
-    if (this.llmCall) {
-      result = await hybridScan({ content, llmCall: this.llmCall });
-    } else {
-      // Tier 0 only when no LLM configured
-      result = {
-        verdict: "benign",
-        confidence: 0,
-        tier: 0,
-        script_results: [],
-        total_latency_us: 0,
-        total_tokens: 0,
-      };
-    }
+    // Without an LLM, run Tier 0 scripts only (they never need the LLM) and
+    // let the scan pipeline mark the degraded mode in its failure path.
+    result = await hybridScan({
+      content,
+      llmCall: this.llmCall ?? createUnavailableLlmCall("LLM not configured on daemon"),
+    });
 
     // Update stats
     this.scansTotal++;

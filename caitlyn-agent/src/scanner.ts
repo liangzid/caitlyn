@@ -212,8 +212,51 @@ export function parseTier1Response(
     return { verdict: "malicious", confidence: 0.8 };
   }
 
-  // Unknown format — default benign with low confidence, plus a comment noting the hardcoded fallback
-  return { verdict: "benign", confidence: 0.5 };
+  // Unknown format — fail toward caution: mark suspicious with low confidence
+  // so malformed LLM output cannot silently pass as benign.
+  return { verdict: "suspicious", confidence: 0.5 };
+}
+
+/**
+ * Build an LLM call function that always fails.
+ * Used to run Tier 0-only scans (scripts never need the LLM) while keeping
+ * the unified scan() pipeline; the failure path reports the degraded mode.
+ */
+export function createUnavailableLlmCall(reason: string): LlmCallFn {
+  return async () => {
+    throw new Error(reason);
+  };
+}
+
+/**
+ * Derive a conservative verdict from Tier 0 results when Tier 1 is
+ * unavailable: any malicious vote wins, otherwise weak signals become
+ * "suspicious" instead of silently passing as benign.
+ */
+function deriveTier0Verdict(
+  results: ScriptResult[],
+): { verdict: "benign" | "suspicious" | "malicious"; confidence: number } {
+  const malicious = results.filter((r) => r.verdict === "malicious");
+  if (malicious.length > 0) {
+    return {
+      verdict: "malicious",
+      confidence: Math.max(...malicious.map((r) => r.confidence)),
+    };
+  }
+
+  const signals = results.filter(
+    (r) =>
+      r.verdict === "suspicious" ||
+      (r.verdict === "benign" && r.confidence > 0.3 && r.reason !== null),
+  );
+  if (signals.length > 0) {
+    return {
+      verdict: "suspicious",
+      confidence: Math.max(...signals.map((r) => r.confidence)),
+    };
+  }
+
+  return { verdict: "benign", confidence: 0 };
 }
 
 export function buildTier1Prompt(
@@ -340,9 +383,10 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     // LLM failed — fall back to Tier 0 results only
     const latency = Math.round(performance.now() - scanStart) * 1000;
     const errorMsg = err instanceof Error ? err.message : String(err);
+    const fallback = deriveTier0Verdict(t0.results);
     const result: ScanResult = {
-      verdict: "benign",
-      confidence: 0,
+      verdict: fallback.verdict,
+      confidence: fallback.confidence,
       tier: 1,
       script_results: [
         ...t0.results,

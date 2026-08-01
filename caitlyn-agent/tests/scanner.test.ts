@@ -204,34 +204,34 @@ describe("parseTier1Response", () => {
 
   // ── Edge cases: malformed input ──
 
-  it("defaults to benign 0.5 for empty string", () => {
+  it("defaults to suspicious 0.5 for empty string", () => {
     const result = parseTier1Response("");
-    expect(result.verdict).toBe("benign");
+    expect(result.verdict).toBe("suspicious");
     expect(result.confidence).toBe(0.5);
   });
 
-  it("defaults to benign 0.5 for unrecognized format", () => {
+  it("defaults to suspicious 0.5 for unrecognized format", () => {
     const result = parseTier1Response("completely bogus input!!!");
-    expect(result.verdict).toBe("benign");
+    expect(result.verdict).toBe("suspicious");
     expect(result.confidence).toBe(0.5);
   });
 
-  it("defaults to benign 0.5 for verdict-only without confidence", () => {
+  it("defaults to suspicious 0.5 for verdict-only without confidence", () => {
     const result = parseTier1Response("malicious");
-    expect(result.verdict).toBe("benign");
+    expect(result.verdict).toBe("suspicious");
     expect(result.confidence).toBe(0.5);
   });
 
-  it("defaults to benign 0.5 for unknown verdict with valid confidence", () => {
+  it("defaults to suspicious 0.5 for unknown verdict with valid confidence", () => {
     // "dangerous" is not in the enum — regex won't match
     const result = parseTier1Response("dangerous 0.95");
-    expect(result.verdict).toBe("benign");
+    expect(result.verdict).toBe("suspicious");
     expect(result.confidence).toBe(0.5);
   });
 
-  it("defaults to benign 0.5 for whitespace-only input", () => {
+  it("defaults to suspicious 0.5 for whitespace-only input", () => {
     const result = parseTier1Response("   ");
-    expect(result.verdict).toBe("benign");
+    expect(result.verdict).toBe("suspicious");
     expect(result.confidence).toBe(0.5);
   });
 
@@ -243,20 +243,20 @@ describe("parseTier1Response", () => {
 
   it("does not match with trailing whitespace (^ and $ anchors)", () => {
     const result = parseTier1Response("benign 0.42  ");
-    expect(result.verdict).toBe("benign");
+    expect(result.verdict).toBe("suspicious");
     expect(result.confidence).toBe(0.5); // falls through to default
   });
 
   it("does not match with leading whitespace (^ anchor)", () => {
     const result = parseTier1Response("  suspicious 0.33");
-    expect(result.verdict).toBe("benign");
+    expect(result.verdict).toBe("suspicious");
     expect(result.confidence).toBe(0.5); // falls through to default
   });
 
   it("does not match multiline responses", () => {
     // Regex uses ^ anchor, so content after newline breaks the match
     const result = parseTier1Response("malicious 0.99\nsome extra text");
-    expect(result.verdict).toBe("benign");
+    expect(result.verdict).toBe("suspicious");
     expect(result.confidence).toBe(0.5);
   });
 });
