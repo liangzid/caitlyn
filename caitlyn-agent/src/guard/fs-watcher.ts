@@ -66,6 +66,8 @@ export const DEFAULT_FS_WATCHER_CONFIG: Partial<FSWatcherConfig> = {
   ignorePatterns: [
     "node_modules", ".git", "__pycache__", "*.pyc",
     ".DS_Store", "*.swp", "*.swo", "*.lock",
+    // CAITLYN's own sidecar files must never re-trigger a scan.
+    "*.caitlyn-flag", "*.caitlyn_meta.json",
   ],
   skipExtensions: [
     ".jpg", ".jpeg", ".png", ".gif", ".svg", ".ico",

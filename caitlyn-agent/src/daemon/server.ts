@@ -191,16 +191,17 @@ export class DaemonServer {
       return;
     }
 
-    if (!this.watcher) {
-      this.watcher = new FSWatcher(
-        { watchDirs: parsed.dirs, quarantineDir: "/tmp/caitlyn-quarantine" },
-        this.llmCall,
-      );
-      this.watcher.start();
-    } else {
-      // FSWatcher doesn't support adding dirs after start — recreate
-      // (in a real implementation, we'd add this capability)
+    // FSWatcher does not support changing dirs after start — recreate it so
+    // the new watch list is actually honored.
+    if (this.watcher) {
+      await this.watcher.stop();
+      this.watcher = null;
     }
+    this.watcher = new FSWatcher(
+      { watchDirs: parsed.dirs, quarantineDir: "/tmp/caitlyn-quarantine" },
+      this.llmCall,
+    );
+    this.watcher.start();
 
     this.watchDirs = parsed.dirs;
 
