@@ -69,10 +69,6 @@ export interface AntibodyIndex {
   trees: Record<string, TreeNode>;
 }
 
-export interface AntigenIndex {
-  entries: Record<string, { id: string; category: string; escapes: string[] }>;
-}
-
 // ── Scan Types ────────────────────────────────────────────────────
 
 export type Verdict = "benign" | "suspicious" | "malicious";

@@ -20,13 +20,11 @@ import type { Antibody as EvoAntibody } from "../src/evolution/types.js";
 
 import {
   buildAntibodyIndex,
-  buildAntigenIndex,
   toEvoAntibody,
   validateAntibodyConfig,
   validateAntigenConfig,
   loadAntibodyIndex,
   saveAntibodyIndex,
-  saveAntigenIndex,
   loadAntibodies,
   getMemoryBank,
   getCostMonitor,
@@ -227,34 +225,6 @@ describe("buildAntibodyIndex", () => {
     expect(index.roots).toEqual(["gp"]);
     expect(index.trees["gp"].children).toEqual(["p"]);
     expect(index.trees["p"].children).toEqual(["c"]);
-  });
-});
-
-describe("buildAntigenIndex", () => {
-  it("builds entries map from antigen entries", () => {
-    const antigens = [
-      {
-        config: {
-          id: "ag-1",
-          name: "Antigen 1",
-          category: "injection" as const,
-          injection_point: "prompt",
-          target_agent: "test",
-          attack_template: "template",
-          created_at: "2025-01-01",
-          parent_id: null,
-          escapes: ["esc1"],
-        },
-        readme: "",
-        payload: "payload",
-        folderPath: "/fake/ag-1",
-      },
-    ];
-
-    const index = buildAntigenIndex(antigens);
-    expect(index.entries["ag-1"]).toBeTruthy();
-    expect(index.entries["ag-1"].category).toBe("injection");
-    expect(index.entries["ag-1"].escapes).toEqual(["esc1"]);
   });
 });
 

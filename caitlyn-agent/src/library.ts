@@ -19,7 +19,6 @@ import type {
   AntigenEntry,
   AntigenConfig,
   AntibodyIndex,
-  AntigenIndex,
   AntibodyStats,
 } from "./schema.js";
 
@@ -383,18 +382,6 @@ function aggregateStats(index: AntibodyIndex): void {
   }
 }
 
-export function buildAntigenIndex(antigens: AntigenEntry[]): AntigenIndex {
-  const entries: AntigenIndex["entries"] = {};
-  for (const ag of antigens) {
-    entries[ag.config.id] = {
-      id: ag.config.id,
-      category: ag.config.category,
-      escapes: ag.config.escapes,
-    };
-  }
-  return { entries };
-}
-
 // ── Index persistence ─────────────────────────────────────────────
 
 export function saveAntibodyIndex(index: AntibodyIndex): void {
@@ -418,15 +405,6 @@ export function loadAntibodyIndex(): AntibodyIndex | null {
   } catch {
     return null;
   }
-}
-
-export function saveAntigenIndex(index: AntigenIndex): void {
-  fs.mkdirSync(ANTIGENS_DIR, { recursive: true });
-  fs.writeFileSync(
-    path.join(ANTIGENS_DIR, "index.json"),
-    JSON.stringify(index, null, 2),
-    "utf-8",
-  );
 }
 
 // ── Evolution Integration ─────────────────────────────────────────
