@@ -152,13 +152,13 @@ export class DaemonServer {
         `[daemon] ⚠️ anomaly: ${trigger.metric}=${trigger.value} ` +
           `(p99 ${trigger.baselineP99}, ewma ${trigger.baselineEwma})`,
       );
-      await this.runImmuneResponse(trigger);
+      await this.runEvolutionResponse(trigger);
     }
     return triggers;
   }
 
   /** Run the evolution loop for a statistics-only trigger (unknown path). */
-  private async runImmuneResponse(trigger: AnomalyTrigger): Promise<void> {
+  private async runEvolutionResponse(trigger: AnomalyTrigger): Promise<void> {
     const generator = this.generatorLlm ?? this.llmCall;
     const reviewer = this.reviewerLlm ?? this.llmCall;
     if (!generator || !reviewer) {

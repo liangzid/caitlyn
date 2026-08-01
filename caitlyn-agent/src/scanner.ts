@@ -331,7 +331,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
   recordShadowScans(options.content);
   if (t0.malicious) {
     const latency = Math.round(performance.now() - scanStart) * 1000;
-    appendStatsEvent("immune_self", "scan_latency_us", latency);
+    appendStatsEvent("evolution_self", "scan_latency_us", latency);
     const result: ScanResult = {
       verdict: "malicious",
       confidence: Math.max(...t0.results.map((r) => r.confidence)),
@@ -367,7 +367,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     const verdict = parsed.verdict;
     const confidence = parsed.confidence;
     const latency = Math.round(performance.now() - scanStart) * 1000;
-    appendStatsEvent("immune_self", "scan_latency_us", latency);
+    appendStatsEvent("evolution_self", "scan_latency_us", latency);
 
     const result: ScanResult = {
       verdict,
@@ -397,7 +397,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     // LLM failed — fall back to Tier 0 results only
     const latency = Math.round(performance.now() - scanStart) * 1000;
     const errorMsg = err instanceof Error ? err.message : String(err);
-    appendStatsEvent("immune_self", "scan_latency_us", latency);
+    appendStatsEvent("evolution_self", "scan_latency_us", latency);
     const fallback = deriveTier0Verdict(t0.results);
     const result: ScanResult = {
       verdict: fallback.verdict,

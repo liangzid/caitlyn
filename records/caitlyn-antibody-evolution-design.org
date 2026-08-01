@@ -18,9 +18,9 @@ Stage 1 重新设计疫苗/进化链路。团长明确：现有 evolution 相关
    - 成本/频率触发降为辅助（仅效率优化，不作主故事）。
    - 事件驱动（Tier0 命中但 Tier1 放行）已砍掉。
 3. StatsCollector：独立组件，作为 daemon 的一部分。事件产生端无状态追加
-   ~/.caitlyn/stats/events.jsonl；daemon 聚合、基线建模、异常判定；
-   baseline.json 定期持久化。信号源四层清单已确认（Agent 行为、文件系统、
-   OS/网络、免疫系统自身信号）。
+     ~/.caitlyn/stats/events.jsonl；daemon 聚合、基线建模、异常判定；
+     baseline.json 定期持久化。信号源四层清单已确认（Agent 行为、文件系统、
+     OS/网络、进化系统自身信号，标识 evolution_self）。
 4. 自治等级配置（[evolution]）：
    - autonomy = "auto"（有样本路径，默认；经确定性验证约束 + 评审）
    - unknown_threat_action = "candidate"（无样本路径，默认；泛化候选需确认）
@@ -113,7 +113,7 @@ Stage 1 重新设计疫苗/进化链路。团长明确：现有 evolution 相关
 4. C4 feat(stats): events collector + EWMA/p99 基线 + 异常触发
    - 事件产生端无状态追加 ~/.caitlyn/stats/events.jsonl；daemon 聚合（StatsCollector）；
      EWMA 基线 + p99 异常判定；baseline.json 定期持久化；冷却期与每日上限（L5）；
-     信号源四层（agent_behavior / filesystem / os_network / immune_self）。
+     信号源四层（agent_behavior / filesystem / os_network / evolution_self）。
    - unit tests：事件追加、EWMA 计算、p99、异常判定、基线持久化、冷却、日限。
 5. C5 feat(evolution): deterministic verification sandbox
    - 抗原簇必须全中；良性样本 FP<=1；正则签名验证带超时与危险模式拒绝（L2）。
@@ -173,7 +173,7 @@ npm test 全绿（24 个测试文件 / 322 tests）。
 - CLI：caitlyn vaccinate <pattern>（显式触发）、--approve <id>、--status。
 - daemon：60s 周期 collect stats，统计异常自动触发免疫应答（unknown 路径），
   triggers.jsonl 持久化"察觉未知"记录；generator=model / reviewer=small_model。
-- 扫描路径：scan() 对 shadow 抗体只记录不拦截；immune_self/filesystem/
+- 扫描路径：scan() 对 shadow 抗体只记录不拦截；evolution_self/filesystem/
   agent_behavior 三层事件已接（os_network 采集点待环境集成，接口已就绪）。
 - agent 工具 caitlyn_vaccinate 与 TUI /vaccinate 均已切到新 loop。
 
