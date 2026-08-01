@@ -59,3 +59,44 @@
   guard 合一 → AgentEval 契约 → daemon HTTP/mcp_proxy → CLI/TUI stub）。
 - evolution 第二版（评审一致性抽查、红队、频率基线、os_network 采集）。
 - 阶段 3 研究/产品（AgentEval 大规模评测等）。
+
+* 阶段 2 正确性收尾完成（2026-08-01）
+
+团长确认"阶段 2 逐一实现 + evolution 讨论无水分 + 打磨"。全部完成并推送。
+
+** 阶段 2（9 项）
+- S2.1 scanner totalTokens：真实 prompt+输出 token 估算（不再写死 +1）。
+- S2.2 hook-bin post 语义：post 恶意输出 flag 不 block；payload 64KB 上限。
+- S2.3 guard 合一：hook-bin 改为 AgentHooksEngine 的薄适配层（单一实现）。
+- S2.4 AgentEval：caitlyn_py_defense 统一 daemon 契约（benign 词汇 + daemon 优先
+  本地回退）；pytest 11 通过。
+- S2.5 mcp_proxy：FastMCP 工具参数 schema 注册（动态签名）；fake_mcp 增加 HTTP
+  /tools/call 端点，proxy 真实网络转发 + 进程内回退；pytest 18 通过。
+- S2.6 daemon HTTP：1MiB body 上限（413）+ requestTimeout 30s。
+- S2.7 parseYaml：单引号/双引号多行标量（折叠 + 空行），真实抗体 prompt 完整解析。
+- S2.8 TUI：/antibody add <id> [category] [tier]（生成 config/README/detect.ts）、
+  /antibody remove（移入 .trash 可恢复）、/login <provider> <key> 持久化 auth.json。
+- S2.9 环境：清理 caitlyn.db/cost_log/memory_bank 遗留（备份 /tmp）；daemon 重启为
+  最新代码；修复 provider 无 key 时 daemon 挂起（降级 Tier0）。
+
+** evolution 第二版（无水分补齐）
+- E2.1 频率型基线：StatsEvent.frequency 事件按 collect 周期聚合成观测。
+- E2.2 os_network 采集：/proc/net 真实连接统计，daemon 每周期采集。
+- E2.3 评审一致性抽查：consistency_recheck 配置，accept 候选二次评审，不一致拒绝
+  并写教训。
+- E2.4 主动红队：caitlyn vaccinate --redteam，244 条真实攻击样本跑真实 Tier0
+  （实测 36.9% 检出率；exfil 0% 暴露弱点）。
+- E2.5 相似样本簇：engine 自动从 knowledge_base 找 Jaccard top-k 注入生成器
+  （参考上下文，非硬约束；L1 边界保持）。
+- E2.6 SHM 兜底：shm_fallback 配置，revise 候选进下一轮定向微调。
+- E2.7 成本信号：scan_tokens 事件（成本触发经值基线覆盖）。
+
+** 测试隔离彻底化（关键修复）
+- 根因：vitest 4 并行 worker 复用 + env 竞态，偶发把真实抗体库改写。
+- 修复：library 目录改为运行时解析（CAITLYN_LIBRARY_DIR 每次调用读取）；
+  setup 为每个 worker 提供共享临时库副本（原子锁防竞态）；所有测试 env
+  保存/恢复；client 测试不再 watch /tmp。连续 4 轮全量测试零污染。
+
+** 打磨
+- CLI help 补 --redteam；CI 增加 AgentEval pytest job。
+- 最终状态：TS 364 tests 全绿 + AgentEval 18 pytest 全绿；git 工作区干净。

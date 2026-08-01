@@ -17,6 +17,7 @@
  *   caitlyn vaccinate <pattern>  Submit vaccination pattern to daemon
  *   caitlyn vaccinate --approve <id>  Explicitly activate a candidate
  *   caitlyn vaccinate --status       Show the evolution DAG
+ *   caitlyn vaccinate --redteam [category]  Run the active red-team drill
  */
 
 import { spawnSync } from "node:child_process";
