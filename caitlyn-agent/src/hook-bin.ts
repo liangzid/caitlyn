@@ -19,6 +19,7 @@
 import { runTier0 } from "./scanner.js";
 import { loadAntibodies } from "./library.js";
 import type { ScriptResult } from "./schema.js";
+import { appendStatsEvent } from "./evolution/stats-events.js";
 
 interface HookInput {
   tool: string;
@@ -56,6 +57,11 @@ async function main(): Promise<void> {
 
   // Build scan content from hook input
   const content = buildContent(input!);
+  if (content) {
+    appendStatsEvent("agent_behavior", "tool_payload_bytes", content.length, {
+      tool: input!.tool,
+    });
+  }
   if (!content || content.trim().length === 0) {
     respond({ action: "allow", reason: "no scannable content" }, 0);
   }

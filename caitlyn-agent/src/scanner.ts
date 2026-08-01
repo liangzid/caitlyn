@@ -12,6 +12,8 @@ import * as path from "node:path";
 import type { AntibodyEntry, AntigenEntry, ScanResult, ScriptResult } from "./schema.js";
 import { logScan } from "./history.js";
 import { recordScanFeedback } from "./library.js";
+import { recordShadowScans } from "./evolution/runtime.js";
+import { appendStatsEvent } from "./evolution/stats-events.js";
 
 // ── Tier 0: Sandbox Script Runner ─────────────────────────────────
 
@@ -326,8 +328,10 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
 
   // Tier 0: Fast scripts
   const t0 = await runTier0(options.antibodies, options.content, options.tier0TimeoutMs);
+  recordShadowScans(options.content);
   if (t0.malicious) {
     const latency = Math.round(performance.now() - scanStart) * 1000;
+    appendStatsEvent("immune_self", "scan_latency_us", latency);
     const result: ScanResult = {
       verdict: "malicious",
       confidence: Math.max(...t0.results.map((r) => r.confidence)),
@@ -363,6 +367,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     const verdict = parsed.verdict;
     const confidence = parsed.confidence;
     const latency = Math.round(performance.now() - scanStart) * 1000;
+    appendStatsEvent("immune_self", "scan_latency_us", latency);
 
     const result: ScanResult = {
       verdict,
@@ -392,6 +397,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     // LLM failed — fall back to Tier 0 results only
     const latency = Math.round(performance.now() - scanStart) * 1000;
     const errorMsg = err instanceof Error ? err.message : String(err);
+    appendStatsEvent("immune_self", "scan_latency_us", latency);
     const fallback = deriveTier0Verdict(t0.results);
     const result: ScanResult = {
       verdict: fallback.verdict,

@@ -14,6 +14,7 @@ import * as path from "node:path";
 import type { ScanResult } from "../schema.js";
 import { createUnavailableLlmCall, type LlmCallFn } from "../scanner.js";
 import { hybridScan } from "../hybrid-scanner.js";
+import { appendStatsEvent } from "../evolution/stats-events.js";
 import type { GuardConfig, GuardEvent, VerdictAction } from "./types.js";
 import { DEFAULT_GUARD_CONFIG } from "./types.js";
 import { evaluatePolicy, prepareContent } from "./policy.js";
@@ -278,6 +279,7 @@ export class FSWatcher {
     // Skip empty files
     if (extractedText.trim().length === 0) {
       this.stats.filesAllowed++;
+      appendStatsEvent("filesystem", "file_write_size_bytes", 0);
       return {
         filePath,
         fileType,
@@ -290,6 +292,7 @@ export class FSWatcher {
 
     // Scan
     this.stats.filesScanned++;
+    appendStatsEvent("filesystem", "file_write_size_bytes", extractedText.length);
     let scanResult: ScanResult | null = null;
     let action: VerdictAction = "allow";
 
