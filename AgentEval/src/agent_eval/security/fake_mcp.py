@@ -27,8 +27,10 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from dataclasses import dataclass, field
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -324,6 +326,67 @@ class FakeMCPServer:
         if self._scenario:
             return self._scenario.call_log
         return []
+
+
+# ── HTTP Scenario Endpoint ─────────────────────────────────────────
+
+class HTTPScenarioServer:
+    """Minimal HTTP JSON endpoint for proxy forwarding.
+
+    POST /tools/call with {"tool": str, "arguments": dict} returns
+    {"content": str} from the active scenario. This is the wire
+    contract used by CaitlynMCPProxy for real network forwarding.
+    """
+
+    def __init__(self, port: int = 9876, host: str = "127.0.0.1"):
+        self.port = port
+        self.host = host
+        self._httpd: ThreadingHTTPServer | None = None
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        """Start the HTTP server in a background thread."""
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):  # noqa: N802 (http.server API)
+                if self.path != "/tools/call":
+                    self._json(404, {"error": "not found"})
+                    return
+                try:
+                    length = int(self.headers.get("Content-Length", "0"))
+                    body = json.loads(self.rfile.read(length).decode("utf-8"))
+                    tool = body.get("tool")
+                    arguments = body.get("arguments", {})
+                    if not isinstance(tool, str):
+                        self._json(400, {"error": "missing tool"})
+                        return
+                    content = get_active_scenario().get_response(tool, arguments)
+                    self._json(200, {"content": content})
+                except Exception as exc:  # noqa: BLE001 - report and continue
+                    self._json(500, {"error": str(exc)})
+
+            def _json(self, status: int, payload: dict) -> None:
+                data = json.dumps(payload).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def log_message(self, _format: str, *args: Any) -> None:
+                logger.debug("HTTPScenarioServer: %s", args)
+
+        self._httpd = ThreadingHTTPServer((self.host, self.port), Handler)
+        self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
+        self._thread.start()
+        logger.info("HTTPScenarioServer listening on %s:%d", self.host, self.port)
+
+    def stop(self) -> None:
+        """Stop the HTTP server."""
+        if self._httpd:
+            self._httpd.shutdown()
+            self._httpd.server_close()
+            self._httpd = None
 
 
 # ── Helper: Build Scenario from Test Case ─────────────────────────

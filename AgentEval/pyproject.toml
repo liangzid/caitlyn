@@ -49,3 +49,6 @@ packages = ["src/agent_eval"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+filterwarnings = [
+  "ignore:cannot collect test class 'TestScenario'.*:pytest.PytestCollectionWarning",
+]

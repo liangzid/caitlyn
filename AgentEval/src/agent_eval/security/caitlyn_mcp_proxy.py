@@ -194,37 +194,65 @@ class FastMCPProxy:
         params: list[dict],
     ) -> None:
         """Register a single proxy tool on the FastMCP server."""
-        proxy = self.caitlyn_proxy
-
-        # Build a dynamic function that forwards to Fake MCP
-        def make_handler(name: str):
-            def handler(**kwargs: Any) -> str:
-                # Forward call to Fake MCP Server
-                raw_output = self._call_fake_mcp(name, kwargs)
-                # Scan through CAITLYN
-                filtered, blocked = proxy.scan_tool_output(name, raw_output)
-                return filtered
-            return handler
-
-        handler = make_handler(tool_name)
+        handler = self._make_handler_with_schema(tool_name, tool_desc, params)
         handler.__name__ = tool_name
         handler.__doc__ = tool_desc
 
         server.tool()(handler)
 
+    def _make_handler_with_schema(
+        self, tool_name: str, tool_desc: str, params: list[dict],
+    ) -> Any:
+        """Build a handler whose signature registers the tool parameter
+        schema (named, typed arguments instead of **kwargs)."""
+        names = [p["name"] for p in params]
+        signature = ", ".join(f"{name}: str" for name in names)
+        call_args = ", ".join(f"{name!r}: {name}" for name in names)
+        ns: dict[str, Any] = {
+            "_proxy": self,
+            "_tool_name": tool_name,
+        }
+        source = (
+            f"def handler({signature}) -> str:\n"
+            f"    return _proxy._forward_and_scan(_tool_name, {{{call_args}}})"
+        )
+        exec(source, ns)  # noqa: S102 - controlled local construction
+        handler = ns["handler"]
+        handler.__name__ = tool_name
+        handler.__doc__ = tool_desc + "\n\nArgs:\n" + "\n".join(
+            f"    {p['name']} ({p['type']}): {p['description']}" for p in params
+        )
+        return handler
+
+    def _forward_and_scan(self, tool_name: str, arguments: dict) -> str:
+        """Forward a tool call to Fake MCP and scan the output."""
+        raw_output = self._call_fake_mcp(tool_name, arguments)
+        filtered, _blocked = self.caitlyn_proxy.scan_tool_output(tool_name, raw_output)
+        return filtered
+
     def _call_fake_mcp(self, tool_name: str, arguments: dict) -> str:
-        """Call a tool on the Fake MCP Server via HTTP.
+        """Call a tool on the Fake MCP Server over HTTP /tools/call.
 
-        The Fake MCP Server uses the MCP SSE protocol. For simplicity,
-        we send a direct tool invocation request.
+        Falls back to the in-process scenario when the HTTP endpoint is
+        unreachable (same-process harness setups).
         """
-        # The Fake MCP Server in our architecture uses the TestScenario
-        # module-level state via set_active_scenario(). Since the proxy
-        # runs in the same process, we can directly use the scenario.
-        from agent_eval.security.fake_mcp import get_active_scenario
+        url = self.fake_mcp_url.rstrip("/") + "/tools/call"
+        body = json.dumps({"tool": tool_name, "arguments": arguments}).encode("utf-8")
+        try:
+            req = urllib.request.Request(
+                url,
+                data=body,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                return data.get("content", "")
+        except Exception as exc:  # noqa: BLE001 - network fallback
+            logger.warning("HTTP forward to %s failed (%s); using in-process scenario", url, exc)
+            from agent_eval.security.fake_mcp import get_active_scenario
 
-        scenario = get_active_scenario()
-        return scenario.get_response(tool_name, arguments)
+            return get_active_scenario().get_response(tool_name, arguments)
 
     def start(self, port: int = 9071) -> None:
         """Start the proxy MCP server (blocking)."""
