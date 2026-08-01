@@ -1,22 +1,15 @@
 /**
  * Tests for the red-team drill: real sample loading and report
- * statistics (with a stubbed Tier 0 for deterministic counting).
+ * statistics (with an injected Tier 0 runner for deterministic counting).
  */
-import { describe, it, expect, vi } from "vitest";
-
-vi.mock("../src/scanner.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/scanner.js")>();
-  return { ...actual, runTier0: vi.fn() };
-});
-
-import { runTier0 } from "../src/scanner.js";
+import { describe, it, expect } from "vitest";
+import type { LlmCallFn } from "../src/scanner.js";
+import type { ScriptResult } from "../src/schema.js";
 import {
   loadAttackSamples,
   runRedTeam,
   type AttackSample,
 } from "../src/evolution/redteam.js";
-
-const mockedRunTier0 = vi.mocked(runTier0);
 
 const SAMPLES: AttackSample[] = [
   { id: "s1", content: "hit me", category: "injection", attackType: "x" },
@@ -40,10 +33,10 @@ describe("loadAttackSamples", () => {
 
 describe("runRedTeam", () => {
   it("counts detections per category and reports misses", async () => {
-    mockedRunTier0.mockImplementation(async (_antibodies, content) => {
+    const tier0Runner = async (_antibodies: unknown, content: string) => {
       const hit = content.includes("hit");
       return {
-        results: hit
+        results: (hit
           ? [
               {
                 antibody_id: "ab-test",
@@ -54,12 +47,12 @@ describe("runRedTeam", () => {
                 error: null,
               },
             ]
-          : [],
+          : []) as ScriptResult[],
         malicious: hit,
       };
-    });
+    };
 
-    const report = await runRedTeam(SAMPLES, []);
+    const report = await runRedTeam(SAMPLES, [], 500, tier0Runner);
     expect(report.total).toBe(5);
     expect(report.detected).toBe(2);
     expect(report.detectionRate).toBeCloseTo(0.4, 5);
@@ -76,14 +69,14 @@ describe("runRedTeam", () => {
   });
 
   it("caps the missed list at 20 and marks truncation", async () => {
-    mockedRunTier0.mockResolvedValue({ results: [], malicious: false });
+    const tier0Runner = async () => ({ results: [], malicious: false });
     const many = Array.from({ length: 30 }, (_, i) => ({
       id: `m${i}`,
       content: "clean",
       category: "injection",
       attackType: "x",
     }));
-    const report = await runRedTeam(many, []);
+    const report = await runRedTeam(many, [], 500, tier0Runner);
     expect(report.missedSampleIds).toHaveLength(20);
     expect(report.truncated).toBe(true);
   });

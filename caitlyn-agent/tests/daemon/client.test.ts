@@ -34,8 +34,10 @@ let server: DaemonServer;
 const PORT = 19071;
 const mockBenign: LlmCallFn = async () => "0";
 const STATS_DIR = path.join(os.tmpdir(), `${testHomeId}-stats`);
+const WATCH_DIR = path.join(os.tmpdir(), `${testHomeId}-watch`);
 
 beforeAll(async () => {
+  fs.mkdirSync(WATCH_DIR, { recursive: true });
   server = new DaemonServer({ port: PORT, statsDir: STATS_DIR });
   server.setLlmCall(mockBenign);
   await server.start();
@@ -46,6 +48,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await server.stop();
+  fs.rmSync(WATCH_DIR, { recursive: true, force: true });
   try { fs.rmSync(path.join(os.tmpdir(), testHomeId), { recursive: true, force: true }); } catch { /* ok */ }
 });
 
@@ -82,7 +85,7 @@ describe("daemonWatch via direct HTTP", () => {
     const r1 = await fetch(`http://127.0.0.1:${PORT}/v1/watch`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dirs: ["/tmp"] }),
+      body: JSON.stringify({ dirs: [WATCH_DIR] }),
     });
     expect(r1.status).toBe(200);
 
@@ -90,7 +93,7 @@ describe("daemonWatch via direct HTTP", () => {
     const r2 = await fetch(`http://127.0.0.1:${PORT}/v1/watch`);
     const info = await r2.json();
     expect(info.active).toBe(true);
-    expect(info.dirs).toContain("/tmp");
+    expect(info.dirs).toContain(WATCH_DIR);
 
     // Stop
     const r3 = await fetch(`http://127.0.0.1:${PORT}/v1/watch`, { method: "DELETE" });

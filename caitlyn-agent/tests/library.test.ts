@@ -2,7 +2,16 @@
  * Tests for library.ts — antibody loading, index building, persistence,
  * and scan feedback.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  beforeAll,
+  afterAll,
+  vi,
+} from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -19,8 +28,23 @@ import {
   saveAntibodyIndex,
   loadAntibodies,
   recordScanFeedback,
-  ANTIBODIES_DIR,
+  antibodiesDir,
 } from "../src/library.js";
+
+// The library copy installed by the global setup would shadow the real
+// repository library this suite must exercise; restore it explicitly.
+let originalLibraryDir: string | undefined;
+beforeAll(() => {
+  originalLibraryDir = process.env.CAITLYN_LIBRARY_DIR;
+  delete process.env.CAITLYN_LIBRARY_DIR;
+});
+afterAll(() => {
+  if (originalLibraryDir) {
+    process.env.CAITLYN_LIBRARY_DIR = originalLibraryDir;
+  } else {
+    delete process.env.CAITLYN_LIBRARY_DIR;
+  }
+});
 
 // ── Test Helpers ────────────────────────────────────────────────────
 
@@ -302,7 +326,7 @@ describe("index persistence", () => {
   it("loadAntibodyIndex() returns null for missing index file", () => {
     // When the index.json doesn't exist, it returns null
     // We verify the behavior pattern by checking the function reads from ANTIBODIES_DIR
-    const indexPath = path.join(ANTIBODIES_DIR, "index.json");
+    const indexPath = path.join(antibodiesDir(), "index.json");
     // The index.json should exist since it's auto-generated
     const result = loadAntibodyIndex();
     // It should either be null (no index) or a valid index with roots

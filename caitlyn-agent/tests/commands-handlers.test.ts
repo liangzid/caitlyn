@@ -1,5 +1,7 @@
 /**
  * Tests for TUI command handlers: /antibody add/remove and /login.
+ * The library dir is redirected per-test via CAITLYN_LIBRARY_DIR, which
+ * library.ts resolves at call time (no module reload races).
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
@@ -15,6 +17,12 @@ vi.mock("../src/config/credentials.js", async (importOriginal) => {
   };
 });
 
+import {
+  doAntibodyAddFull,
+  doAntibodyRemove,
+  doLogin,
+} from "../src/commands/handlers.js";
+import { loadAntibodies } from "../src/library.js";
 import { persistApiKey } from "../src/config/credentials.js";
 
 function makeHost() {
@@ -26,32 +34,33 @@ function makeHost() {
 
 describe("antibody management handlers", () => {
   let tmpDir: string;
+  let previousLibraryDir: string | undefined;
   let host: ReturnType<typeof makeHost>;
-  let handlers: typeof import("../src/commands/handlers.js");
-  let library: typeof import("../src/library.js");
 
-  beforeEach(async () => {
+  beforeEach(() => {
+    previousLibraryDir = process.env.CAITLYN_LIBRARY_DIR;
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-handlers-"));
     process.env.CAITLYN_LIBRARY_DIR = tmpDir;
-    vi.resetModules();
-    handlers = await import("../src/commands/handlers.js");
-    library = await import("../src/library.js");
     host = makeHost();
   });
 
   afterEach(() => {
-    delete process.env.CAITLYN_LIBRARY_DIR;
+    if (previousLibraryDir) {
+      process.env.CAITLYN_LIBRARY_DIR = previousLibraryDir;
+    } else {
+      delete process.env.CAITLYN_LIBRARY_DIR;
+    }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   it("creates a tier-0 antibody with config, readme and detect script", async () => {
-    await handlers.doAntibodyAddFull(host, "ab-new-test", "injection", 0);
+    await doAntibodyAddFull(host, "ab-new-test", "injection", 0);
     const dir = path.join(tmpDir, "antibodies", "ab-new-test");
     expect(fs.existsSync(path.join(dir, "config.yaml"))).toBe(true);
     expect(fs.existsSync(path.join(dir, "README.md"))).toBe(true);
     expect(fs.existsSync(path.join(dir, "detect.ts"))).toBe(true);
 
-    const loaded = library.loadAntibodies();
+    const loaded = loadAntibodies();
     expect(loaded.map((a) => a.config.id)).toContain("ab-new-test");
     expect(host.showSystemMessage).toHaveBeenCalledWith(
       expect.stringContaining('Antibody "ab-new-test" created'),
@@ -59,39 +68,39 @@ describe("antibody management handlers", () => {
   });
 
   it("creates a tier-1 antibody without a detect script", async () => {
-    await handlers.doAntibodyAddFull(host, "ab-tier1", "jailbreak", 1);
+    await doAntibodyAddFull(host, "ab-tier1", "jailbreak", 1);
     expect(fs.existsSync(path.join(tmpDir, "antibodies", "ab-tier1", "detect.ts"))).toBe(false);
   });
 
   it("rejects invalid ids, categories and tiers", async () => {
-    await handlers.doAntibodyAddFull(host, "Bad Id!", "injection", 0);
-    await handlers.doAntibodyAddFull(host, "ab-x", "nonsense", 0);
-    await handlers.doAntibodyAddFull(host, "ab-x", "injection", 9);
+    await doAntibodyAddFull(host, "Bad Id!", "injection", 0);
+    await doAntibodyAddFull(host, "ab-x", "nonsense", 0);
+    await doAntibodyAddFull(host, "ab-x", "injection", 9);
     expect(fs.existsSync(path.join(tmpDir, "antibodies", "Bad Id!"))).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, "antibodies", "ab-x"))).toBe(false);
     expect(host.showSystemMessage).toHaveBeenCalledTimes(3);
   });
 
   it("refuses to duplicate an existing id", async () => {
-    await handlers.doAntibodyAddFull(host, "ab-dup", "injection", 0);
-    await handlers.doAntibodyAddFull(host, "ab-dup", "injection", 0);
+    await doAntibodyAddFull(host, "ab-dup", "injection", 0);
+    await doAntibodyAddFull(host, "ab-dup", "injection", 0);
     expect(host.showSystemMessage).toHaveBeenLastCalledWith(
       expect.stringContaining("already exists"),
     );
   });
 
   it("moves removed antibodies to .trash and hides them from the library", async () => {
-    await handlers.doAntibodyAddFull(host, "ab-gone", "injection", 0);
-    await handlers.doAntibodyRemove(host, "ab-gone");
+    await doAntibodyAddFull(host, "ab-gone", "injection", 0);
+    await doAntibodyRemove(host, "ab-gone");
 
     expect(fs.existsSync(path.join(tmpDir, "antibodies", "ab-gone"))).toBe(false);
     const trashItems = fs.readdirSync(path.join(tmpDir, "antibodies", ".trash"));
     expect(trashItems.some((f) => f.startsWith("ab-gone-"))).toBe(true);
-    expect(library.loadAntibodies().map((a) => a.config.id)).not.toContain("ab-gone");
+    expect(loadAntibodies().map((a) => a.config.id)).not.toContain("ab-gone");
   });
 
   it("reports missing antibodies on remove", async () => {
-    await handlers.doAntibodyRemove(host, "ab-missing");
+    await doAntibodyRemove(host, "ab-missing");
     expect(host.showSystemMessage).toHaveBeenCalledWith(
       'Antibody "ab-missing" not found.',
     );
@@ -105,7 +114,6 @@ describe("login handler", () => {
 
   it("persists the api key when provider and key are given", async () => {
     const host = makeHost();
-    const { doLogin } = await import("../src/commands/handlers.js");
     await doLogin(host, "deepseek sk-abc123");
     expect(persistApiKey).toHaveBeenCalledWith("deepseek", "sk-abc123");
     expect(host.showSystemMessage).toHaveBeenCalledWith(
@@ -115,7 +123,6 @@ describe("login handler", () => {
 
   it("shows usage when the key is missing", async () => {
     const host = makeHost();
-    const { doLogin } = await import("../src/commands/handlers.js");
     await doLogin(host, "deepseek");
     expect(persistApiKey).not.toHaveBeenCalled();
     expect(host.showSystemMessage).toHaveBeenCalledWith(
