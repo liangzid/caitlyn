@@ -11,7 +11,7 @@
  */
 
 import type { ScanResult } from "../schema.js";
-import type { LlmCallFn } from "../scanner.js";
+import { createUnavailableLlmCall, type LlmCallFn } from "../scanner.js";
 import { hybridScan } from "../hybrid-scanner.js";
 import type { GuardConfig, GuardEvent, VerdictAction } from "./types.js";
 import { DEFAULT_GUARD_CONFIG } from "./types.js";
@@ -182,14 +182,15 @@ export class AgentHooksEngine {
     // Scan
     let scanResult: ScanResult | null = null;
     try {
-      if (!this.llmCall) {
-        return this._allow(ctx, null);
-      }
-
       const content = prepareContent(ctx.content, this.config.max_scan_bytes);
 
       const result = await Promise.race([
-        hybridScan({ content, llmCall: this.llmCall }),
+        hybridScan({
+          content,
+          // Tier 0 scripts never need the LLM: without one, run the unified
+          // pipeline with a failing Tier 1 so tool calls are still scanned.
+          llmCall: this.llmCall ?? createUnavailableLlmCall("LLM not configured"),
+        }),
         new Promise<never>((_, reject) =>
           setTimeout(
             () => reject(new Error("hook scan timeout")),

@@ -230,8 +230,8 @@ export function createUnavailableLlmCall(reason: string): LlmCallFn {
 
 /**
  * Derive a conservative verdict from Tier 0 results when Tier 1 is
- * unavailable: any malicious vote wins, otherwise weak signals become
- * "suspicious" instead of silently passing as benign.
+ * unavailable: any malicious vote wins; detectors that report weak
+ * signals as "suspicious" are promoted, everything else stays benign.
  */
 function deriveTier0Verdict(
   results: ScriptResult[],
@@ -245,9 +245,7 @@ function deriveTier0Verdict(
   }
 
   const signals = results.filter(
-    (r) =>
-      r.verdict === "suspicious" ||
-      (r.verdict === "benign" && r.confidence > 0.3 && r.reason !== null),
+    (r) => r.verdict === "suspicious",
   );
   if (signals.length > 0) {
     return {

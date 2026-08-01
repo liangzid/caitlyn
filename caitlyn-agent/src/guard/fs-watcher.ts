@@ -12,7 +12,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ScanResult } from "../schema.js";
-import type { LlmCallFn } from "../scanner.js";
+import { createUnavailableLlmCall, type LlmCallFn } from "../scanner.js";
 import { hybridScan } from "../hybrid-scanner.js";
 import type { GuardConfig, GuardEvent, VerdictAction } from "./types.js";
 import { DEFAULT_GUARD_CONFIG } from "./types.js";
@@ -292,31 +292,32 @@ export class FSWatcher {
     let action: VerdictAction = "allow";
 
     try {
-      if (!this.llmCall) {
-        action = "allow";
-      } else {
-        const content = prepareContent(extractedText, this.config.max_scan_bytes);
-        const result = await Promise.race([
-          hybridScan({ content, llmCall: this.llmCall }),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("scan timeout")), this.config.scan_timeout_ms),
-          ),
-        ]);
-        scanResult = result;
-
-        const decision = evaluatePolicy({
-          mode: "fs-watcher",
-          source: filePath,
+      // Tier 0 scripts never need the LLM: without one, run the unified
+      // pipeline with a failing Tier 1 so files are still scanned.
+      const content = prepareContent(extractedText, this.config.max_scan_bytes);
+      const result = await Promise.race([
+        hybridScan({
           content,
-          scanResult: result,
-          config: this.config,
-        });
+          llmCall: this.llmCall ?? createUnavailableLlmCall("LLM not configured"),
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("scan timeout")), this.config.scan_timeout_ms),
+        ),
+      ]);
+      scanResult = result;
 
-        action = decision.action;
+      const decision = evaluatePolicy({
+        mode: "fs-watcher",
+        source: filePath,
+        content,
+        scanResult: result,
+        config: this.config,
+      });
 
-        if (this.config.onEvent) {
-          this.config.onEvent({ ...decision.event, metadata: { filePath, fileType } });
-        }
+      action = decision.action;
+
+      if (this.config.onEvent) {
+        this.config.onEvent({ ...decision.event, metadata: { filePath, fileType } });
       }
     } catch (err) {
       this.stats.scanErrors++;
