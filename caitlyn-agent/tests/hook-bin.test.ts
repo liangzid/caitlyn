@@ -78,12 +78,15 @@ describe("decideHook", () => {
     expect(d.exitCode).toBe(0);
   });
 
-  it("caps oversized content before handing it to the engine", async () => {
+  it("configures the engine to cap oversized content", async () => {
     engineMock.processHook.mockResolvedValue({ action: "allow", reason: "ok" });
     const huge = "x".repeat(200 * 1024);
     await decideHook({ tool: "bash", post: true, content: huge });
+    expect(engineMock.constructorCalls[0]).toEqual(
+      expect.objectContaining({ max_scan_bytes: 64 * 1024 }),
+    );
     expect(engineMock.processHook).toHaveBeenCalledWith(
-      expect.objectContaining({ content: huge.slice(0, 64 * 1024) }),
+      expect.objectContaining({ content: huge }),
     );
   });
 });
