@@ -16,13 +16,19 @@
  * Before hooks block malicious input; post hooks (PostToolUse) can only
  * flag malicious tool output — the tool has already run.
  *
- * No LLM dependency — designed for sub-second hook latency.
+ * All decision logic lives in AgentHooksEngine (single guard
+ * implementation); this binary is only an adapter between the hook
+ * protocol and the engine. No LLM dependency — Tier 1 degrades.
  */
 
-import { runTier0 } from "./scanner.js";
-import { loadAntibodies } from "./library.js";
-import type { ScriptResult } from "./schema.js";
+import {
+  AgentHooksEngine,
+  DEFAULT_AGENT_HOOKS_CONFIG,
+  type AgentHooksConfig,
+} from "./guard/agent-hooks.js";
+import { createUnavailableLlmCall } from "./scanner.js";
 import { appendStatsEvent } from "./evolution/stats-events.js";
+import type { VerdictPolicy } from "./guard/types.js";
 
 interface HookInput {
   tool: string;
@@ -39,6 +45,13 @@ interface HookOutput {
 
 /** Scan payload cap for hook input (defense against huge outputs). */
 const MAX_SCAN_BYTES = 64 * 1024;
+
+/** Post hooks flag malicious output; they cannot block a finished tool. */
+const POST_VERDICT_POLICY: VerdictPolicy = {
+  benign: "allow",
+  suspicious: "flag",
+  malicious: "flag",
+};
 
 export interface HookDecision {
   output: HookOutput;
@@ -90,53 +103,28 @@ export async function decideHook(input: HookInput): Promise<HookDecision> {
     return { output: { action: "allow", reason: "no scannable content" }, exitCode: 0 };
   }
 
-  const antibodies = loadAntibodies();
-  const tier0Only = antibodies.filter(
-    (ab: { config: { tier: number }; scriptPath: string | null }) =>
-      ab.config.tier === 0 && ab.scriptPath,
+  const engine = new AgentHooksEngine(
+    {
+      ...DEFAULT_AGENT_HOOKS_CONFIG,
+      enabled: true,
+      max_scan_bytes: MAX_SCAN_BYTES,
+      scan_timeout_ms: 2000,
+      hook_timeout_ms: 2000,
+      verdict_policy: input.post === true ? POST_VERDICT_POLICY : undefined,
+    } as AgentHooksConfig,
+    createUnavailableLlmCall("hook-bin: no LLM configured"),
   );
-  if (tier0Only.length === 0) {
-    return { output: { action: "allow", reason: "no Tier 0 antibodies loaded" }, exitCode: 0 };
-  }
-
-  const { results, malicious } = await runTier0(
-    tier0Only,
-    content.slice(0, MAX_SCAN_BYTES),
-    500,
-  );
-
-  if (malicious) {
-    const matched = results
-      .filter((r: ScriptResult) => r.verdict === "malicious")
-      .map((r: ScriptResult) => r.antibody_id)
-      .join(", ");
-    if (input.post === true) {
-      return {
-        output: {
-          action: "flag",
-          reason: `post-tool output may be malicious (detected by: ${matched})`,
-        },
-        exitCode: 0,
-      };
-    }
-    return {
-      output: { action: "block", reason: `malicious content detected by: ${matched}` },
-      exitCode: 1,
-    };
-  }
-
-  const suspicious = results.filter((r: ScriptResult) => r.verdict === "suspicious");
-  if (suspicious.length > 0) {
-    return {
-      output: {
-        action: "flag",
-        reason: `suspicious content flagged by: ${suspicious.map((r: ScriptResult) => r.antibody_id).join(", ")}`,
-      },
-      exitCode: 0,
-    };
-  }
-
-  return { output: { action: "allow", reason: "content passed Tier 0 scan" }, exitCode: 0 };
+  const decision = await engine.processHook({
+    hookPoint: input.post === true ? "after" : "before",
+    toolName: input.tool,
+    content,
+    toolArgs: input.args as Record<string, unknown> | undefined,
+    toolResult: input.content,
+  });
+  return {
+    output: { action: decision.action, reason: decision.reason },
+    exitCode: decision.action === "block" ? 1 : 0,
+  };
 }
 
 function buildContent(input: HookInput): string {
