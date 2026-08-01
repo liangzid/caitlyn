@@ -70,6 +70,17 @@ describe("POST /v1/scan", () => {
     expect(res.status).toBe(400);
   });
 
+  it("rejects request bodies larger than 1 MiB", async () => {
+    const res = await fetch(`${BASE}/v1/scan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "x".repeat(1024 * 1024 + 1024) }),
+    });
+    expect(res.status).toBe(413);
+    const body = await res.json();
+    expect(body.error).toContain("too large");
+  });
+
   it("scans content and returns result (benign)", async () => {
     const res = await fetch(`${BASE}/v1/scan`, {
       method: "POST",

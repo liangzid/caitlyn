@@ -59,6 +59,17 @@ export interface DaemonStatus {
   } | null;
 }
 
+/** Maximum accepted request body (1 MiB). */
+const MAX_BODY_BYTES = 1024 * 1024;
+/** Per-request timeout for the local HTTP server. */
+const REQUEST_TIMEOUT_MS = 30_000;
+
+class BodyTooLargeError extends Error {
+  constructor() {
+    super("request body too large");
+  }
+}
+
 // ── Daemon Server ───────────────────────────────────────────────────
 
 export class DaemonServer {
@@ -106,7 +117,10 @@ export class DaemonServer {
 
   async start(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.server = http.createServer((req, res) => this._handleRequest(req, res));
+      this.server = http.createServer(
+        { requestTimeout: REQUEST_TIMEOUT_MS },
+        (req, res) => this._handleRequest(req, res),
+      );
       this.server.on("error", reject);
       this.server.listen(this.config.port, this.config.host, () => {
         this.startTime = Date.now();
@@ -239,6 +253,11 @@ export class DaemonServer {
         res.end(JSON.stringify({ error: "not found" }));
       }
     } catch (err) {
+      if (err instanceof BodyTooLargeError) {
+        res.writeHead(413, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "request body too large" }));
+        return;
+      }
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: String(err) }));
     }
@@ -356,10 +375,19 @@ export class DaemonServer {
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
-function readBody(req: http.IncomingMessage): Promise<string> {
+function readBody(req: http.IncomingMessage, maxBytes: number = MAX_BODY_BYTES): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
-    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    let total = 0;
+    req.on("data", (chunk: Buffer) => {
+      total += chunk.length;
+      if (total > maxBytes) {
+        reject(new BodyTooLargeError());
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")));
     req.on("error", reject);
   });
