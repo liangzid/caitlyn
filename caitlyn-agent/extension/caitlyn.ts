@@ -3,7 +3,7 @@
  *
  * Transforms pi into CAITLYN: immune system for AI agents.
  * - Replaces system prompt (via --system-prompt CLI flag)
- * - Registers caitlyn_scan, caitlyn_status, caitlyn_vaccinate tools
+ * - Registers caitlyn_scan, caitlyn_status tools
  * - Rich terminal rendering: ASCII dashboards, colored output
  * - CAITLYN branding on session start
  *
@@ -70,23 +70,29 @@ ${C.reset}`;
 interface CaitlyndScanResult {
   verdict: string;
   confidence: number;
-  antibody_results: Array<{
+  tier: number;
+  script_results: Array<{
     antibody_id: string;
-    antibody_name: string;
     verdict: string;
     confidence: number;
-    reasoning: string;
+    reason: string | null;
+    latency_us: number;
+    error: string | null;
   }>;
   total_latency_us: number;
   total_tokens: number;
-  triggered_vaccination: boolean;
 }
 
 interface CaitlyndStatus {
-  active_antibodies: number;
-  memory_entries: number;
-  total_antibodies: number;
-  uptime_seconds: number;
+  pid: number;
+  uptime_ms: number;
+  antibodies_loaded: number;
+  antigens_loaded: number;
+  scans_total: number;
+  scans_blocked: number;
+  scans_flagged: number;
+  scans_allowed: number;
+  watch_dirs: string[];
 }
 
 // ── Formatters ──────────────────────────────────────────────────
@@ -102,49 +108,47 @@ function formatScanResult(r: CaitlyndScanResult): string {
     "",
   ];
 
-  if (r.antibody_results?.length) {
+  if (r.script_results?.length) {
     lines.push(`${C.bold}Antibody Votes:${C.reset}`);
-    for (const ab of r.antibody_results) {
+    for (const ab of r.script_results) {
       const icon =
         ab.verdict === "malicious" ? `${C.red}●${C.reset}`
         : ab.verdict === "suspicious" ? `${C.yellow}●${C.reset}`
         : `${C.green}●${C.reset}`;
-      const shortReason = ab.reasoning.length > 150
-        ? ab.reasoning.slice(0, 147) + "..."
-        : ab.reasoning;
-      lines.push(`  ${icon} ${C.bold}${ab.antibody_name}${C.reset}: ${ab.verdict} (${(ab.confidence * 100).toFixed(0)}%)`);
-      lines.push(`    ${C.dim}${shortReason}${C.reset}`);
+      const reason = ab.reason ?? ab.error ?? "";
+      const shortReason = reason.length > 150
+        ? reason.slice(0, 147) + "..."
+        : reason;
+      lines.push(`  ${icon} ${C.bold}${ab.antibody_id}${C.reset}: ${ab.verdict} (${(ab.confidence * 100).toFixed(0)}%)`);
+      if (shortReason) {
+        lines.push(`    ${C.dim}${shortReason}${C.reset}`);
+      }
     }
-  }
-
-  if (r.triggered_vaccination) {
-    lines.push("");
-    lines.push(`${C.magenta}${C.bold}💉 Vaccination Triggered!${C.reset} New specialized antibody evolving for this pattern.`);
   }
 
   return lines.join("\n");
 }
 
 function formatStatusDashboard(s: CaitlyndStatus): string {
-  const uptimeMin = Math.floor(s.uptime_seconds / 60);
+  const uptimeSec = Math.round(s.uptime_ms / 1000);
+  const uptimeMin = Math.floor(uptimeSec / 60);
   const uptimeStr = uptimeMin >= 60
     ? `${Math.floor(uptimeMin / 60)}h ${uptimeMin % 60}m`
-    : `${uptimeMin}m ${s.uptime_seconds % 60}s`;
+    : `${uptimeMin}m ${uptimeSec % 60}s`;
 
-  const abPct = s.total_antibodies > 0
-    ? Math.round((s.active_antibodies / s.total_antibodies) * 100)
-    : 0;
+  const libraryTotal = s.antibodies_loaded + s.antigens_loaded;
 
   return [
     "",
     box("CAITLYN Defense Dashboard", [
       "",
       `  ${C.bold}${C.cyan}🛡️  Antibodies${C.reset}`,
-      bar("  Active", s.active_antibodies, Math.max(s.total_antibodies, 1), C.green),
-      `  ${C.dim}  ${abPct}% of ${s.total_antibodies} total antibodies are active${C.reset}`,
+      bar("  Antibodies", s.antibodies_loaded, Math.max(libraryTotal, 1), C.green),
+      bar("  Antigens", s.antigens_loaded, Math.max(libraryTotal, 1), C.magenta),
       "",
-      `  ${C.bold}${C.blue}🧠 Memory Bank${C.reset}`,
-      `  ${C.bold}${s.memory_entries.toLocaleString()}${C.reset} ${C.dim}attack signatures cached${C.reset}`,
+      `  ${C.bold}${C.blue}📊 Scans${C.reset}`,
+      `  ${C.bold}${s.scans_total}${C.reset} total · ${C.red}${s.scans_blocked} blocked${C.reset} · ${C.yellow}${s.scans_flagged} flagged${C.reset} · ${C.green}${s.scans_allowed} allowed${C.reset}`,
+      `  ${C.dim}${s.watch_dirs?.length ? "watching: " + s.watch_dirs.join(", ") : "not watching"}${C.reset}`,
       "",
       `  ${C.bold}${C.magenta}⏱️  Uptime${C.reset}`,
       `  ${C.bold}${uptimeStr}${C.reset} ${C.dim}since daemon start${C.reset}`,
@@ -201,27 +205,6 @@ export default function (pi: any) {
     },
   });
 
-  pi.registerCommand("vaccinate", {
-    description: "Evolve antibody for a pattern (usage: /vaccinate <pattern_hash>)",
-    async handler(args: string, ctx: any) {
-      if (!args.trim()) {
-        ctx.sendUserMessage("Usage: /caitlyn_vaccinate <pattern_hash>");
-        return;
-      }
-      const resp = await fetch(`${CAITLYND_URL}/v1/vaccinate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pattern_hash: args.trim() }),
-      });
-      if (!resp.ok) {
-        ctx.sendUserMessage(`caitlyn_vaccinate failed (${resp.status})`);
-        return;
-      }
-      const data = await resp.json();
-      ctx.sendUserMessage(`💉 Vaccination triggered. Result: ${JSON.stringify(data)}`);
-    },
-  });
-
   // ── caitlyn_scan ──────────────────────────────────────────────
 
   pi.registerTool({
@@ -229,7 +212,7 @@ export default function (pi: any) {
     label: "Scan Content",
     description:
       "Scan external content for injection, poisoning, or jailbreak attacks " +
-      "before it enters an LLM agent's context. Returns verdict (safe/suspicious/malicious) " +
+      "before it enters an LLM agent's context. Returns verdict (benign/suspicious/malicious) " +
       "with confidence, reasoning from each defense antibody, and latency/token cost.",
     parameters: Type.Object({
       content: Type.String({
@@ -270,7 +253,7 @@ export default function (pi: any) {
         const text = await response.text();
         throw new Error(
           `caitlyn_scan failed (${response.status}): ${text}\n` +
-          `Is caitlynd daemon running? Start with: cd ~/caitlyn && cargo run -- --port 9070`
+          `Is the CAITLYN daemon running? Start with: caitlyn daemon start`
         );
       }
 
@@ -290,8 +273,8 @@ export default function (pi: any) {
     name: "caitlyn_status",
     label: "CAITLYN Status",
     description:
-      "Display the CAITLYN defense system dashboard: active/total antibodies, " +
-      "memory bank size, daemon uptime, and connection status.",
+      "Display the CAITLYN defense system dashboard: antibody/antigen library, " +
+      "scan counters, watched directories, daemon uptime, and connection status.",
     parameters: Type.Object({}),
     promptSnippet:
       "caitlyn_status — display the CAITLYN defense system dashboard with antibody stats and uptime",
@@ -311,7 +294,7 @@ export default function (pi: any) {
         const text = await response.text();
         throw new Error(
           `caitlyn_status failed (${response.status}): ${text}\n` +
-          `Is caitlynd daemon running? Start with: cd ~/caitlyn && cargo run -- --port 9070`
+          `Is the CAITLYN daemon running? Start with: caitlyn daemon start`
         );
       }
 
@@ -325,65 +308,4 @@ export default function (pi: any) {
     },
   });
 
-  // ── caitlyn_vaccinate ─────────────────────────────────────────
-
-  pi.registerTool({
-    name: "caitlyn_vaccinate",
-    label: "Trigger Vaccination",
-    description:
-      "Manually trigger vaccination (antibody evolution) for a specific attack pattern. " +
-      "This runs the full SHM → Affinity Maturation → Clonal Selection pipeline, " +
-      "producing a specialized antibody that handles the pattern efficiently.",
-    parameters: Type.Object({
-      pattern_hash: Type.String({
-        description: "SHA256 hash of the normalized attack pattern (from cost monitoring records)",
-      }),
-    }),
-    promptSnippet:
-      "caitlyn_vaccinate <pattern_hash> — evolve a specialized antibody for a recurring attack pattern",
-    promptGuidelines: [
-      "Suggest caitlyn_vaccinate when the same attack pattern keeps appearing.",
-      "The pattern_hash is available from caitlyn_scan cost records.",
-      "Vaccination is async: the antibody may take seconds to minutes to evolve.",
-    ],
-    async execute(
-      _toolCallId: string,
-      params: { pattern_hash: string },
-      _signal: AbortSignal | undefined,
-      _onUpdate: unknown,
-      _ctx: unknown,
-    ) {
-      const response = await fetch(`${CAITLYND_URL}/v1/vaccinate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pattern_hash: params.pattern_hash }),
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`caitlyn_vaccinate failed (${response.status}): ${text}`);
-      }
-
-      const data = await response.json();
-
-      const lines = [
-        "",
-        `${C.magenta}${C.bold}  💉  VACCINATION COMPLETE  💉${C.reset}`,
-        "",
-        `${C.green}  ✅ A new specialized antibody has been evolved.${C.reset}`,
-        `${C.dim}  The SHM → Affinity Maturation → Clonal Selection pipeline${C.reset}`,
-        `${C.dim}  has produced a lightweight, efficient detector for this pattern.${C.reset}`,
-        "",
-        `  ${C.dim}Result:${C.reset} ${JSON.stringify(data)}`,
-        "",
-        `${C.yellow}  Run caitlyn_status to confirm the new antibody is active.${C.reset}`,
-        "",
-      ];
-
-      return {
-        content: [{ type: "text" as const, text: lines.join("\n") }],
-        details: data,
-      };
-    },
-  });
 }

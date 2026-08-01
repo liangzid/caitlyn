@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ScanVerdict:
     """Result from CAITLYN's scan API."""
-    verdict: str          # "safe", "suspicious", "malicious"
+    verdict: str          # "benign", "suspicious", "malicious" (TS daemon contract)
     confidence: float     # 0.0 - 1.0
     reasoning: str        # CAITLYN's reasoning trace
     matched_antibodies: list[str]
@@ -138,26 +138,31 @@ class CaitlynClient:
         except urllib.error.URLError as e:
             raise ConnectionError(f"CAITLYN daemon not reachable: {e}")
 
-        # Parse CAITLYN's response format
-        # Current HTTP API returns: { verdict, confidence, antibody_results, ... }
-        antibody_results = data.get("antibody_results", [])
+        # Parse the current TS daemon response:
+        #   { verdict: "benign"|"suspicious"|"malicious", confidence, tier,
+        #     script_results: [{antibody_id, verdict, confidence, reason, ...}],
+        #     total_latency_us, total_tokens, ... }
+        script_results = data.get("script_results", [])
         matched_names = [
-            ar.get("antibody_name", ar.get("antibody_id", ""))
-            for ar in antibody_results
+            ar.get("antibody_id", "")
+            for ar in script_results
             if ar.get("verdict") in ("malicious", "suspicious")
         ]
-        matched_memory = [
-            m.get("signature", m.get("id", ""))
-            for m in data.get("matched_memory", [])
+        reasons = [
+            ar["reason"]
+            for ar in script_results
+            if ar.get("verdict") in ("malicious", "suspicious")
+            and ar.get("reason")
         ]
+        latency_us = data.get("total_latency_us", 0)
 
         return ScanVerdict(
-            verdict=data.get("verdict", "safe"),
+            verdict=data.get("verdict", "benign"),
             confidence=data.get("confidence", 0.0),
-            reasoning=data.get("aggregate_reasoning", ""),
+            reasoning="; ".join(reasons),
             matched_antibodies=matched_names,
-            matched_memory=matched_memory,
-            latency_ms=data.get("latency_ms", 0.0),
+            matched_memory=[],  # memory bank is not part of the TS daemon response
+            latency_ms=latency_us / 1000.0,
         )
 
     def status(self) -> CaitlynStatus:
@@ -170,9 +175,9 @@ class CaitlynClient:
             with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read().decode())
                 return CaitlynStatus(
-                    active_antibodies=data.get("active_antibodies", 0),
-                    memory_entries=data.get("memory_entries", 0),
-                    status=data.get("status", "unknown"),
+                    active_antibodies=data.get("antibodies_loaded", 0),
+                    memory_entries=0,  # not exposed by the TS daemon
+                    status="ok" if data.get("pid") else "unknown",
                 )
         except Exception as e:
             logger.warning(f"CAITLYN status failed: {e}")
