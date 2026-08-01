@@ -1,0 +1,52 @@
+#+TITLE: CAITLYN 抗体进化（免疫 System 2）设计讨论
+#+AUTHOR: Zi Liang (团长) + Agent
+#+DATE: 2026-08-01
+
+* 背景
+
+Stage 1 重新设计疫苗/进化链路。团长明确：现有 evolution 相关代码视为垃圾，
+按讨论全新设计，不受现有代码影响。测试相关工作仍悬置。
+
+* 已确认的设计决策
+
+1. 叙事：免疫系统故事，不叫 GA。System 1 = 快防御（Tier0+Tier1 实时扫描）；
+   System 2 = 慢免疫（抗原-抗体库 DAG 演化）。变异只是免疫框架内的优化操作。
+2. 触发层级：
+   - 主触发 = 从 OS 与 agent 读取统计量，偏离正常基线（EWMA + p99）触发免疫应答；
+     即使没有捕获注入文本，也要生成"察觉未知"的记录/产物。
+   - 显式触发 = 用户/CLI/TUI/agent 主动调用。
+   - 成本/频率触发降为辅助（仅效率优化，不作主故事）。
+   - 事件驱动（Tier0 命中但 Tier1 放行）已砍掉。
+3. StatsCollector：独立组件，作为 daemon 的一部分。事件产生端无状态追加
+   ~/.caitlyn/stats/events.jsonl；daemon 聚合、基线建模、异常判定；
+   baseline.json 定期持久化。信号源四层清单已确认（Agent 行为、文件系统、
+   OS/网络、免疫系统自身信号）。
+4. 自治等级配置（[evolution]）：
+   - autonomy = "auto"（有样本路径，默认；经确定性验证约束 + 评审）
+   - unknown_threat_action = "candidate"（无样本路径，默认；泛化候选需确认）
+   - record / candidate / auto 三档；candidate 自动升级机制留第二版。
+5. 抗原构成：主抗原 = 触发样本；相似样本簇作为参考上下文防过拟合（不进入硬约束）。
+6. 父代选择：无单独选亲本；LLM 读取整个抗体 DAG（结构化元数据）后直接综合合成。
+   meta vs full context 为实验点，配置项 dag_context = "meta" | "full"。
+7. 生成结构：全 DAG 合成为主生成器（一次产出 N 个候选）；SHM 仅作候选全部失败时
+   的定向微调兜底。
+8. 评估：放弃大规模验证集统计评估（无足够攻击样本）。改为轻量确定性约束
+   （抗原簇必须全中；少量良性样本如 5 个中 <=1 FP）+ LLM 独立评审。
+9. Loop 结构（LLM loop engineering 思路）：
+   state = {目标, 抗原画像, DAG 谱系, 候选历史, 失败教训}；
+   生成器 LLM -> 确定性验证（真实工具，抗原簇+良性样本）-> 独立评审 LLM ->
+   更新 state。accept 固化（受自治等级约束）；revise 建议进下一轮；
+   reject / 无进展 / 预算耗尽则升级降级。需显式终止条件、最大轮数/预算、
+   上下文管理（防 context rot）。
+10. 评审者身份（已确认）：独立评审模型。生成器与评审者分离
+    （生成 deepseek-v4-pro、评审 deepseek-v4-flash）。输入 = 候选 + 确定性验证
+    结果 + 库背景；输出结构化评审单（accept/revise/reject + 具体建议）。
+    理由：loop engineering 证据表明自我评审容易偏袒自己的产物。
+
+* 待讨论分支（一次一个，逐个确认）
+
+- Reflexion 式失败教训记忆：存哪、怎么存、如何进入下一轮上下文。
+- 候选晋升/证据机制：candidate 何时自动转 active。
+- DAG 生命周期：库上限、低效抗体退役、重复度控制。
+- 对抗投毒防护：攻击者诱导生成坏抗体的防护。
+- 实现顺序（分几个 commit 落地），设计确认后再动代码。
