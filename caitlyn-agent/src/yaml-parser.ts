@@ -14,7 +14,17 @@ export function coerceValue(raw: unknown): unknown {
   if (typeof raw !== "string") return raw;
   const v = raw.trim();
   if (v === '""' || v === "''") return "";
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+  if (v.startsWith('"') && v.endsWith('"')) {
+    // Double-quoted YAML strings process escape sequences.
+    const inner = v.slice(1, -1);
+    return inner
+      .replace(/\\n/g, "\n")
+      .replace(/\\r/g, "\r")
+      .replace(/\\t/g, "\t")
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, "\\");
+  }
+  if (v.startsWith("'") && v.endsWith("'")) {
     return v.slice(1, -1);
   }
   if (v === "" || v === "~") return null;
@@ -46,6 +56,8 @@ interface Frame {
   indent: number;
   container: Record<string, unknown>;
   key: string;
+  /** "map" for key-open frames, "list" for list-item object frames. */
+  kind: "map" | "list";
 }
 
 // ── Phase 1: tokenize ────────────────────────────────────────────────
@@ -168,8 +180,20 @@ function buildTree(tokens: Token[]): Record<string, unknown> {
   const stack: Frame[] = [];
 
   for (const token of tokens) {
-    // Pop frames at equal or deeper indent
-    while (stack.length > 0 && stack[stack.length - 1].indent >= token.indent) {
+    // Pop frames at equal or deeper indent. List tokens additionally pop
+    // previous list-item frames at the same indent, which tolerates the
+    // unindented list style used in existing configs:
+    //   deps:
+    //   - node
+    // while keeping the enclosing mapping frame as their parent.
+    const isListToken = token.kind === "list-scalar" || token.kind === "list-object";
+    while (stack.length > 0) {
+      const top = stack[stack.length - 1];
+      const shouldPop = isListToken
+        ? top.indent > token.indent ||
+          (top.kind === "list" && top.indent >= token.indent)
+        : top.indent >= token.indent;
+      if (!shouldPop) break;
       stack.pop();
     }
     const parent = stack.length > 0 ? stack[stack.length - 1].container : root;
@@ -184,7 +208,7 @@ function buildTree(tokens: Token[]): Record<string, unknown> {
         if (token.value === OPEN_MAPPING) {
           const nested: Record<string, unknown> = {};
           parent[token.key] = nested;
-          stack.push({ indent: token.indent, container: nested, key: token.key });
+          stack.push({ indent: token.indent, container: nested, key: token.key, kind: "map" });
         } else {
           parent[token.key] = token.value;
         }
@@ -208,7 +232,7 @@ function buildTree(tokens: Token[]): Record<string, unknown> {
         }
         arr.push(item);
         parent[lk] = arr;
-        stack.push({ indent: token.indent, container: item, key: lk });
+        stack.push({ indent: token.indent, container: item, key: lk, kind: "list" });
         break;
       }
     }
