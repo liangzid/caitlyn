@@ -205,7 +205,9 @@ def _parse_attack_line(line: str, idx: int) -> SecurityTestCase | None:
         return None
 
     attack_template = obj.get("template", obj.get("attack_type", ""))
-    injection_domain = obj.get("injection_domain", "web_search")
+    # Some AgentDojo records carry an explicit null injection_domain;
+    # fall back to the default tool instead of crashing _map_source_to_tool.
+    injection_domain = obj.get("injection_domain") or "web_search"
 
     # Split content into task + injection
     parts = content.split("\n\n", 1)
