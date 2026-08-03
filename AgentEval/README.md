@@ -132,6 +132,7 @@ response3 = caller.call(task, model='openrouter/auto')
 | openclaw | CLI-based | openrouter/auto | openclaw:latest |
 | kilo_code | Node.js | kilo/openrouter/free | kilo_code:latest |
 | opencode | Go-based | opencode/big-pickle | opencode:latest |
+| pi | CLI (Node.js) | openrouter/free | agent-eval:latest |
 | codex | CLI | openrouter/free | codex:latest |
 | claude_code | CLI | anthropic/claude-sonnet-4.6 | claude_code:latest |
 | droid | CLI | openrouter/free | droid:latest |

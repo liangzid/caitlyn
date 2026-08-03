@@ -13,6 +13,7 @@ AGENT_DEFAULT_MODELS = {
     "openclaw": "openrouter/auto",
     "kilo_code": "kilo/openrouter/free",
     "opencode": "opencode/big-pickle",
+    "pi": "openrouter/free",
     "codex": "openrouter/free",
     "claude_code": "anthropic/claude-sonnet-4.6",
     "droid": "openrouter/free",

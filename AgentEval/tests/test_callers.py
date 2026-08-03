@@ -32,7 +32,7 @@ def test_api_key_loaded():
 
 def test_get_caller():
     """Test that get_caller returns correct caller types."""
-    agents = ["nanobot", "hermes", "zeroclaw", "openclaw", "kilo_code", "opencode"]
+    agents = ["nanobot", "hermes", "zeroclaw", "openclaw", "kilo_code", "opencode", "pi", "codex"]
     for agent in agents:
         caller = get_caller(agent)
         assert caller is not None
@@ -46,6 +46,8 @@ def test_get_default_model_for_agent():
     assert get_default_model_for_agent("openclaw") == "openrouter/auto"
     assert get_default_model_for_agent("kilo_code") == "kilo/openrouter/free"
     assert get_default_model_for_agent("opencode") == "opencode/big-pickle"
+    assert get_default_model_for_agent("pi") == "openrouter/free"
+    assert get_default_model_for_agent("codex") == "openrouter/free"
 
 
 if __name__ == "__main__":

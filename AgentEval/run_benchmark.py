@@ -86,7 +86,7 @@ Examples:
     )
     p.add_argument(
         "--agent", type=str, default="simulated",
-        choices=["simulated", "claude_code", "codex", "opencode", "openclaw", "hermes"],
+        choices=["simulated", "claude_code", "codex", "pi", "opencode", "openclaw", "hermes"],
         help="Agent to evaluate (default: simulated)",
     )
     p.add_argument(

@@ -1,5 +1,5 @@
-# AgentEval — Single Docker image with all 5 agents
-#   Claude Code + Codex CLI + OpenCode + OpenClaw + Hermes
+# AgentEval — Single Docker image with all 6 agents
+#   Claude Code + Codex CLI + OpenCode + OpenClaw + Hermes + Pi
 #
 # Build:  docker build -t agent-eval:latest -f Dockerfile .
 # Run:    docker run -d --name agent-eval \
@@ -11,6 +11,7 @@
 #         docker exec agent-eval opencode run "hello"
 #         docker exec agent-eval openclaw infer model run --prompt "hello"
 #         docker exec agent-eval hermes -z "hello"
+#         docker exec agent-eval pi -p "hello"
 
 FROM ubuntu:24.04
 
@@ -41,13 +42,14 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && npm config set registry https://registry.npmjs.org/
 
 # ── Install all agents ────────────────────────────────────────
-# Order: Claude Code → Codex CLI → OpenCode → OpenClaw → Hermes
+# Order: Claude Code → Codex CLI → OpenCode → OpenClaw → Hermes → Pi
 
 RUN npm install -g @anthropic-ai/claude-code 2>&1 | tail -3
 RUN npm install -g @openai/codex 2>&1 | tail -3
 RUN npm install -g opencode-ai 2>&1 | tail -3
 RUN npm install -g openclaw@latest 2>&1 | tail -3
 RUN pip install --break-system-packages hermes-agent 2>&1 | tail -3
+RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.80.6 2>&1 | tail -3
 
 # ── Codex: OpenRouter provider (evaluation) ──────────────────
 # Built-in "openrouter" provider; wire_api must be "responses" (the "chat"
@@ -64,6 +66,7 @@ RUN codex --version 2>&1 || echo "codex: OK"
 RUN opencode version 2>&1 || echo "opencode: OK"
 RUN openclaw --version 2>&1 || echo "openclaw: OK"
 RUN hermes --version 2>&1 || echo "hermes: OK"
+RUN pi --help 2>&1 | head -1 || echo "pi: OK"
 
 # ── Runtime setup ─────────────────────────────────────────────
 RUN mkdir -p /workspace /root/.claude /root/.codex /root/.opencode /root/.openclaw /root/.hermes

@@ -143,6 +143,24 @@ class CodexCaller(AgentCaller):
         return _run_command(cmd, task_input.get("task_id", ""), timeout)
 
 
+class PiCaller(AgentCaller):
+    """pi-coding-agent (Earendil Works) via OpenRouter.
+
+    model must be a bare OpenRouter slug without the "openrouter/" provider
+    prefix, e.g. "deepseek/deepseek-chat" or "cohere/north-mini-code:free".
+    The "openrouter/free" alias is not part of pi's built-in model registry.
+    """
+    def call(self, task_input, timeout=300, model=DEFAULT_MODEL):
+        prompt = task_input.get("problem_statement", task_input.get("task_id", ""))
+        api_key = get_openrouter_api_key()
+        cmd = [
+            "docker", "exec", "-e", f"OPENROUTER_API_KEY={api_key}",
+            CONTAINER, "pi", "-p", "--provider", "openrouter",
+            "--model", f"openrouter/{model}", prompt,
+        ]
+        return _run_command(cmd, task_input.get("task_id", ""), timeout)
+
+
 # ── Legacy (not in current container) ─────────────────────────────
 
 class ZeroClawCaller(AgentCaller):
@@ -206,6 +224,7 @@ CODING_STYLE_CALLERS = {
     "claude_code": ClaudeCodeCaller,
     "cursor": CursorCaller,
     "opencode": OpenCodeCaller,
+    "pi": PiCaller,
     "kilo_code": KiloCodeCaller,
     "codex": CodexCaller,
     "droid": DroidCaller,

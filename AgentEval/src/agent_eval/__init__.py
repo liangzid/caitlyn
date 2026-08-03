@@ -17,6 +17,7 @@ Available agents:
     - openclaw: OpenClaw coding assistant
     - kilo_code: Kilo Code CLI
     - opencode: OpenCode by SST
+    - pi: pi-coding agent (Earendil Works)
     - codex: OpenAI Codex CLI
     - claude_code: Claude Code
     - droid: Factory AI Droid
