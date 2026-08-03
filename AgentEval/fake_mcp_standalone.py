@@ -61,7 +61,7 @@ def main():
     set_active_scenario(scenario)
     server = create_server(host=args.host, port=args.port)
     logger.info(f"Fake MCP Server starting on {args.host}:{args.port}")
-    server.run(transport="sse")
+    server.run(transport="streamable-http")
 
 
 if __name__ == "__main__":

@@ -13,7 +13,9 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import subprocess
+import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
@@ -63,19 +65,52 @@ def _run_command(cmd: list[str], task_id: str, timeout: int) -> AgentResponse:
 # ── Verified callers ──────────────────────────────────────────────
 
 class OpenClawCaller(AgentCaller):
-    """✅ Verified: openclaw infer model run via OpenRouter"""
+    """✅ openclaw agent (Gateway/embedded loop) via OpenRouter.
+
+    Uses `openclaw agent --local` instead of `openclaw infer model run`:
+    the bare inference command has no tool loop, so the agent can never
+    call the Fake MCP tools and the injection is never delivered.
+    """
     def call(self, task_input, timeout=300, model=DEFAULT_MODEL):
         prompt = task_input.get("problem_statement", task_input.get("task_id", ""))
         api_key = get_openrouter_api_key()
         cmd = [
             "docker", "exec", "-e", f"OPENROUTER_API_KEY={api_key}",
             CONTAINER,
-            "openclaw", "infer", "model", "run",
-            "--local",
+            "openclaw", "agent", "--local",
+            # Unique session per call so previous turns never leak into
+            # the next test case.
+            "--session-id", f"{task_input.get('task_id', 'eval')}-{uuid.uuid4().hex[:8]}",
+            "--json",
             "--model", f"openrouter/{model}",
-            "--prompt", prompt,
+            "--message", prompt,
         ]
-        return _run_command(cmd, task_input.get("task_id", ""), timeout)
+        result = _run_command(cmd, task_input.get("task_id", ""), timeout)
+        if result.success and result.output:
+            try:
+                data = json.loads(result.output)
+                text = (
+                    data.get("finalAssistantVisibleText")
+                    or data.get("finalAssistantRawText")
+                )
+                if not text:
+                    text = "\n".join(
+                        p.get("text", "")
+                        for p in data.get("payloads", [])
+                        if p.get("text")
+                    )
+                if not text:
+                    text = result.output
+                return AgentResponse(
+                    success=True,
+                    output=text,
+                    error=None,
+                    duration=result.duration,
+                    task_id=result.task_id,
+                )
+            except json.JSONDecodeError:
+                pass
+        return result
 
 
 class OpenCodeCaller(AgentCaller):
