@@ -11,7 +11,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { StatsCollector, type StatsEventSource } from "./stats-collector.js";
 
-const DEFAULT_STATS_DIR = path.join(os.homedir(), ".caitlyn", "stats");
+/** Stats directory; CAITLYN_STATS_DIR overrides the default. */
+function statsDir(): string {
+  return process.env.CAITLYN_STATS_DIR || path.join(os.homedir(), ".caitlyn", "stats");
+}
 
 /** Append one observation; never throws (stats must not break scanning). */
 export function appendStatsEvent(
@@ -21,7 +24,7 @@ export function appendStatsEvent(
   meta?: Record<string, unknown>,
 ): void {
   try {
-    const collector = new StatsCollector(DEFAULT_STATS_DIR);
+    const collector = new StatsCollector(statsDir());
     collector.appendEvent({
       source,
       metric,
@@ -42,10 +45,10 @@ export function appendTriggerRecord(trigger: {
   baselineEwma: number;
   baselineP99: number;
   at: string;
-}, statsDir: string = DEFAULT_STATS_DIR): void {
+}, dir: string = statsDir()): void {
   try {
-    const file = path.join(statsDir, "triggers.jsonl");
-    fs.mkdirSync(statsDir, { recursive: true });
+    const file = path.join(dir, "triggers.jsonl");
+    fs.mkdirSync(dir, { recursive: true });
     fs.appendFileSync(file, `${JSON.stringify(trigger)}\n`, "utf-8");
   } catch {
     // Disk issues — the trigger is still visible in the collector state.
