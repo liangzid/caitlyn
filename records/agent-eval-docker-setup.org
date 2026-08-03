@@ -1,0 +1,56 @@
+#+TITLE: AgentEval 评测环境：Docker + OpenRouter 讨论与落地
+#+AUTHOR: Zi Liang (团长) + Agent
+#+DATE: 2026-08-03
+
+* 背景
+
+讨论 CAITLYN 效果评估怎么跑。确认基线实验顺序：先无防御 ASR 基线
+（20 条用例），再上 agents x defenses 矩阵。
+
+* 已确认决策
+
+1. 环境：继续使用已运行的单一 Docker 容器 agent-eval（callers 全部走
+   docker exec），不在宿主 OS 跑真实 agent 实验。原因：隔离/可复现/安全，
+   且容器已装好 5 个 agent。
+2. 基线抽样：按 8 种攻击模板分层抽 20 条 + benign 按 domain 抽，不纯随机。
+3. 模型：不用 Anthropic（区域不支持），用 OpenRouter。flow test 用免费模型
+   （openrouter/free 或 cohere/north-mini-code:free），正式基线用
+   deepseek/deepseek-chat（免费档不稳，opencode 实测 120s 无输出）。
+4. claude_code 本轮跳过：Claude Code 有模型白名单，不收 OpenRouter 的
+   非 Anthropic 模型 id；用户确认暂不评估。
+5. OpenRouter 账户余额约 $16.44（430 - 413.56）。OpenAI 直连被区域 403。
+
+* 落地改动（2026-08-03）
+
+** codex OpenRouter 配置
+- 容器 /root/.codex/config.toml 写入内置 openrouter provider：
+  model_provider = "openrouter" / model = "openrouter/free" /
+  [model_providers.openrouter] base_url + env_key + wire_api = "responses"。
+  wire_api "chat" 已于 2026 年被 codex 废弃（实测报错，官方文档确认）。
+- callers.py CodexCaller 删除无效的 -c provider=openrouter（会被静默忽略并
+  回退 OpenAI，触发区域 403），改由容器配置提供 provider。
+- 实测 get_caller('codex') 返回 OK。
+
+** pi coding agent
+- 容器安装 @earendil-works/pi-coding-agent@0.80.6（与本地 pi-src 同版本）。
+- callers.py 新增 PiCaller：pi -p --provider openrouter --model
+  openrouter/<slug>；models.py/run_benchmark.py/tests/README 同步。
+- pi 无内置 MCP（官方文档确认），走非 MCP prompt 路径。
+- 实测 get_caller('pi')（cohere/north-mini-code:free）返回 OK。
+
+** Dockerfile 修复
+- 原文件 RUN 在 FROM 之前，无法构建；已修正顺序。
+- 固化 codex openrouter 配置 + pi 安装（镜像可复现）。
+
+* 验证
+
+- AgentEval pytest 18/18 通过。
+- codex、pi 冒烟各一次（free 模型）通过；opencode/openclaw/hermes 之前
+  已实测通过（openrouter/free；opencode 免费档不稳）。
+
+* 遗留
+
+- 正式 20 条基线运行时模型建议 deepseek/deepseek-chat（便宜且稳定）。
+- claude_code 接入待定；opencode 免费档需要重试机制或换模型。
+- 容器仍挂载 /host-home（/home/zi 只读），跑注入实验前应移除，避免
+  agent 读到真实数据与攻击语料。
