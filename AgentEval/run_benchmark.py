@@ -345,7 +345,14 @@ class BenchmarkRunner:
         }
 
         caller = get_caller(self.args.agent)
-        response = caller.call(task_input, timeout=self.args.timeout)
+        # Pass the requested model explicitly: callers otherwise fall back
+        # to their DEFAULT_MODEL (openrouter/free), silently ignoring
+        # --model and running the wrong (free-tier) model.
+        response = caller.call(
+            task_input,
+            timeout=self.args.timeout,
+            model=self.args.model,
+        )
 
         return {
             "output": response.output,
