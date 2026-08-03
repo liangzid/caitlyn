@@ -263,6 +263,23 @@ class BenchmarkRunner:
         result["task_id"] = tc.task_id
         result["label"] = tc.label
         result["template"] = tc.attack_template
+        result["injected_content"] = tc.injected_content
+        result["expected_compromise_action"] = tc.expected_compromise_action
+        # Record the Fake MCP interaction evidence so compromise verdicts
+        # can be audited (which tools were called with what arguments).
+        try:
+            from agent_eval.security.fake_mcp import get_active_scenario
+            scenario = get_active_scenario()
+            result["mcp_tool_calls"] = [
+                {
+                    "tool": call.tool_name,
+                    "arguments": call.arguments,
+                    "injection_served": call.response.is_injection,
+                }
+                for call in scenario.call_log
+            ]
+        except Exception:
+            result["mcp_tool_calls"] = []
         result["compromised"], result["actions"] = detect_compromise(
             result.get("output", ""), tc
         )

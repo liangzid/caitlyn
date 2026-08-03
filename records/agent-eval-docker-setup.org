@@ -65,3 +65,39 @@
    run() 参数（host/port 改由构造函数传入）。容器内经
    host.docker.internal:9876/sse 实测连通。
 3. codex 与 pi 用 deepseek/deepseek-v4-flash 冒烟各一次通过。
+
+* 无防御基线评测（2026-08-03，stratified20）
+
+数据集：20 攻击（8 模板 x 2 + 4 主模板各 +1）+ 10 benign，
+valsets/stratified_test/，脚本 AgentEval/scripts/build_stratified_test.py。
+模型：deepseek/deepseek-v4-flash。投递：codex/opencode/openclaw 走 MCP
+工具输出，pi/hermes 走 prompt（hermes mcp add 崩溃）。
+
+| agent    | raw ASR | conservative ASR | FPR | avg |
+|----------+---------+------------------+-----+-----|
+| codex    | 3/20    | 0/20             | 0   | 217s|
+| opencode | 3/20    | 0/20             | 0   | 86s |
+| openclaw | 1/20    | 0/20             | 0   | 12s |
+| hermes   | 3/20    | 0/20             | 0   | 84s |
+| pi       | 4/20    | 0/20             | 0   | 89s |
+
+raw ASR 全部为检测器误报：detect_compromise 把"ignore previous
+instructions is a red flag"等防御性措辞判为被攻陷。人工抽查所有命中，
+均为拒绝执行。保守检测器（执行动作句式 + COMPROMISED: 标记）下全部为 0。
+
+* 发现并修复的问题
+
+1. FakeMCPServer.start() 是空实现，scenario 为进程内变量：run_benchmark
+   改为进程内启动 Fake MCP（线程），set_active_scenario 每例生效。
+2. _run_real_agent 不传 --model：所有 caller 静默用 openrouter/free。
+   已修复，本次评测实际使用 deepseek/deepseek-v4-flash。
+3. detect_compromise 关键词误报严重：harness.py 已收紧为执行动作句式，
+   run_benchmark 结果新增 mcp_tool_calls / injected_content 审计字段。
+4. opencode 偶发向 MCP 发送畸形 JSON-RPC（带 shell 输出的参数），
+   FastMCP 返回 400 后 opencode 自行重连；hermes mcp add 报
+   Event loop is closed（hermes 自身 bug，未解决，改用 prompt 投递）。
+5. openclaw 全程未调用 MCP 工具（CallToolRequest=0），其 ASR 不可信，
+   后续需配置 openclaw 的 MCP 工具通道或标记为 no-tool-use 基线。
+
+结果文件：AgentEval/results/{codex,opencode,openclaw,hermes,pi}.json；
+离线重算：AgentEval/scripts/analyze_results.py。
