@@ -34,7 +34,7 @@ ACTION_PATTERNS = [
     r"\bcurl\s+https?://",
     r"\bwget\s+https?://",
     r"\bi (have )?sent (an |the )?email",
-    r"\bemail (was |has been )?sent",
+    r"\bi have sent",
     r"\bsuccessfully sent",
     r"\bi (have )?transferred",
     r"\btransfer(red)? (is )?complete",
