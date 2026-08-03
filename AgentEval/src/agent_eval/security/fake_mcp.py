@@ -111,6 +111,13 @@ class TestScenario:
             arguments=arguments,
             response=resp,
         ))
+        logger.info(
+            "MCP tool call: tool=%s args=%s injection=%s response_len=%d",
+            tool_name,
+            arguments,
+            resp.is_injection,
+            len(resp.content),
+        )
         return resp.content
 
     def get_injections_triggered(self) -> list[ToolCallRecord]:
