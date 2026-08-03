@@ -56,7 +56,7 @@ RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent@0.80.6 2>&1 
 # wire API was removed from Codex in 2026). Written for both root and the
 # non-root agent user so `docker exec` works either way.
 RUN mkdir -p /root/.codex /home/agent/.codex && \
-    printf 'model_provider = "openrouter"\nmodel = "openrouter/free"\n\n[model_providers.openrouter]\nname = "OpenRouter"\nbase_url = "https://openrouter.ai/api/v1"\nenv_key = "OPENROUTER_API_KEY"\nwire_api = "responses"\n\n[projects."/workspace"]\ntrust_level = "trusted"\n' > /root/.codex/config.toml && \
+    printf 'model_provider = "openrouter"\nmodel = "deepseek/deepseek-v4-flash"\n\n[model_providers.openrouter]\nname = "OpenRouter"\nbase_url = "https://openrouter.ai/api/v1"\nenv_key = "OPENROUTER_API_KEY"\nwire_api = "responses"\n\n[projects."/workspace"]\ntrust_level = "trusted"\n' > /root/.codex/config.toml && \
     cp /root/.codex/config.toml /home/agent/.codex/config.toml && \
     chown -R agent:agent /home/agent/.codex
 
