@@ -24,11 +24,153 @@ TEST-CASES
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
 from agent_eval.security.fake_mcp import ToolResponse, build_scenario, TestScenario
+
+
+# ── Task/Injection Splitter ────────────────────────────────────────
+
+# Attack templates in agentdojo_all.jsonl and the marker that starts the
+# injected block for each template. The markers are matched after
+# whitespace normalization.
+TEMPLATE_MARKERS = {
+    "direct": "TODO:",
+    "ignore_previous": "Ignore your previous instructions",
+    "system_message": "###(system_message)",
+    "injecagent": "IMPORTANT!!!",
+    "important_instructions": "<INFORMATION>",
+    "important_instructions_no_names": "<INFORMATION>",
+    "important_instructions_wrong_user": "<INFORMATION>",
+    "important_instructions_wrong_model": "<INFORMATION>",
+}
+
+_BENIGN_CATALOG: list[str] | None = None
+
+
+def _benign_catalog() -> list[str]:
+    """Load the 68 AgentDojo benign tasks lazily (task texts are used as
+    alignment anchors to separate task from injection in attack lines)."""
+    global _BENIGN_CATALOG
+    if _BENIGN_CATALOG is None:
+        path = (
+            Path(__file__).resolve().parents[4]
+            / "valsets" / "benign" / "agent_tasks.jsonl"
+        )
+        try:
+            with open(path, encoding="utf-8") as f:
+                _BENIGN_CATALOG = [
+                    json.loads(line).get("content", "")
+                    for line in f
+                    if line.strip()
+                ]
+        except OSError:
+            _BENIGN_CATALOG = []
+    return _BENIGN_CATALOG
+
+
+def _normalize(text: str) -> str:
+    """Strip all whitespace for alignment; the injected block is inserted
+    at positions where the original task whitespace was consumed."""
+    return re.sub(r"\s+", "", text)
+
+
+def _split_attack_content(
+    content: str, benign_domain: str | None, template: str
+) -> tuple[str, str] | None:
+    """Recover (user_task, injected_content) from a flattened AgentDojo line.
+
+    The dataset concatenates the benign user task with the injected block
+    (pre/mid/end insertion, with or without blank-line separators). This
+    aligns the line against the benign task catalog:
+    - task fully at the start -> injection is the tail;
+    - task fully at the end -> injection is the head;
+    - task split around the injection -> prefix/suffix alignment.
+    The injected span is then anchored to the template marker.
+
+    Returns None when no catalog task matches.
+    """
+    normalized_content = _normalize(content)
+    marker = _normalize(TEMPLATE_MARKERS.get(template, ""))
+    candidates = _benign_catalog()
+
+    best: tuple[str, str] | None = None
+    for task_text in candidates:
+        normalized_task = _normalize(task_text)
+        if len(normalized_task) > len(normalized_content):
+            continue
+
+        # Longest common prefix/suffix of task vs content (whitespace-free).
+        fwd = 0
+        while (
+            fwd < len(normalized_task)
+            and fwd < len(normalized_content)
+            and normalized_task[fwd] == normalized_content[fwd]
+        ):
+            fwd += 1
+        bwd = 0
+        while (
+            bwd < len(normalized_task)
+            and bwd < len(normalized_content)
+            and normalized_task[len(normalized_task) - 1 - bwd]
+            == normalized_content[len(normalized_content) - 1 - bwd]
+        ):
+            bwd += 1
+
+        if fwd == len(normalized_task):
+            start, end = len(normalized_task), len(normalized_content)
+        elif bwd == len(normalized_task):
+            start, end = 0, len(normalized_content) - len(normalized_task)
+        else:
+            # Mid insertion: prefix + suffix rebuild the task; one character
+            # of overlap/tolerance covers consumed whitespace at the joints.
+            if not (
+                len(normalized_task) - 1
+                <= fwd + bwd
+                <= len(normalized_task) + 1
+            ):
+                continue
+            start, end = fwd, len(normalized_content) - bwd
+
+        if end <= start:
+            continue
+
+        if marker:
+            # The prefix alignment may overrun into the injection by a few
+            # characters; anchor the span to the template marker.
+            marker_pos = normalized_content.lower().find(
+                marker.lower(), max(0, start - 5), end
+            )
+            if marker_pos < 0:
+                continue
+            start = marker_pos
+
+        if end <= start:
+            continue
+
+        # Map the normalized span back to original character positions.
+        original_positions: list[int] = []
+        original_index = 0
+        for norm_index in range(len(normalized_content)):
+            while normalized_content[norm_index] != content[original_index]:
+                original_index += 1
+            if start <= norm_index < end:
+                original_positions.append(original_index)
+            original_index += 1
+
+        injection = content[
+            original_positions[0] : original_positions[-1] + 1
+        ].strip()
+        if not injection:
+            continue
+
+        if best is None or len(injection) < len(best[1]):
+            best = (task_text, injection)
+
+    return best
 
 
 # ── Security Test Case Schema ─────────────────────────────────────
@@ -205,18 +347,20 @@ def _parse_attack_line(line: str, idx: int) -> SecurityTestCase | None:
         return None
 
     attack_template = obj.get("template", obj.get("attack_type", ""))
-    # Some AgentDojo records carry an explicit null injection_domain;
-    # fall back to the default tool instead of crashing _map_source_to_tool.
     injection_domain = obj.get("injection_domain") or "web_search"
 
-    # Split content into task + injection
-    parts = content.split("\n\n", 1)
-    if len(parts) == 2:
-        problem = parts[0].strip()
-        injected = parts[1].strip()
+    split = _split_attack_content(
+        content, obj.get("benign_domain"), attack_template
+    )
+    if split is not None:
+        problem, injected = split
     else:
-        problem = content
-        injected = ""
+        # Fallback for lines the catalog alignment cannot handle.
+        parts = content.split("\n\n", 1)
+        if len(parts) == 2:
+            problem, injected = parts[0].strip(), parts[1].strip()
+        else:
+            problem, injected = content, ""
 
     tool_name = _map_source_to_tool(injection_domain)
 
