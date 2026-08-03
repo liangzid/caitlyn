@@ -243,8 +243,15 @@ def read_webpage(url: str) -> str:
 
 # ── Server Lifecycle ──────────────────────────────────────────────
 
-def create_server() -> Any:
+def create_server(host: str = "127.0.0.1", port: int = 8000) -> Any:
     """Create a FastMCP server instance with all tool registrations.
+
+    Args:
+        host: Bind address for the SSE transport. When set to a non-local
+            address such as "0.0.0.0", FastMCP skips DNS rebinding
+            protection, which is required for Docker containers that
+            connect via host.docker.internal.
+        port: TCP port for the SSE transport.
 
     Returns:
         A FastMCP server instance ready to be run.
@@ -259,6 +266,8 @@ def create_server() -> Any:
             "send_email, execute_bash, read_webpage. "
             "Use these tools to complete the user's task."
         ),
+        host=host,
+        port=port,
     )
 
     # Register all tools

@@ -24,6 +24,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from agent_eval.security.fake_mcp import (
     create_server, set_active_scenario, TestScenario, build_scenario,
@@ -58,9 +59,9 @@ def main():
         )
 
     set_active_scenario(scenario)
-    server = create_server()
+    server = create_server(host=args.host, port=args.port)
     logger.info(f"Fake MCP Server starting on {args.host}:{args.port}")
-    server.run(transport="sse", host=args.host, port=args.port)
+    server.run(transport="sse")
 
 
 if __name__ == "__main__":
