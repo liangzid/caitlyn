@@ -50,7 +50,18 @@
 
 * 遗留
 
-- 正式 20 条基线运行时模型建议 deepseek/deepseek-chat（便宜且稳定）。
+- 已定：正式评测模型用 deepseek/deepseek-v4-flash（OpenRouter 确认支持，
+  284B MoE / 1M ctx，$0.09/M in、$0.18/M out；codex 容器配置与 Dockerfile
+  默认值已切换）。
 - claude_code 接入待定；opencode 免费档需要重试机制或换模型。
-- 容器仍挂载 /host-home（/home/zi 只读），跑注入实验前应移除，避免
-  agent 读到真实数据与攻击语料。
+
+* 环境前提完成（2026-08-03）
+
+1. /host-home 挂载已移除：docker commit 保存 pi + codex 配置后重建容器
+   （agent-eval:with-pi），旧容器停用改名 agent-eval-old 作备份；新容器
+   Mounts 为空。
+2. Fake MCP server 已在 0.0.0.0:9876 运行（setsid nohup，日志
+   /tmp/fake_mcp.log）；修复了 standalone 的 src import 路径与 FastMCP
+   run() 参数（host/port 改由构造函数传入）。容器内经
+   host.docker.internal:9876/sse 实测连通。
+3. codex 与 pi 用 deepseek/deepseek-v4-flash 冒烟各一次通过。
