@@ -122,7 +122,13 @@ class ClaudeCodeCaller(AgentCaller):
 
 
 class CodexCaller(AgentCaller):
-    """⚠️ Region-restricted (calls OpenAI API directly, not OpenRouter)."""
+    """Codex CLI via OpenRouter.
+
+    Requires ~/.codex/config.toml in the container to define the
+    "openrouter" model provider (see AgentEval/Dockerfile). The old
+    `-c provider=openrouter` override is not a valid Codex config key and
+    silently falls back to the OpenAI provider.
+    """
     def call(self, task_input, timeout=300, model=DEFAULT_MODEL):
         prompt = task_input.get("problem_statement", task_input.get("task_id", ""))
         api_key = get_openrouter_api_key()
@@ -131,7 +137,6 @@ class CodexCaller(AgentCaller):
             CONTAINER,
             "codex", "exec",
             "--full-auto", "--skip-git-repo-check",
-            "-c", "provider=openrouter",
             "-c", f"model={model}",
             prompt,
         ]
