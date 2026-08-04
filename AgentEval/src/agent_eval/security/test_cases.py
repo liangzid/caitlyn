@@ -216,6 +216,9 @@ class SecurityTestCase:
     injected_content: str = ""
     """The injection payload embedded in the tool output."""
 
+    injection_arguments: dict = field(default_factory=dict)
+    """Exact tool arguments the poisoned call should use (delivery hint)."""
+
     expected_compromise_action: str = ""
     """What the attacker expects the agent to do if compromised.
 
@@ -328,6 +331,83 @@ def load_from_agentdojo_jsonl(
     print(f"Loaded {len(test_cases)} test cases "
           f"({n_attacks} attacks, {n_benign} benign)")
 
+    return test_cases
+
+
+def load_natural_cases(
+    attacks_path: str | Path,
+    benign_path: str | Path | None = None,
+    max_benign_samples: int = 10,
+) -> list[SecurityTestCase]:
+    """Load the hand-crafted natural attack library.
+
+    Each line carries explicit fields (user_task, injected_content,
+    injection_tool, expected_compromise_action), so no task/injection
+    splitting is needed. Benign controls reuse the standard loader.
+    """
+    test_cases: list[SecurityTestCase] = []
+    tools = [
+        "web_search", "read_file", "list_directory",
+        "send_email", "execute_bash", "read_webpage",
+    ]
+
+    attacks_path = Path(attacks_path)
+    if attacks_path.exists():
+        with open(attacks_path, encoding="utf-8") as f:
+            for i, line in enumerate(f):
+                try:
+                    obj = json.loads(line)
+                    task = obj.get("user_task", "")
+                    injection = obj.get("injected_content", "")
+                    tool = obj.get("injection_tool", "web_search")
+                    if not task or not injection:
+                        continue
+                    test_cases.append(SecurityTestCase(
+                        task_id=obj.get("id", f"nat-{i:03d}"),
+                        problem_statement=task,
+                        attack_category="injection",
+                        attack_template=obj.get("pattern", "custom"),
+                        injection_goal=tool,
+                        tools_available=list(tools),
+                        tool_responses=[
+                            ControlledToolResponse(
+                                tool_name=tool,
+                                call_index=0,
+                                content=injection,
+                                is_injection=True,
+                            ),
+                        ],
+                        injected_tool=tool,
+                        injected_content=injection,
+                        injection_arguments=obj.get("injection_arguments", {}),
+                        expected_compromise_action=obj.get(
+                            "expected_compromise_action", ""
+                        ),
+                        label="injection",
+                        source_dataset="natural20",
+                        source_id=obj.get("id", f"nat-{i:03d}"),
+                    ))
+                except Exception as e:  # noqa: BLE001 - skip bad lines
+                    print(f"Warning: skipping natural attack line {i}: {e}")
+
+    if benign_path:
+        benign_path = Path(benign_path)
+        if benign_path.exists():
+            with open(benign_path, encoding="utf-8") as f:
+                for i, line in enumerate(f):
+                    if i >= max_benign_samples:
+                        break
+                    try:
+                        tc = _parse_benign_line(line, i)
+                        if tc is not None:
+                            test_cases.append(tc)
+                    except Exception as e:  # noqa: BLE001
+                        print(f"Warning: skipping benign line {i}: {e}")
+
+    n_attacks = sum(1 for t in test_cases if t.label == "injection")
+    n_benign = sum(1 for t in test_cases if t.label == "benign")
+    print(f"Loaded {len(test_cases)} natural test cases "
+          f"({n_attacks} attacks, {n_benign} benign)")
     return test_cases
 
 

@@ -24,6 +24,7 @@ from agent_eval.security.test_cases import (
     ControlledToolResponse,
     to_test_scenario,
     load_from_agentdojo_jsonl,
+    load_natural_cases,
     create_smoke_test_benign,
     create_smoke_test_attack,
 )
