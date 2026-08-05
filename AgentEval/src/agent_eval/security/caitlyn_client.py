@@ -42,6 +42,7 @@ class ScanVerdict:
     matched_antibodies: list[str]
     matched_memory: list[str]
     latency_ms: float
+    tokens: int = 0
 
     @property
     def is_malicious(self) -> bool:
@@ -155,6 +156,7 @@ class CaitlynClient:
             and ar.get("reason")
         ]
         latency_us = data.get("total_latency_us", 0)
+        tokens = data.get("total_tokens", 0)
 
         return ScanVerdict(
             verdict=data.get("verdict", "benign"),
@@ -163,6 +165,7 @@ class CaitlynClient:
             matched_antibodies=matched_names,
             matched_memory=[],  # memory bank is not part of the TS daemon response
             latency_ms=latency_us / 1000.0,
+            tokens=tokens,
         )
 
     def status(self) -> CaitlynStatus:
@@ -206,6 +209,10 @@ class CaitlynDefense:
         self.enabled = enabled
         self.caitlyn: CaitlynClient | None = None
         self._stats = CaitlynDefenseStats()
+        self._case_latency_ms: float = 0.0
+        self._case_tokens: int = 0
+        self._case_calls: int = 0
+        self._case_stats_snapshot: tuple[int, int, int] = (0, 0, 0)
 
         if enabled:
             self.caitlyn = CaitlynClient(port=caitlyn_port)
@@ -216,6 +223,10 @@ class CaitlynDefense:
                 )
             else:
                 logger.info("CAITLYN defense active")
+
+    @property
+    def name(self) -> str:
+        return "CaitlynDefense"
 
     def filter(
         self,
@@ -239,6 +250,9 @@ class CaitlynDefense:
 
         try:
             verdict = self.caitlyn.scan(content, source=source, agent_task=agent_task)
+            self._case_latency_ms += verdict.latency_ms
+            self._case_tokens += verdict.tokens
+            self._case_calls += 1
         except ConnectionError:
             # CAITLYN unreachable — fall through
             self._stats.passed += 1
@@ -271,6 +285,25 @@ class CaitlynDefense:
     @property
     def stats(self) -> "CaitlynDefenseStats":
         return self._stats
+
+    def reset_case(self) -> None:
+        self._case_latency_ms = 0.0
+        self._case_tokens = 0
+        self._case_calls = 0
+        s = self.stats
+        self._case_stats_snapshot = (s.blocked, s.flagged, s.passed)
+
+    def case_cost(self) -> dict:
+        s = self.stats
+        blocked0, flagged0, passed0 = self._case_stats_snapshot
+        return {
+            "latency_ms": round(self._case_latency_ms, 1),
+            "tokens": self._case_tokens,
+            "calls": self._case_calls,
+            "blocked": s.blocked - blocked0,
+            "flagged": s.flagged - flagged0,
+            "passed": s.passed - passed0,
+        }
 
 
 @dataclass

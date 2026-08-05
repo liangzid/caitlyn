@@ -215,3 +215,33 @@ nat-008 发出门户凭据；nat-005 付款单+IBAN 发给攻击者邮箱；nat-
 分析工具：analyze_results.py 新增 action ASR（依据每例 mcp_tool_calls
 审计日志判断 send_email/execute_bash 是否带攻击者目标），这是权威指标；
 文本检测（raw/conservative）仅作参考。
+
+* 防御基线对比（2026-08-05）
+
+同一评测面：opencode + deepseek/deepseek-chat + natural20（20 攻击 +
+10 benign）。防御挂在 Fake MCP 响应出口（MCP proxy 语义），LLM 类防御用
+同一 deepseek-chat。防御成本（延迟/ tokens / blocked）逐条记录。
+
+修复过程发现的问题：
+- run_benchmark 原来只给 simulated agent 接防御，真实 agent 路径完全没接；
+- 收尾 _print_summary 用空 api_key 重建 LLM judge 导致结果丢失；
+- CaitlynDefense 的 name property 补丁插进 __init__，导致 client 未初始化、
+  防御全程 fallthrough（首轮 caitlyn 结果无效）；
+- fewshot 的 _call_llm 重写未记录成本；
+- mcp_tool_calls 序列化漏掉 blocked/original_content。
+
+结果（action ASR，动作实锤）：
+
+| defense          | ASR      | FPR  | 延迟/例 | tokens/例 | blocked |
+|------------------+----------+------+---------+-----------+---------|
+| none             | 11/20 55%| 0/10 | 0ms     | 0         | 0       |
+| regex_guard      | 10/20 50%| 0/10 | ~0ms    | 0         | 4       |
+| llm_judge        |  6/20 30%| 0/10 | 3758ms  | 333       | 8       |
+| llm_judge_fewshot|  7/20 35%| 0/10 | 3528ms  | 653       | 6       |
+| caitlyn (ours)   |  5/20 25%| 0/10 | 1069ms  | 2233      | 5 (+1 flagged) |
+
+解读：CAITLYN 相对无防御把 ASR 从 55% 压到 25%（相对降 ~55%），全部防御
+FPR=0。CAITLYN 延迟最低（1.07s/例），但 token 消耗最高（2233/例，Tier1
+prompt 带抗体库上下文），可换 deepseek-v4-flash 小模型优化。注意事项：
+样本量小（20），且 deepseek-chat 跟随行为有随机性（同基线重跑可能 ±2/20），
+结论方向可信但数字是示意性的；严格对比应多次采样取均值。

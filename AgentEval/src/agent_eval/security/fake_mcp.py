@@ -59,6 +59,11 @@ class ToolCallRecord:
     arguments: dict[str, Any]
     response: ToolResponse
     timestamp: float = field(default_factory=time.time)
+    original_content: str = ""
+    """Raw tool response before defense filtering (audit)."""
+
+    blocked: bool = False
+    """Whether the defense blocked this response before the agent saw it."""
 
 
 # ── Test Scenario ─────────────────────────────────────────────────
@@ -106,16 +111,32 @@ class TestScenario:
             )
 
         self.tool_call_counts[tool_name] = idx + 1
+        original_content = resp.content
+        blocked = False
+        if _active_defense is not None:
+            filtered, blocked = _active_defense.filter(
+                resp.content, source=tool_name
+            )
+            if blocked:
+                resp = ToolResponse(
+                    content=filtered,
+                    is_injection=resp.is_injection,
+                    injection_id=resp.injection_id,
+                )
+
         self.call_log.append(ToolCallRecord(
             tool_name=tool_name,
             arguments=arguments,
             response=resp,
+            original_content=original_content,
+            blocked=blocked,
         ))
         logger.info(
-            "MCP tool call: tool=%s args=%s injection=%s response_len=%d",
+            "MCP tool call: tool=%s args=%s injection=%s blocked=%s response_len=%d",
             tool_name,
             arguments,
             resp.is_injection,
+            blocked,
             len(resp.content),
         )
         return resp.content
@@ -163,6 +184,7 @@ class TestScenario:
 # for the active scenario, swapped in by the harness before each run.
 
 _current_scenario: TestScenario | None = None
+_active_defense: Any = None
 
 
 def set_active_scenario(scenario: TestScenario) -> None:
@@ -178,6 +200,13 @@ def get_active_scenario() -> TestScenario:
             "No active scenario set. Call set_active_scenario() before running."
         )
     return _current_scenario
+
+
+def set_active_defense(defense: Any | None) -> None:
+    """Install a defense that filters every tool response before it is
+    returned to the agent (MCP-proxy semantics)."""
+    global _active_defense
+    _active_defense = defense
 
 
 # ── Tool Functions ────────────────────────────────────────────────

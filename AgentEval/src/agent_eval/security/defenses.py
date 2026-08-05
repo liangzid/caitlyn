@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import urllib.request
 import urllib.error
 from abc import ABC, abstractmethod
@@ -72,6 +73,39 @@ class Defense(ABC):
     def stats(self) -> "DefenseStats":
         return DefenseStats()
 
+    def __init__(self) -> None:
+        """Per-case cost accounting (latency ms, LLM tokens, verdicts)."""
+        self._case_latency_ms: float = 0.0
+        self._case_tokens: int = 0
+        self._case_calls: int = 0
+        self._case_stats_snapshot: tuple[int, int, int] = (0, 0, 0)
+
+    def reset_case(self) -> None:
+        """Start a new test case; record the current verdict counters."""
+        self._case_latency_ms = 0.0
+        self._case_tokens = 0
+        self._case_calls = 0
+        s = self.stats
+        self._case_stats_snapshot = (s.blocked, s.flagged, s.passed)
+
+    def add_cost(self, latency_ms: float, tokens: int = 0) -> None:
+        self._case_latency_ms += latency_ms
+        self._case_tokens += tokens
+        self._case_calls += 1
+
+    def case_cost(self) -> dict:
+        """Per-case defense cost and verdict deltas."""
+        s = self.stats
+        blocked0, flagged0, passed0 = self._case_stats_snapshot
+        return {
+            "latency_ms": round(self._case_latency_ms, 1),
+            "tokens": self._case_tokens,
+            "calls": self._case_calls,
+            "blocked": s.blocked - blocked0,
+            "flagged": s.flagged - flagged0,
+            "passed": s.passed - passed0,
+        }
+
 
 @dataclass
 class DefenseStats:
@@ -90,6 +124,7 @@ class NoneDefense(Defense):
     """No defense — all content passes through unchanged."""
 
     def __init__(self):
+        super().__init__()
         self._stats = DefenseStats()
 
     def filter(self, content: str, source: str = "web_search") -> tuple[str, bool]:
@@ -192,6 +227,7 @@ class LLMJudgeDefense(Defense):
         self.base_url = base_url
         self.model = model
         self._stats = DefenseStats()
+        super().__init__()
 
     def filter(self, content: str, source: str = "web_search") -> tuple[str, bool]:
         try:
@@ -218,6 +254,7 @@ class LLMJudgeDefense(Defense):
 
     def _call_llm(self, content: str, source: str) -> dict:
         """Call the LLM for classification."""
+        start = time.time()
         body = json.dumps({
             "model": self.model,
             "messages": [
@@ -241,6 +278,13 @@ class LLMJudgeDefense(Defense):
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode())
 
+        latency_ms = (time.time() - start) * 1000.0
+        usage = data.get("usage", {})
+        tokens = int(
+            usage.get("total_tokens")
+            or usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0)
+        )
+        self.add_cost(latency_ms, tokens)
         response_text = data["choices"][0]["message"]["content"]
         return _parse_json_response(response_text)
 
@@ -266,6 +310,7 @@ class LLMJudgeFewshotDefense(LLMJudgeDefense):
 
     def _call_llm(self, content: str, source: str) -> dict:
         """Call the LLM with few-shot examples."""
+        start = time.time()
         # Build few-shot prompt
         fewshot_text = "Here are examples of safe and malicious tool outputs:\n\n"
         for i, ex in enumerate(FEWSHOT_EXAMPLES):
@@ -302,6 +347,13 @@ class LLMJudgeFewshotDefense(LLMJudgeDefense):
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode())
 
+        latency_ms = (time.time() - start) * 1000.0
+        usage = data.get("usage", {})
+        tokens = int(
+            usage.get("total_tokens")
+            or usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0)
+        )
+        self.add_cost(latency_ms, tokens)
         response_text = data["choices"][0]["message"]["content"]
         return _parse_json_response(response_text)
 
@@ -360,13 +412,16 @@ class RegexGuardDefense(Defense):
     """
 
     def __init__(self):
+        super().__init__()
         self._stats = DefenseStats()
 
     def filter(self, content: str, source: str = "web_search") -> tuple[str, bool]:
+        start = time.time()
         matched = []
         for i, pattern in enumerate(_COMPILED_PATTERNS):
             if pattern.search(content):
                 matched.append(INJECTION_PATTERNS[i])
+        self.add_cost((time.time() - start) * 1000.0, 0)
 
         if matched:
             self._stats.blocked += 1

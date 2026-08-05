@@ -54,6 +54,7 @@ from agent_eval.security import (
 )
 from agent_eval.security.fake_mcp import (
     set_active_scenario,
+    set_active_defense,
     FakeMCPServer,
 )
 
@@ -154,10 +155,12 @@ class BenchmarkRunner:
         self.metrics = SecurityMetrics()
         self.api_key = args.api_key or os.environ.get("OPENAI_API_KEY", "")
         self._mcp_thread: Any = None
+        self._defense: Any = None
 
     def run(self) -> SecurityMetrics:
         """Run the benchmark and return metrics."""
         self._start_fake_mcp()
+        self._defense = self._setup_defense()
         test_cases = self._load_test_cases()
         logger.info(
             f"Running {len(test_cases)} cases | "
@@ -179,6 +182,34 @@ class BenchmarkRunner:
         self._print_summary()
         self._save_results()
         return self.metrics
+
+    def _setup_defense(self) -> Any | None:
+        """Create the defense and install it on the Fake MCP response path.
+
+        Real agents only see tool outputs through the in-process Fake MCP
+        server, so the defense intercepts every response there (proxy
+        semantics). LLM-based defenses use the same model as the agent.
+        """
+        if self.args.defense == "none":
+            return None
+
+        from agent_eval.security.defenses import create_defense
+        from agent_eval.api_keys import get_openrouter_api_key
+
+        try:
+            api_key = get_openrouter_api_key()
+        except Exception:
+            api_key = ""
+        defense = create_defense(
+            defense_type=self.args.defense,
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+            model=self.args.model,
+            caitlyn_port=9070,
+        )
+        set_active_defense(defense)
+        logger.info("defense active: %s", defense.name)
+        return defense
 
     def _start_fake_mcp(self) -> None:
         """Start the Fake MCP server in-process for real agent runs.
@@ -258,6 +289,8 @@ class BenchmarkRunner:
         """Run a single test case."""
         scenario = to_test_scenario(tc)
         set_active_scenario(scenario)
+        if self._defense is not None:
+            self._defense.reset_case()
 
         start = time.time()
 
@@ -282,6 +315,8 @@ class BenchmarkRunner:
                     "tool": call.tool_name,
                     "arguments": call.arguments,
                     "injection_served": call.response.is_injection,
+                    "blocked": call.blocked,
+                    "original_content": call.original_content,
                 }
                 for call in scenario.call_log
             ]
@@ -290,6 +325,8 @@ class BenchmarkRunner:
         result["compromised"], result["actions"] = detect_compromise(
             result.get("output", ""), tc
         )
+        if self._defense is not None:
+            result["defense_cost"] = self._defense.case_cost()
         return result
 
     _caitlyn_defense: Any = None
@@ -466,7 +503,7 @@ class BenchmarkRunner:
         print(f"  FPR:        {self.metrics.fpr:.1%} "
               f"({self.metrics.benign_blocked}/{self.metrics.benign_cases})")
         print(f"  Avg time:   {self.metrics.avg_duration:.1f}s")
-        defense = self._get_defense()
+        defense = self._defense if self._defense is not None else self._get_defense()
         if defense:
             s = defense.stats
             print(f"  Defense:    blocked={s.blocked} flagged={s.flagged} passed={s.passed}")
