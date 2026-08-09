@@ -1,0 +1,116 @@
+                  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                   CAITLYN 论文实验设计总结（粗略版）
+
+                        Zi Liang (团长) + Agent
+                  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+                               2026-08-09
+
+
+Table of Contents
+─────────────────
+
+1. 论文主张与实验的对应
+2. 实验结构（8 点，四组）
+.. 1. 组 1：核心证据链
+.. 2. 组 2：机制层
+.. 3. 组 3：对抗稳健性
+.. 4. 组 4：长期性
+3. 已确认的设计红线
+4. 待决问题
+5. 下一步
+
+
+1 论文主张与实验的对应
+══════════════════════
+
+  论文 = 防御系统（CAITLYN）+ human-expert 新兴注入数据集（benchmark）两
+  个贡献。实验部分回答四条主线：有效、适应、机制、稳健/长期。
+
+
+2 实验结构（8 点，四组）
+════════════════════════
+
+2.1 组 1：核心证据链
+────────────────────
+
+  1. 主表 —— 现有 benchmark 下的防御效果
+     • 数据集：AgentDojo（公开可比）+ natural20（自建可执行）双轨
+     • 矩阵：agents × defenses × attacks；defenses =
+       none/regex/llm_judge/fewshot/CAITLYN
+     • 指标：action ASR（权威口径）、FPR、benign 任务成功率（效用）、
+       p50/p95 延迟、token/$ 成本
+     • 现状：仅 opencode × 4 防御 × n=20 pilot（无防御 55% → CAITLYN 25%）
+
+  2. 新数据集 —— human-expert 设计的 emerging 注入数据集
+     • 定位：现有公开 benchmark 覆盖不足的真实新兴向量（候选：结构化工具
+       输出劫持、链式跨通道、MCP schema 投毒、skill 文件投毒、agent 间传
+       播、编码/多语言规避）
+     • 规模草案：5-8 pattern，每类 15-25 条，总 100-150；benign 池 30-50
+     • 硬约束：可执行（具体目标）、自然语言、经 MCP 送达；无防御 ASR ≥
+       50%
+     • 内嵌可信度验证：新颖性筛查（对照 AgentDojo/InjecAgent/natural20）、
+       投递率、人工复核记录
+
+  3. Emerging 效果测试
+     • E2a 零样本：静态 CAITLYN vs 静态基线，不进化
+     • E2b 适应：每类 k 条 seed 进 System II，held-out 上 before → after；
+       对照 CAITLYN-static vs CAITLYN+evolution
+     • 记录：ASR 下降、FPR 稳定、进化成本（轮数/token/时间）、跨 pattern
+       迁移
+
+
+2.2 组 2：机制层
+────────────────
+
+  1. Ablation：Tier0-only / Tier1-only / fewshot / consistency recheck /
+     similar clusters / SHM / shadow
+  2. Case study：单案例完整生命周期（首遇漏检 → Tier1 → System II 进化 →
+     变体被拦截），真实 trace，不编造
+  3. 成本分析：延迟/token/$ 构成与 Pareto（ASR vs 成本）
+
+
+2.3 组 3：对抗稳健性
+────────────────────
+
+  1. Adaptive attack + poisoning
+     • 需先定义攻击者能力模型（白盒/黑盒、能否见判定输出）
+     • poisoning：恶意抗原流下 benign FPR 增量
+     • adaptive：规避变体（编码/改写）下的 ASR
+
+
+2.4 组 4：长期性
+────────────────
+
+  1. 长期演化：多 pattern 按时间序列到达 → 覆盖增长/遗忘/归档；Tier-0 仿
+     真即可
+
+
+3 已确认的设计红线
+══════════════════
+
+  1. action 级 ground truth（MCP 审计），不以输出文本猜测
+  2. 投递保证（强制首调 + 参数提示）
+  3. 新颖性可辩护 + 泄漏控制（held-out 不进生成器/相似簇/redteam）
+  4. ≥3 seed 重复、CI、统计口径
+  5. 不 mock；case study 用真实 trace
+
+
+4 待决问题
+══════════
+
+  1. Q5（挂起）：主表 agent × model 矩阵
+  2. natural-N 规模与 benign 池构成（主表）
+  3. 指标与统计协议细节
+  4. 新数据集构建流程（pattern 清单、纯人工 vs LLM 辅助 + 人工策展、专家
+     评审）
+  5. case study 选材与 lifecycle trace 工具
+  6. venue / threat model / 贡献列表（写作骨架）
+
+
+5 下一步
+════════
+
+  三选一：A 数据集构建细节（推荐，critical path）| B 论文写作骨架 | C 工
+  程实现排期
