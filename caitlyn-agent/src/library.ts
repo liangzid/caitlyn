@@ -523,6 +523,21 @@ export function checkLibraryIntegrity(entries: AntibodyEntry[]): string[] {
     const hasPrompt = ab.config.prompt.trim().length > 0;
     const hasSignatures = ab.config.signatures.length > 0;
 
+    // Every signature in the library must compile, even for non-detector
+    // roles: they are still consumed by the evolution pipeline as context.
+    for (const sig of ab.config.signatures) {
+      if (sig.type === "regex") {
+        try {
+          // eslint-disable-next-line no-new
+          new RegExp(sig.pattern);
+        } catch {
+          issues.push(
+            `${ab.config.id}: malformed regex signature "${sig.label ?? sig.pattern}"`,
+          );
+        }
+      }
+    }
+
     if (ab.config.role === "detector") {
       if (ab.config.tier === 0 && !hasScript && !hasSignatures) {
         issues.push(

@@ -15,9 +15,15 @@ stats:
   false_positives: 0
   avg_latency_us: 0
 signatures:
-- pattern: "(send|email|forward|share|post|upload|submit).{0,80}(to|via|using).{0,40}\\S+@\\S+"
+- pattern: "(send|email|forward|share|post|upload|submit)\\b.{0,120}\\b(credentials|secrets|passwords|private keys|session tokens|api keys|system prompt|conversation|transcript|full context|all messages|message history|environment variables|the summary|this summary|all data|logs|files)\\b.{0,120}\\S+@\\S+"
   type: regex
-  label: exfil-email
+  label: exfil-email-secrets
+- pattern: "(send|share|post|upload|submit)\\b.{0,80}\\b(the link|it via a public link)\\b.{0,80}\\S+@\\S+"
+  type: regex
+  label: exfil-email-link
+- pattern: "(send|email|forward|share|post|upload|submit)\\b.{0,100}\\b(external|public|collector|backup|archive)\\b.{0,80}\\S+@\\S+"
+  type: regex
+  label: exfil-email-external
 - pattern: "(post|upload|send|push|submit).{0,80}https?://\\S+"
   type: regex
   label: exfil-url

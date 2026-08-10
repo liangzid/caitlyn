@@ -26,6 +26,7 @@ import {
   validateAntigenConfig,
   loadAntibodyIndex,
   saveAntibodyIndex,
+  saveAntibody,
   loadAntibodies,
   recordScanFeedback,
   checkLibraryIntegrity,
@@ -484,5 +485,42 @@ describe("checkLibraryIntegrity", () => {
     const issues = checkLibraryIntegrity([a, b]);
     expect(issues.join("\n")).toContain("duplicate antibody id: ab-dup");
     expect(issues.join("\n")).toContain("duplicate tier 0 signature");
+  });
+});
+
+describe("saveAntibody round-trip", () => {
+  it("preserves prompt, role and signatures when persisting", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-lib-rt-"));
+    fs.mkdirSync(path.join(dir, "antibodies"), { recursive: true });
+    const prev = process.env.CAITLYN_LIBRARY_DIR;
+    process.env.CAITLYN_LIBRARY_DIR = dir;
+    try {
+      const entry = makeAntibodyEntry({
+        id: "ab-roundtrip",
+        tier: 1,
+        prompt: "You are a detector.\nAnalyze carefully.",
+        role: "detector",
+        signatures: [
+          { pattern: "ignore previous", type: "exact", label: "ignore" },
+        ],
+      });
+      entry.folderPath = path.join(dir, "antibodies", "ab-roundtrip");
+      entry.scriptPath = null;
+
+      saveAntibody(entry);
+
+      const loaded = loadAntibodies().find((a) => a.config.id === "ab-roundtrip");
+      expect(loaded?.config.prompt).toBe("You are a detector.\nAnalyze carefully.");
+      expect(loaded?.config.role).toBe("detector");
+      expect(loaded?.config.signatures).toEqual([
+        { pattern: "ignore previous", type: "exact", label: "ignore" },
+      ]);
+    } finally {
+      if (prev === undefined) {
+        delete process.env.CAITLYN_LIBRARY_DIR;
+      } else {
+        process.env.CAITLYN_LIBRARY_DIR = prev;
+      }
+    }
   });
 });

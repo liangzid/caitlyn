@@ -20,6 +20,7 @@ const signatures: Array<{ pattern: RegExp; weight: number; label: string }> = [
   { pattern: /[\u200B-\u200F\u2028-\u202F\uFEFF]/, weight: 0.8, label: "zero-width" },
   { pattern: /[\u0430-\u044F\u0391-\u03C9]/, weight: 0.6, label: "homoglyph" },
   { pattern: /[\u202A-\u202E]/, weight: 0.8, label: "rtl-override" },
+  { pattern: /([^\s])\1{10,}/, weight: 0.4, label: "char-run" },
 ];
 
 // ── Heuristic flags ─────────────────────────────────────────────
@@ -43,18 +44,27 @@ if (homoglyphMatches.length > 0) {
   flags.push(`homoglyph-chars:${homoglyphMatches.length}`);
 }
 
-// 3. Entropy-like: high ratio of unique chars to total length (>0.3)
-//    Only meaningful for longer text — short sentences trip it trivially.
-if (content.length >= 64) {
-  const uniqueChars = new Set(content).size;
-  if (uniqueChars / content.length > 0.3) {
-    heuristicScore += 0.3;
-    flags.push("high-unique-char-ratio");
-  }
+// 3. Format-anomaly detection. Calibrated on real data: benign prose has
+//    symbol density <= 0.10 while shell/HTML/JSON/obfuscated attack
+//    payloads sit in 0.09-0.51; ALL-CAPS plus symbols is another
+//    attack-heavy profile that normal prose rarely has.
+const symbolDensity = (content.match(/[^A-Za-z0-9\s]/g) ?? []).length / content.length;
+const upperDensity = (content.match(/[A-Z]/g) ?? []).length / content.length;
+if (content.length >= 64 && symbolDensity > 0.1) {
+  heuristicScore += 0.35;
+  flags.push(`high-symbol-density:${symbolDensity.toFixed(2)}`);
+}
+if (content.length >= 64 && upperDensity >= 0.2 && symbolDensity >= 0.04) {
+  heuristicScore += 0.35;
+  flags.push(`caps-and-symbols:${upperDensity.toFixed(2)}`);
 }
 
-// 4. Repetition detection: same substring repeated >5 times in a row
-const repeatMatch = content.match(/(.+?)\1{5,}/);
+// 4. Repetition detection: the same letter-leading token repeated 3+ times
+//    back-to-back (payload padding/obfuscation). Natural prose does not
+//    produce "abcabcabc" or "SpotifySpotifySpotify"; pure digit runs
+//    (e.g. account numbers) are excluded to avoid bank-number false
+//    positives.
+const repeatMatch = content.match(/([A-Za-z][A-Za-z0-9]{3,})\1{2,}/);
 if (repeatMatch) {
   heuristicScore += 0.4;
   flags.push("substring-repeat");

@@ -1,0 +1,87 @@
+#+TITLE: Tier1 分级触发实现 + 全抗体正确性审计
+#+AUTHOR: Zi Liang (团长) + Agent
+#+DATE: 2026-08-10
+
+* 背景
+
+团长确认上一轮方案："实现分级触发，并对所有 antibodies 的正确性 double
+check，确保 caitlyn 可用"。本记录覆盖两部分：分级触发落地，以及
+318 条良性 + 244 条攻击的真实数据审计与修复。
+
+* 分级触发（Tier 1 Escalation）
+
+** 决策模型（确定性代码，不用额外 LLM）
+
+- none：aggressive 策略 + 信任干净输入 → 跳过 LLM。
+- fast：跑通用子集（classifier-injection / classifier-jailbreak /
+  builtin-poisoning）；fast 命中 malicious 直接拦截；fast 可疑升级全量；
+  fast 干净则放行。
+- full：跑全部 9 个 tier1 检测器（弱信号/高风险/off 策略）。
+
+** 实现要点
+
+- 新增 src/escalation.ts：decideEscalation / hasWeakSignal。
+- [scanning] 配置：escalation_policy（safe 默认 / aggressive / off）、
+  fast_detector_ids、weak_signal_threshold、source_trust、high_risk。
+- scan() 按决策执行 staged 子集；fast 与 full 不重复调用已跑过的检测器；
+  fast 子集配置为空时静默降级 full（绝不因配置错误漏检）。
+- 来源信任度接线：daemon 请求可传 source；guard 工具输出/文件内容传 low。
+- 设计取舍（已与方案说明不同）：默认 safe 策略下"干净输入仍跑 fast 子集"
+  而不是零 LLM。原因：基准攻击绝大多数绕过 Tier 0（regex 基线 TPR
+  0-9%），若干净输入完全不跑 LLM，召回会塌方。零 LLM 留给 aggressive。
+
+** 真实冒烟（deepseek-v4-pro，隔离临时库）
+
+| 场景 | LLM 调用 | 结果 |
+|------+----------+------|
+| aggressive+信任+干净 | 0 | benign，64ms |
+| safe+干净 | 3 | benign，1.8s，1351 tokens |
+| safe+Tier0 漏网攻击 | 3 | malicious 0.98（fast 子集拦截） |
+| safe+弱信号（HTML 注入） | 9 | malicious 1.0（full） |
+
+* 全抗体正确性审计（真实数据）
+
+** 审计手段
+
+- checkLibraryIntegrity 增强：所有签名必须可编译（regex），重复 id、
+  重复 runtime 签名、tier0 无实现、tier1/2 无 prompt 均报错。
+- schema 往返测试：saveAntibody 保留 prompt/role/signatures（新增）。
+- 318 条良性（agent_tasks 68 + agentdefense 250）× Tier 0 FP 统计。
+- 244 条知识库攻击 × Tier 0 红队。
+
+** 发现并修复
+
+1. ab-entropy-anomaly 误报源：
+   - substring-repeat 把缩进空格当重复串（AgentDojo 样本前导空格）。
+   - high-unique-char-ratio 对普通英文短句误报（良性 p50=0.43）。
+   - 但旧 unique-char 启发式确实独力捕获约 14 条攻击（符号密集载荷）。
+   修复：改为数据校准的格式异常启发式（符号密度 >0.10；或全大写+符号），
+   char-run 排除空白，substring-repeat 要求字母开头单元（排除银行账号
+   数字串）。
+2. ab-exfiltration 误报：send ... to <email> 把"给妻子发邮件订酒店"
+   当外泄。修复：要求敏感内容词/公开链接/外部收件人词与发送动词共现。
+
+** 审计前后数字（Tier 0）
+
+| 指标 | 修复前 | 修复后 |
+|------+--------+--------|
+| agent_tasks 良性 FP | 23/68（33.8%） | 0/68 |
+| agentdefense 良性 FP | 19/250（7.6%） | 0/250 |
+| 红队 244 检出 | 135（55.3%） | 155（63.5%） |
+| exfil 检出 | 23（52.3%） | 25（56.8%） |
+
+（初始红队 36.9%；本轮审计把 Tier 0 提升到 63.5% 且良性 FP 归零。）
+
+* 验证
+
+- tsc --noEmit 通过；npm run audit:library：21 抗体 16 detectors 0 issue。
+- 全量测试 396 passed（33 文件）。
+- 真实 LLM 分级冒烟四条路径全部符合预期。
+
+* 遗留
+
+- 团长未提交的 eval 统计增量（5 个 detector config + index.json）仍保留
+  在工作区未动；entropy config.yaml 虽被其改写格式，本记录未提交该文件。
+- 下一步：用正式 detection sweep 量化 safe/aggressive 两种策略在
+  四个基准上的 TPR/FPR/成本；escalation-coordinator 的 LLM 元决策
+  （当前是确定性代码）暂不启用。
