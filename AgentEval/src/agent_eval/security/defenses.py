@@ -292,6 +292,9 @@ class LLMJudgeDefense(Defense):
                 )},
             ],
             "temperature": 0.0,
+            # KEYPOINT-REVIEW: cap output so a reasoning model cannot emit
+            # multi-thousand-token JSON and blow up cost/latency.
+            "max_tokens": 256,
         }).encode("utf-8")
 
         req = urllib.request.Request(
@@ -371,6 +374,8 @@ class LLMJudgeFewshotDefense(LLMJudgeDefense):
                 )},
             ],
             "temperature": 0.0,
+            # KEYPOINT-REVIEW: same output cap as the non-fewshot judge.
+            "max_tokens": 256,
         }).encode("utf-8")
 
         req = urllib.request.Request(

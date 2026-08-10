@@ -34,13 +34,15 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
+import random
 import sys
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -100,6 +102,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--base-url", default="https://openrouter.ai/api/v1")
     p.add_argument("--caitlyn-port", type=int, default=9070)
     p.add_argument("--caitlyn-mode", choices=["fast", "full"], default="full")
+    p.add_argument("--caitlyn-daemon-model", default="deepseek/deepseek-chat")
+    p.add_argument("--agentdefense-size", type=int, default=250)
+    p.add_argument("--workers", type=int, default=8)
     p.add_argument("--output-dir", default="results/detection_experiment")
     return p.parse_args()
 
@@ -124,22 +129,78 @@ def _agentdefense_content(row: dict) -> str:
     return ""
 
 
-def read_caitlyn_daemon_model() -> str:
-    """Best-effort read of the CAITLYN daemon model (env overrides config)."""
-    env_model = os.environ.get("CAITLYN_MODEL")
-    if env_model:
-        return env_model
-    try:
-        for line in (PROJECT_ROOT / "config.toml").read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if stripped.startswith("model") and not stripped.startswith("small_model"):
-                return stripped.split("=", 1)[1].strip().strip('"').strip("'")
-    except OSError:
-        pass
-    return "unknown"
+def _proportional_allocation(counts: dict[str, int], target: int) -> dict[str, int]:
+    """Hamilton largest-remainder allocation, min 1 per non-empty stratum."""
+    total = sum(counts.values())
+    if total <= 0 or target <= 0:
+        return {}
+    base = {k: max(1, int(v * target / total)) for k, v in counts.items() if v > 0}
+    used = sum(base.values())
+    remainders = sorted(
+        ((v * target / total - base[k], k) for k, v in counts.items() if v > 0),
+        reverse=True,
+    )
+    for _, k in remainders:
+        if used >= target:
+            break
+        base[k] += 1
+        used += 1
+    return base
 
 
-def load_attack_samples(dataset: str, limit: int) -> list[DetectionSample]:
+def _exact_allocation(counts: dict[str, int], target: int) -> dict[str, int]:
+    """Hamilton allocation trimmed down to exactly `target` items.
+
+    ADB has many tiny strata, so the min-1 rule can overshoot the target.
+    We decrement the currently largest allocations until the total is exact.
+    """
+    alloc = _proportional_allocation(counts, target)
+    while sum(alloc.values()) > target:
+        key = max(alloc, key=lambda k: (alloc[k], counts[k], k))
+        alloc[key] -= 1
+        if alloc[key] <= 0:
+            del alloc[key]
+    return alloc
+
+
+def _stratified_sample(
+    items: list[dict], strata_key: str, target: int, seed: int
+) -> list[dict]:
+    """Deterministic proportional stratified sample keyed by strata_key."""
+    rng = random.Random(seed)
+    groups: dict[str, list[dict]] = {}
+    for item in items:
+        groups.setdefault(str(item.get(strata_key, "unknown")), []).append(item)
+    allocation = _exact_allocation(
+        {k: len(v) for k, v in groups.items()}, target
+    )
+    sampled: list[dict] = []
+    for stratum, take in allocation.items():
+        pool = groups[stratum]
+        sampled.extend(rng.sample(pool, min(take, len(pool))))
+    rng.shuffle(sampled)
+    return sampled
+
+
+def ensure_agentdefense_subset(size: int) -> Path:
+    """Return (and lazily create) the stratified AgentDefense-S{size} subset."""
+    out_path = EVAL_SUBSETS / f"agentdefense_detection_subset_s{size}.jsonl"
+    if out_path.exists():
+        return out_path
+    full = _read_jsonl(EVAL_SUBSETS / "agentdefense_detection_subset.jsonl")
+    subset = _stratified_sample(full, "source", size, 20260810)
+    out_path.write_text(
+        "".join(
+            json.dumps(row, ensure_ascii=False) + "\n" for row in subset
+        ),
+        encoding="utf-8",
+    )
+    return out_path
+
+
+def load_attack_samples(
+    dataset: str, limit: int, agentdefense_size: int = 250
+) -> list[DetectionSample]:
     """Load attack samples for one dataset with content extraction."""
     samples: list[DetectionSample] = []
 
@@ -194,7 +255,7 @@ def load_attack_samples(dataset: str, limit: int) -> list[DetectionSample]:
 
     elif dataset == "agentdefense":
         rows = _read_jsonl(
-            EVAL_SUBSETS / "agentdefense_detection_subset.jsonl", limit
+            ensure_agentdefense_subset(agentdefense_size), limit
         )
         for row in rows:
             content = _agentdefense_content(row)
@@ -257,6 +318,26 @@ def make_detector(
         model=model,
         caitlyn_port=caitlyn_port,
     )
+
+
+def run_one_job(
+    detector_name: str,
+    sample: DetectionSample,
+    params: dict[str, Any],
+    api_key: str,
+    base_url: str,
+    model: str,
+    caitlyn_port: int,
+) -> dict:
+    """Create a fresh detector and scan one sample.
+
+    A fresh instance per call avoids races on per-detector state such as
+    Defense.last_result when the same detector runs concurrently.
+    """
+    detector = make_detector(
+        detector_name, api_key, base_url, model, caitlyn_port
+    )
+    return scan_one(detector, detector_name, sample, params)
 
 
 def scan_one(
@@ -459,7 +540,9 @@ def main() -> None:
 
     samples: list[DetectionSample] = []
     for dataset in args.datasets:
-        samples.extend(load_attack_samples(dataset, args.limit_attacks))
+        samples.extend(
+            load_attack_samples(dataset, args.limit_attacks, args.agentdefense_size)
+        )
     samples.extend(load_shared_benign(args.limit_benign))
 
     params: dict[str, Any] = {
@@ -468,7 +551,10 @@ def main() -> None:
         "base_url": args.base_url,
         "caitlyn_port": args.caitlyn_port,
         "caitlyn_mode": args.caitlyn_mode,
-        "caitlyn_daemon_model": read_caitlyn_daemon_model(),
+        "caitlyn_daemon_model": args.caitlyn_daemon_model,
+        "max_tokens": 256,
+        "workers": args.workers,
+        "agentdefense_size": args.agentdefense_size,
         "limit_attacks": args.limit_attacks,
         "limit_benign": args.limit_benign,
     }
@@ -478,19 +564,41 @@ def main() -> None:
         f"(model={args.model})"
     )
     records: list[dict] = []
+    write_lock = Lock()
+    done_count = 0
+    total_jobs = len(args.detectors) * len(samples)
     with records_path.open("w", encoding="utf-8") as fh:
         for detector_name in args.detectors:
-            detector = make_detector(
-                detector_name, api_key, args.base_url, args.model, args.caitlyn_port
-            )
-            for sample in samples:
-                record = scan_one(detector, detector_name, sample, params)
-                fh.write(json.dumps(record, ensure_ascii=False) + "\n")
-                records.append(record)
-                print(
-                    f"  [{detector_name}] {sample.dataset}:{sample.sample_id} "
-                    f"blocked={record['result'].get('blocked')}"
-                )
+            # PI Detector shares a class-level HF pipeline; keep it sequential
+            # to avoid concurrent inference on the same pipeline object.
+            workers = 1 if detector_name == "pi_detector" else args.workers
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = [
+                    executor.submit(
+                        run_one_job,
+                        detector_name,
+                        sample,
+                        params,
+                        api_key,
+                        args.base_url,
+                        args.model,
+                        args.caitlyn_port,
+                    )
+                    for sample in samples
+                ]
+                for future in as_completed(futures):
+                    record = future.result()
+                    with write_lock:
+                        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+                        fh.flush()
+                        records.append(record)
+                        done_count += 1
+                        if done_count % 100 == 0 or done_count == total_jobs:
+                            print(
+                                f"  progress {done_count}/{total_jobs} "
+                                f"(detector={detector_name})",
+                                flush=True,
+                            )
 
     summary = summarize(records)
     summary_path.write_text(

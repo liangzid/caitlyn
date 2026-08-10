@@ -1,0 +1,80 @@
+#+TITLE: Detection-Only Sweep 正式运行计划
+#+AUTHOR: Zi Liang (团长) + Agent
+#+DATE: 2026-08-10
+#+STATUS: 已确认，正式版启动
+
+* 目标
+
+按主表同规模运行 detection-only sweep，输出可复现的逐条检测记录，
+用于 Table 2（TPR/FPR）、每数据集 ROC/PR 曲线以及成本-性能 Pareto。
+
+* 已确认决策（团长 2026-08-10）
+
+1. 数据集只用主表规模，不用全量：
+   - AgentDojo-S250（250 攻击）
+   - ASPI-S（31 行，每行 3 算子，共 93 攻击）
+   - SafeClawBench-S240（240 攻击）
+   - AgentDefense-S250（从 1908 相关样本分层抽样，seed=20260810）
+   - Natural20 不进入图表
+2. 共享 benign 池：AgentDefense-Bench 250 条 benign，所有数据集共用。
+3. 检测器：regex_guard / llm_judge / llm_judge_fewshot / pi_detector / caitlyn。
+4. LLM 模型统一为 deepseek/deepseek-chat（与主表一致）；
+   9070 daemon 已确认是 openrouter + deepseek/deepseek-chat。
+5. LLM-Judge 输出加 max_tokens=256，防止推理型模型长输出拉高成本/延迟。
+6. 并发执行：除 PI Detector（共享 HF pipeline，顺序跑）外，每检测器
+   8 个 worker；PI Detector 本地约 2-5 分钟。
+
+* 规模与调用次数
+
+| 数据集 | 攻击 | 共享 benign |
+|--------+------+-------------|
+| AgentDojo-S250 | 250 | 250 |
+| ASPI-S | 93 | 250 |
+| SafeClawBench-S240 | 240 | 250 |
+| AgentDefense-S250 | 250 | 250 |
+| 合计 | 833 | 250 |
+
+每个检测器扫 1083 个样本：
+- regex_guard / pi_detector：0 次 LLM 调用
+- llm_judge / llm_judge_fewshot：各 1083 次 LLM 调用
+- caitlyn：最多 1083 次 Tier-1 调用（Tier-0 命中会减少）
+- LLM 调用合计约 3249 次
+
+成本估算（OpenRouter 价格，token 数来自最小测试实测）：
+- llm_judge（deepseek-chat）约 $0.95
+- llm_judge_fewshot（deepseek-chat）约 $0.79
+- caitlyn（deepseek-chat，最坏全 Tier-1）约 $0.82
+- 合计约 $2.5-3.1
+
+* 记录格式（records.jsonl，每条检测一行）
+
+输入内容、数据集/样本 id、label、source type、metadata、
+检测器名、参数（model/base_url/port/mode/max_tokens 等）、
+判定结果（blocked/verdict/confidence/score/reasoning/matched_patterns）、
+成本（latency/tokens/prompt/completion/cached/cost_usd）、错误。
+
+* 输出
+
+- AgentEval/results/detection_formal/records.jsonl
+- AgentEval/results/detection_formal/summary.json
+- AgentEval/results/detection_formal/figures/（ROC/PR、Pareto，运行后生成）
+- valsets/eval_subsets/agentdefense_detection_subset_s250.jsonl（分层子集）
+
+* 执行命令
+
+#+begin_example
+cd AgentEval
+uv run python run_detection_experiment.py \
+  --datasets agentdojo aspi safeclawbench agentdefense \
+  --detectors regex_guard llm_judge llm_judge_fewshot pi_detector caitlyn \
+  --model deepseek/deepseek-chat \
+  --caitlyn-port 9070 --caitlyn-daemon-model deepseek/deepseek-chat \
+  --agentdefense-size 250 --workers 8 \
+  --output-dir results/detection_formal
+#+end_example
+
+* 后续
+
+1. 运行完成后绘图：每数据集一张图（左 ROC 右 PR，图例标 AUROC/AUPRC）。
+2. Pareto：保留每次检测的 latency/token/cost，若可行画出 TPR vs 成本。
+3. 更新论文 table-main.tex 中 AgentDefense-S1908 -> AgentDefense-S250。

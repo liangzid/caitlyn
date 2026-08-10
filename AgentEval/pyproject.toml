@@ -56,3 +56,8 @@ pythonpath = ["src"]
 filterwarnings = [
   "ignore:cannot collect test class 'TestScenario'.*:pytest.PytestCollectionWarning",
 ]
+
+[dependency-groups]
+dev = [
+    "matplotlib>=3.10.9",
+]
