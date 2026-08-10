@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -71,6 +72,13 @@ DATASET_MARKERS = {
     "aspi": "s",
     "safeclawbench": "^",
     "agentdefense": "v",
+}
+OP_MARKERS = {
+    "regex_guard": "o",
+    "llm_judge": "s",
+    "llm_judge_fewshot": "^",
+    "pi_detector": "v",
+    "caitlyn": "D",
 }
 
 # OpenRouter deepseek/deepseek-chat prices (USD per token), used only to
@@ -159,6 +167,46 @@ def trapezoid_auc(xs: list[float], ys: list[float]) -> float:
         (xs[i + 1] - xs[i]) * (ys[i] + ys[i + 1]) / 2.0
         for i in range(len(xs) - 1)
     )
+
+
+def spread_points(
+    points: list[tuple[float, float]],
+    min_dx: float = 0.03,
+    min_dy: float = 0.03,
+    max_r: float = 0.18,
+) -> list[tuple[float, float]]:
+    """Move overlapping markers apart with a deterministic outward spiral."""
+    placed: list[tuple[float, float]] = []
+    result: list[tuple[float, float]] = []
+    for x, y in points:
+        candidates: list[tuple[float, float]] = [(x, y)]
+        step = 1
+        while step * min_dx <= max_r:
+            for dx, dy in (
+                (step * min_dx, 0.0),
+                (-step * min_dx, 0.0),
+                (0.0, step * min_dy),
+                (0.0, -step * min_dy),
+                (step * min_dx, step * min_dy),
+                (-step * min_dx, step * min_dy),
+                (step * min_dx, -step * min_dy),
+                (-step * min_dx, -step * min_dy),
+            ):
+                candidates.append((x + dx, y + dy))
+            step += 1
+        chosen = None
+        for cand in candidates:
+            if all(
+                abs(cand[0] - px) >= min_dx or abs(cand[1] - py) >= min_dy
+                for px, py in placed
+            ):
+                chosen = cand
+                break
+        if chosen is None:
+            chosen = (x, y)
+        placed.append(chosen)
+        result.append(chosen)
+    return result
 
 
 def estimate_caitlyn_cost(record: dict) -> float:
@@ -335,18 +383,19 @@ def _style_axes(
     ylim: tuple[float, float],
     logx: bool = False,
     grid_alpha: float = 0.25,
+    ylabel_pad: float = 6.0,
 ) -> None:
     """Apply a clean publication style to one panel."""
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
+    ax.set_ylabel(ylabel, labelpad=ylabel_pad)
     ax.set_xlim(*xlim)
     ax.set_ylim(*ylim)
     if logx:
         ax.set_xscale("log")
     ax.grid(alpha=grid_alpha, linewidth=0.6)
-    ax.tick_params(labelsize=14.5)
+    ax.tick_params(labelsize=12.5)
 
 
 def plot_combined_figure(
@@ -525,12 +574,12 @@ def plot_roc_pr_grid(
     plt.rcParams.update({
         "font.family": "serif",
         "font.serif": ["Liberation Serif", "DejaVu Serif", "Times New Roman"],
-        "font.size": 16,
-        "axes.titlesize": 16,
-        "axes.labelsize": 16,
-        "legend.fontsize": 15,
-        "xtick.labelsize": 15,
-        "ytick.labelsize": 15,
+        "font.size": 13.5,
+        "axes.titlesize": 13.5,
+        "axes.labelsize": 13.5,
+        "legend.fontsize": 12.5,
+        "xtick.labelsize": 13,
+        "ytick.labelsize": 13,
     })
 
     datasets = list(all_data.keys())
@@ -542,7 +591,6 @@ def plot_roc_pr_grid(
     }
     letters = "abcdefgh"
     fig, axes = plt.subplots(2, 4, figsize=(10.0, 4.8), dpi=200)
-
     for i, dataset in enumerate(datasets):
         data = all_data[dataset]
         ax_roc = axes[0, i]
@@ -557,20 +605,32 @@ def plot_roc_pr_grid(
                 fprs, tprs, color=color, linewidth=linewidth,
                 linestyle=linestyle, solid_capstyle="round", zorder=3,
             )
-            ax_roc.plot(
-                d["op_fpr"], d["op_tpr"], marker="D", markersize=5.5,
-                color=color, markerfacecolor=color,
-                markeredgecolor="white", markeredgewidth=0.7,
-                linestyle="None", zorder=4,
-            )
             ax_pr.plot(
                 recalls, precisions, color=color, linewidth=linewidth,
                 linestyle=linestyle, solid_capstyle="round", zorder=3,
             )
-            ax_pr.plot(
-                d["op_recall"], d["op_precision"], marker="D", markersize=5.5,
-                color=color, markerfacecolor=color,
+        detector_order = [det for det in DETECTORS if det in data]
+        roc_ops = spread_points(
+            [(data[det]["op_fpr"], data[det]["op_tpr"])
+             for det in detector_order],
+            min_dx=0.06, min_dy=0.05, max_r=0.45,
+        )
+        for det, (x, y) in zip(detector_order, roc_ops):
+            ax_roc.plot(
+                x, y, marker=OP_MARKERS[det], markersize=5.0,
+                color=DETECTOR_COLORS[det],
+                markerfacecolor=DETECTOR_COLORS[det],
                 markeredgecolor="white", markeredgewidth=0.7,
+                linestyle="None", zorder=4,
+            )
+        if "caitlyn" in data:
+            cait = data["caitlyn"]
+            ax_pr.plot(
+                cait["op_recall"], cait["op_precision"],
+                marker="D", markersize=6.0,
+                color=DETECTOR_COLORS["caitlyn"],
+                markerfacecolor=DETECTOR_COLORS["caitlyn"],
+                markeredgecolor="white", markeredgewidth=0.8,
                 linestyle="None", zorder=4,
             )
         ax_roc.plot(
@@ -579,11 +639,11 @@ def plot_roc_pr_grid(
         )
         ax_roc.set_title(
             f"({letters[i]}) {titles[dataset]}",
-            fontsize=16, fontweight="bold", pad=6,
+            fontsize=13.5, fontweight="bold", pad=6,
         )
         ax_pr.set_title(
             f"({letters[4 + i]}) {titles[dataset]}",
-            fontsize=16, fontweight="bold", pad=6,
+            fontsize=13.5, fontweight="bold", pad=6,
         )
         _style_axes(ax_roc, "FPR", "TPR", (-0.02, 1.02), (-0.02, 1.06))
         _style_axes(ax_pr, "Recall", "Precision", (-0.02, 1.02), (-0.02, 1.06))
@@ -609,14 +669,14 @@ def plot_roc_pr_grid(
     )
     fig.text(
         0.012, 0.66, "ROC", rotation=90, va="center", ha="center",
-        fontsize=16, fontweight="bold",
+        fontsize=13.5, fontweight="bold",
     )
     fig.text(
         0.012, 0.29, "PR", rotation=90, va="center", ha="center",
-        fontsize=16, fontweight="bold",
+        fontsize=13.5, fontweight="bold",
     )
     fig.subplots_adjust(
-        wspace=0.42, hspace=0.45, left=0.09,
+        wspace=0.60, hspace=0.85, left=0.13,
         right=0.985, top=0.94, bottom=0.19,
     )
     fig.savefig(out_path, bbox_inches="tight", pad_inches=0.02)
@@ -631,55 +691,100 @@ def plot_pareto_grid(
     plt.rcParams.update({
         "font.family": "serif",
         "font.serif": ["Liberation Serif", "DejaVu Serif", "Times New Roman"],
-        "font.size": 16,
-        "axes.titlesize": 16,
-        "axes.labelsize": 16,
-        "legend.fontsize": 15,
-        "xtick.labelsize": 15,
-        "ytick.labelsize": 15,
+        "font.size": 13.5,
+        "axes.titlesize": 13.5,
+        "axes.labelsize": 13.5,
+        "legend.fontsize": 12.5,
+        "xtick.labelsize": 12.5,
+        "ytick.labelsize": 12.5,
     })
     fig, (ax_lat, ax_cost) = plt.subplots(
         1, 2, figsize=(10.0, 3.5), dpi=200
     )
     max_cost = 0.0
     dataset_jitter = {
-        "agentdojo": -0.035,
-        "aspi": -0.012,
-        "safeclawbench": 0.012,
-        "agentdefense": 0.035,
+        "agentdojo": 0.35,
+        "aspi": 0.65,
+        "safeclawbench": 1.1,
+        "agentdefense": 1.7,
     }
+    dataset_cost_jitter = {
+        "agentdojo": 0.03,
+        "aspi": 0.11,
+        "safeclawbench": 0.22,
+        "agentdefense": 0.36,
+    }
+    dataset_y_jitter = {
+        "agentdojo": -0.09,
+        "aspi": -0.03,
+        "safeclawbench": 0.03,
+        "agentdefense": 0.09,
+    }
+    lat_items: list[tuple[float, float, str, str]] = []
+    cost_items: list[tuple[float, float, str, str]] = []
     for dataset, data in all_data.items():
-        marker = DATASET_MARKERS[dataset]
-        jitter = dataset_jitter[dataset]
+        lat_jitter = dataset_jitter[dataset]
+        cost_jitter = dataset_cost_jitter[dataset]
+        y_jitter = dataset_y_jitter[dataset]
         for detector, d in data.items():
             lat = d["avg_latency_ms"]
             cost = d["avg_cost_usd"]
             if lat is None or cost is None:
                 continue
             max_cost = max(max_cost, cost)
-            lat_x = max(lat * (1.0 + jitter), 0.01)
-            cost_x = (cost + jitter * max_cost) * 1000.0
-            ax_lat.scatter(
-                lat_x, d["op_tpr"], s=70,
-                color=DETECTOR_COLORS[detector], marker=marker,
-                edgecolor="white", linewidth=0.7, zorder=3,
-            )
-            ax_cost.scatter(
-                cost_x, d["op_tpr"], s=70,
-                color=DETECTOR_COLORS[detector],
-                marker=marker, edgecolor="white", linewidth=0.7, zorder=3,
-            )
-    ax_lat.set_title("(a) Latency Pareto", fontsize=16, fontweight="bold", pad=6)
-    ax_cost.set_title("(b) Cost Pareto", fontsize=16, fontweight="bold", pad=6)
+            lat_x = max(lat * lat_jitter, 0.01)
+            cost_x = cost * 1000.0 + cost_jitter
+            cluster = lat < 2.0 or cost * 1000.0 < 0.1
+            y = d["op_tpr"] + (y_jitter if cluster else 0.0)
+            lat_items.append((math.log10(lat_x), y, detector, dataset))
+            cost_items.append((cost_x, y, detector, dataset))
+    spread_lat = spread_points(
+        [(x, y) for x, y, _, _ in lat_items],
+        min_dx=0.12, min_dy=0.05, max_r=0.60,
+    )
+    spread_cost = spread_points(
+        [(x, y) for x, y, _, _ in cost_items],
+        min_dx=0.10, min_dy=0.05, max_r=0.60,
+    )
+    for (_, _, detector, dataset), (sx, sy) in zip(lat_items, spread_lat):
+        if detector in ("regex_guard", "llm_judge"):
+            face, edge, lw = "white", DETECTOR_COLORS[detector], 1.4
+        else:
+            face, edge, lw = DETECTOR_COLORS[detector], "white", 0.7
+        ax_lat.scatter(
+            10.0 ** sx, sy, s=65,
+            facecolors=face, edgecolors=edge, linewidths=lw,
+            marker=DATASET_MARKERS[dataset],
+            zorder=3,
+        )
+    for (_, _, detector, dataset), (sx, sy) in zip(cost_items, spread_cost):
+        if detector in ("regex_guard", "llm_judge"):
+            face, edge, lw = "white", DETECTOR_COLORS[detector], 1.4
+        else:
+            face, edge, lw = DETECTOR_COLORS[detector], "white", 0.7
+        ax_cost.scatter(
+            sx, sy, s=65,
+            facecolors=face, edgecolors=edge, linewidths=lw,
+            marker=DATASET_MARKERS[dataset],
+            zorder=3,
+        )
+    ax_lat.set_title(
+        "(a) Latency Pareto", fontsize=13.5, fontweight="bold", pad=6
+    )
+    ax_cost.set_title(
+        "(b) Cost Pareto", fontsize=13.5, fontweight="bold", pad=6
+    )
     _style_axes(
         ax_lat, "Avg Latency (ms)", "TPR at default",
-        (0.1, 3.0e4), (-0.02, 1.08), logx=True, grid_alpha=0.15,
+        (0.1, 3.0e4), (-0.06, 1.10), logx=True, grid_alpha=0.15,
+        ylabel_pad=18,
     )
     ax_lat.xaxis.set_major_locator(LogLocator(base=10, numticks=6))
     ax_lat.xaxis.set_minor_locator(NullLocator())
     _style_axes(
         ax_cost, "Avg Cost ($\\times 10^{-3}$ USD)", "TPR at default",
-        (0.0, max_cost * 1000.0 * 1.1), (-0.02, 1.08), grid_alpha=0.15,
+        (0.0, max_cost * 1000.0 * 1.1), (-0.06, 1.10), grid_alpha=0.15,
+        ylabel_pad=18,
     )
     handles_methods = [
         Line2D(
@@ -707,19 +812,19 @@ def plot_pareto_grid(
     fig.legend(
         handles=handles_methods,
         loc="lower center", ncol=1, frameon=False,
-        fontsize=14, bbox_to_anchor=(0.40, -0.28),
+        fontsize=12.5, bbox_to_anchor=(0.40, -0.28),
         handlelength=2.6, handletextpad=0.7,
         borderaxespad=0.2, labelspacing=0.4,
     )
     fig.legend(
         handles=handles_datasets,
         loc="lower center", ncol=1, frameon=False,
-        fontsize=14, bbox_to_anchor=(0.65, -0.28),
+        fontsize=12.5, bbox_to_anchor=(0.65, -0.28),
         handlelength=2.2, handletextpad=0.7,
         borderaxespad=0.2, labelspacing=0.4,
     )
     fig.subplots_adjust(
-        wspace=0.34, left=0.09, right=0.985, top=0.90, bottom=0.44,
+        wspace=0.50, left=0.13, right=0.985, top=0.90, bottom=0.44,
     )
     fig.savefig(out_path, bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
