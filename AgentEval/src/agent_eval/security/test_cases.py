@@ -238,6 +238,15 @@ class SecurityTestCase:
     source_id: str = ""
     """Original ID in the source dataset."""
 
+    metadata: dict = field(default_factory=dict)
+    """Structured subclass dimensions for offline fine-grained analysis.
+
+    Filled by dataset adapters, e.g. AgentDojo suite and injection surface
+    types, ASPI operator and failure mode, SafeClawBench attack family and
+    lifecycle stage. Stored verbatim into result records so per-subclass
+    ASR/FPR/latency/cost can be recomputed without re-running agents.
+    """
+
 
 @dataclass
 class ControlledToolResponse:

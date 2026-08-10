@@ -56,6 +56,8 @@ def test_agentdojo_subset_loader() -> None:
     for c in attacks:
         assert c.injected_tool == "read_file"
         assert c.injected_content
+        assert c.metadata["suite"] in {"workspace", "travel", "banking", "slack"}
+        assert c.metadata["surface_types"]
         listing = [t for t in c.tool_responses if t.tool_name == "list_directory"]
         assert listing and "files" in listing[0].content
 
@@ -70,6 +72,10 @@ def test_aspi_subset_loader() -> None:
     assert len(attacks) == 3 and len(benign) == 1
     for c in attacks:
         assert c.injected_content in c.problem_statement
+        assert c.metadata["condition"] == "clarif_user"
+        assert c.metadata["operator"] in {"HR", "GS", "CP"}
+        assert c.metadata["failure_mode"]
+    assert benign[0].metadata["condition"] == "clarif_benign"
 
 
 def test_safeclawbench_subset_loader() -> None:
@@ -82,3 +88,7 @@ def test_safeclawbench_subset_loader() -> None:
         assert c.label == "injection"
         assert c.expected_compromise_action
         assert c.attack_template in {"ADI", "DPI", "IPI", "MEX", "MPI", "TRI"}
+        assert c.metadata["attack_type"] == c.attack_template
+        assert c.metadata["lifecycle_stage"] in {
+            "input", "decision", "inference", "execution",
+        }

@@ -138,6 +138,14 @@ def load_agentdojo_subset(
                 f"{row['suite']}|{row['user_task_id']}|"
                 f"{row['injection_task_id']}"
             ),
+            metadata={
+                "suite": row["suite"],
+                "user_task_id": row["user_task_id"],
+                "injection_task_id": row["injection_task_id"],
+                "user_difficulty": row.get("user_difficulty"),
+                "injection_difficulty": row.get("injection_difficulty"),
+                "surface_types": list(surfaces.keys()),
+            },
         ))
 
     benign_rows = _read_jsonl(benign_path)[:max_benign]
@@ -171,6 +179,11 @@ def load_agentdojo_subset(
             label="benign",
             source_dataset="agentdojo",
             source_id=f"{row['suite']}|{row['user_task_id']}",
+            metadata={
+                "suite": row["suite"],
+                "user_task_id": row["user_task_id"],
+                "user_difficulty": row.get("user_difficulty"),
+            },
         ))
     return cases
 
@@ -205,6 +218,14 @@ def load_aspi_subset(path: str | Path, max_rows: int = 31) -> list[SecurityTestC
             label="benign",
             source_dataset="aspi",
             source_id=f"{row_id}-benign",
+            metadata={
+                "suite": suite,
+                "user_task_id": row["user_task_id"],
+                "injection_task_id": row["injection_task_id"],
+                "operator": "benign",
+                "failure_mode": "",
+                "condition": "clarif_benign",
+            },
         ))
 
         for injection in row.get("injections", []):
@@ -227,6 +248,14 @@ def load_aspi_subset(path: str | Path, max_rows: int = 31) -> list[SecurityTestC
                 label="injection",
                 source_dataset="aspi",
                 source_id=f"{row_id}-{operator}",
+                metadata={
+                    "suite": suite,
+                    "user_task_id": row["user_task_id"],
+                    "injection_task_id": row["injection_task_id"],
+                    "operator": operator,
+                    "failure_mode": injection.get("failure_mode", ""),
+                    "condition": "clarif_user",
+                },
             ))
     return cases
 
@@ -253,6 +282,13 @@ def load_safeclawbench_subset(path: str | Path, max_cases: int = 240) -> list[Se
             label="injection",
             source_dataset="safeclawbench",
             source_id=row["task_id"],
+            metadata={
+                "attack_type": row["attack_type"],
+                "lifecycle_stage": row.get("lifecycle_stage"),
+                "harm_type": row.get("harm_type"),
+                "difficulty": row.get("difficulty"),
+                "scenario": row.get("scenario"),
+            },
         ))
     return cases
 

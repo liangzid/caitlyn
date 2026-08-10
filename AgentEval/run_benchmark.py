@@ -349,6 +349,7 @@ class BenchmarkRunner:
         result["template"] = tc.attack_template
         result["injected_content"] = tc.injected_content
         result["expected_compromise_action"] = tc.expected_compromise_action
+        result["metadata"] = tc.metadata
         result["prompt"] = self._build_agent_prompt(
             tc,
             f"http://host.docker.internal:{self.args.mcp_port}/mcp",
