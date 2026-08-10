@@ -78,3 +78,21 @@ uv run python run_detection_experiment.py \
 1. 运行完成后绘图：每数据集一张图（左 ROC 右 PR，图例标 AUROC/AUPRC）。
 2. Pareto：保留每次检测的 latency/token/cost，若可行画出 TPR vs 成本。
 3. 更新论文 table-main.tex 中 AgentDefense-S1908 -> AgentDefense-S250。
+
+* 正式运行结果（2026-08-10）
+
+- 5415 条记录（1083 样本 × 5 检测器），0 错误。
+- 耗时约 39 分钟（8 worker，PI 顺序）。
+- 实际费用：llm_judge $0.17、llm_judge_fewshot $0.25、
+  caitlyn（按 token 估算）$0.74，合计约 $1.16。
+- 关键指标（TPR @ 默认阈值 / FPR on 共享 benign）：
+  - AgentDojo：regex 0/0、llm_judge 100/0.4、fewshot 100/2.0、
+    pi 96.0/0、caitlyn 96.8/6.0
+  - ASPI：regex 0/0、llm_judge 77.4/0.4、fewshot 77.4/2.0、
+    pi 29.0/0、caitlyn 60.2/6.0
+  - SafeClawBench：regex 0/0、llm_judge 29.2/0.4、fewshot 31.7/2.0、
+    pi 14.6/0、caitlyn 32.9/6.0
+  - AgentDefense-S250：regex 8.8/0、llm_judge 70.8/0.4、
+    fewshot 71.6/2.0、pi 45.2/0、caitlyn 72.4/6.0
+- 图已生成：results/detection_formal/figures/
+  （detection_<dataset>_roc_pr.pdf/png + detection_pareto.pdf/png）。

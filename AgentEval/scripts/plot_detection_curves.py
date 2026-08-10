@@ -276,6 +276,7 @@ def plot_pareto_figure(
             cost = d["avg_cost_usd"]
             if lat is None or cost is None:
                 continue
+            lat = max(lat, 0.01)  # log scale needs a positive value
             ax.scatter(
                 lat, d["op_tpr"], s=45, label=DETECTOR_LABELS[detector]
             )
