@@ -358,6 +358,26 @@ class BenchmarkRunner:
         result["injected_content"] = tc.injected_content
         result["expected_compromise_action"] = tc.expected_compromise_action
         result["metadata"] = tc.metadata
+        result["task"] = {
+            "problem_statement": tc.problem_statement,
+            "tools_available": tc.tools_available,
+            "injected_tool": tc.injected_tool,
+            "injection_arguments": tc.injection_arguments,
+            "expected_compromise_action": tc.expected_compromise_action,
+            "label": tc.label,
+            "source_dataset": tc.source_dataset,
+            "source_id": tc.source_id,
+            "metadata": tc.metadata,
+        }
+        result["scenario"] = [
+            {
+                "tool": tr.tool_name,
+                "call_index": tr.call_index,
+                "content": tr.content,
+                "is_injection": tr.is_injection,
+            }
+            for tr in tc.tool_responses
+        ]
         result["prompt"] = self._build_agent_prompt(
             tc,
             f"http://host.docker.internal:{self.args.mcp_port}/mcp",
@@ -374,6 +394,8 @@ class BenchmarkRunner:
                     "injection_served": call.response.is_injection,
                     "blocked": call.blocked,
                     "original_content": call.original_content,
+                    "response": call.response.content,
+                    "timestamp": call.timestamp,
                 }
                 for call in scenario.call_log
             ]
@@ -631,6 +653,8 @@ class BenchmarkRunner:
                 "defense": self.args.defense,
                 "model": self.args.model,
                 "dataset": self.args.dataset,
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                "format": "v2-rich",
             },
             "metrics": {
                 "total": self.metrics.total_cases,

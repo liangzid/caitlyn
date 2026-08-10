@@ -79,12 +79,18 @@ class Defense(ABC):
         self._case_tokens: int = 0
         self._case_calls: int = 0
         self._case_stats_snapshot: tuple[int, int, int] = (0, 0, 0)
+        self._case_events: list[dict] = []
+        # KEYPOINT-REVIEW: every filter() call writes the full per-detection
+        # result here (score, verdict, latency, usage). The detection
+        # experiment runner persists it to JSONL for ROC/PR and Pareto plots.
+        self.last_result: dict[str, Any] = {}
 
     def reset_case(self) -> None:
         """Start a new test case; record the current verdict counters."""
         self._case_latency_ms = 0.0
         self._case_tokens = 0
         self._case_calls = 0
+        self._case_events = []
         s = self.stats
         self._case_stats_snapshot = (s.blocked, s.flagged, s.passed)
 
@@ -92,6 +98,10 @@ class Defense(ABC):
         self._case_latency_ms += latency_ms
         self._case_tokens += tokens
         self._case_calls += 1
+
+    def record_event(self, event: dict) -> None:
+        """Append one per-filter event (source, verdict, latency, details)."""
+        self._case_events.append(event)
 
     def case_cost(self) -> dict:
         """Per-case defense cost and verdict deltas."""
@@ -104,6 +114,7 @@ class Defense(ABC):
             "blocked": s.blocked - blocked0,
             "flagged": s.flagged - flagged0,
             "passed": s.passed - passed0,
+            "events": self._case_events,
         }
 
 
@@ -235,8 +246,25 @@ class LLMJudgeDefense(Defense):
         except Exception as e:
             logger.warning(f"LLM-Judge failed: {e}, falling through")
             self._stats.passed += 1
+            self.last_result = {
+                "detector": "llm_judge",
+                "blocked": False,
+                "error": str(e),
+            }
             return content, False
 
+        usage = verdict.get("usage", {})
+        self.last_result = {
+            "detector": "llm_judge",
+            "blocked": verdict.get("verdict") == "malicious",
+            "score": float(verdict.get("confidence", 0.0)),
+            "confidence": float(verdict.get("confidence", 0.0)),
+            "verdict": verdict.get("verdict"),
+            "reasoning": verdict.get("reasoning", ""),
+            "usage": usage,
+            "latency_ms": float(verdict.get("latency_ms", 0.0)),
+            "tokens": int(usage.get("total_tokens", 0)),
+        }
         if verdict.get("verdict") == "malicious":
             self._stats.blocked += 1
             confidence = verdict.get("confidence", 0.0)
@@ -280,13 +308,23 @@ class LLMJudgeDefense(Defense):
 
         latency_ms = (time.time() - start) * 1000.0
         usage = data.get("usage", {})
-        tokens = int(
-            usage.get("total_tokens")
-            or usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0)
-        )
+        prompt_tokens = int(usage.get("prompt_tokens", 0))
+        completion_tokens = int(usage.get("completion_tokens", 0))
+        tokens = int(usage.get("total_tokens") or (prompt_tokens + completion_tokens))
         self.add_cost(latency_ms, tokens)
         response_text = data["choices"][0]["message"]["content"]
-        return _parse_json_response(response_text)
+        parsed = _parse_json_response(response_text)
+        parsed["usage"] = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "cached_tokens": int(
+                (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0)
+            ),
+            "total_tokens": tokens,
+            "cost_usd": usage.get("cost"),
+        }
+        parsed["latency_ms"] = latency_ms
+        return parsed
 
     @property
     def stats(self) -> DefenseStats:
@@ -349,13 +387,23 @@ class LLMJudgeFewshotDefense(LLMJudgeDefense):
 
         latency_ms = (time.time() - start) * 1000.0
         usage = data.get("usage", {})
-        tokens = int(
-            usage.get("total_tokens")
-            or usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0)
-        )
+        prompt_tokens = int(usage.get("prompt_tokens", 0))
+        completion_tokens = int(usage.get("completion_tokens", 0))
+        tokens = int(usage.get("total_tokens") or (prompt_tokens + completion_tokens))
         self.add_cost(latency_ms, tokens)
         response_text = data["choices"][0]["message"]["content"]
-        return _parse_json_response(response_text)
+        parsed = _parse_json_response(response_text)
+        parsed["usage"] = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "cached_tokens": int(
+                (usage.get("prompt_tokens_details") or {}).get("cached_tokens", 0)
+            ),
+            "total_tokens": tokens,
+            "cost_usd": usage.get("cost"),
+        }
+        parsed["latency_ms"] = latency_ms
+        return parsed
 
 
 # ── Regex-Guard Defense ───────────────────────────────────────────
@@ -421,7 +469,16 @@ class RegexGuardDefense(Defense):
         for i, pattern in enumerate(_COMPILED_PATTERNS):
             if pattern.search(content):
                 matched.append(INJECTION_PATTERNS[i])
-        self.add_cost((time.time() - start) * 1000.0, 0)
+        latency_ms = (time.time() - start) * 1000.0
+        self.add_cost(latency_ms, 0)
+        self.last_result = {
+            "detector": "regex_guard",
+            "blocked": bool(matched),
+            "score": float(len(matched)),
+            "matched_patterns": matched,
+            "latency_ms": latency_ms,
+            "tokens": 0,
+        }
 
         if matched:
             self._stats.blocked += 1
@@ -555,12 +612,23 @@ class TransformersPIDefense(Defense):
         result = pipe(content[:2000])[0]
         label = str(result.get("label", ""))
         score = float(result.get("score", 0.0))
-        self.add_cost((time.time() - start) * 1000.0, 0)
+        latency_ms = (time.time() - start) * 1000.0
+        self.add_cost(latency_ms, 0)
+        self.last_result = {
+            "detector": "pi_detector",
+            "blocked": False,
+            "score": score,
+            "confidence": score,
+            "label": label,
+            "latency_ms": latency_ms,
+            "tokens": 0,
+        }
 
         if "LABEL_1" in label or label.lower() in ("injection", "malicious"):
             is_injection = score >= self.threshold
         else:
             is_injection = False
+        self.last_result["blocked"] = is_injection
         if is_injection:
             self._stats.blocked += 1
             return "[SECURITY BLOCKED by PI detector]", True

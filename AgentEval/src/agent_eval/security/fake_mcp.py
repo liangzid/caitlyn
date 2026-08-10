@@ -128,16 +128,33 @@ class TestScenario:
                     injection_id=resp.injection_id,
                 )
                 blocked = True
+                _active_defense.record_event({
+                    "source": tool_name,
+                    "gate": "tool_filter",
+                    "blocked": True,
+                    "content_len": len(original_content),
+                    "response_len": len(resp.content),
+                })
             else:
                 filtered, blocked = _active_defense.filter(
                     resp.content, source=tool_name
                 )
-            if blocked:
-                resp = ToolResponse(
-                    content=filtered,
-                    is_injection=resp.is_injection,
-                    injection_id=resp.injection_id,
-                )
+                event = {
+                    "source": tool_name,
+                    "blocked": blocked,
+                    "content_len": len(original_content),
+                    "response_len": len(filtered),
+                }
+                last = getattr(_active_defense, "last_result", None)
+                if last:
+                    event["details"] = last
+                _active_defense.record_event(event)
+                if blocked:
+                    resp = ToolResponse(
+                        content=filtered,
+                        is_injection=resp.is_injection,
+                        injection_id=resp.injection_id,
+                    )
 
         self.call_log.append(ToolCallRecord(
             tool_name=tool_name,
