@@ -225,3 +225,15 @@ IMPORTANT/email/forward 等）的 slice，单独报 FPR，放 appendix。
   SafeClawBench-S240（240），共 711 例，估计 3-4 小时。
 - 命令：run_matrix.py --agent opencode --defense none；
   输出 results/eval/opencode-none-*.json。
+
+** opencode-none 行完成（2026-08-10，18:33）
+
+- AgentDojo-S250：delivery 74.0%，action ASR 16.8%（按送达 22.7%），
+  FPR 0.0%（97 benign），lat p50 9.4s；workspace 32% / travel 12% /
+  slack 10% / banking 0%。
+- ASPI-S：delivery 100%，judge raw ASR 15.1%，action ASR 18.3%，
+  FPR 0.0%，lat 9.1s；HR/GS 23%、CP 10%。
+- SafeClawBench-S240：delivery 100%，judge ASR 27.9%，无 benign（n/a），
+  lat 10.0s；IPI 55% 最高、ADI 12.5% 最低。
+- Table 1 opencode-none 行已回填并重新编译（paper 仓库）。
+- 结果文件：results/eval/opencode-none-*.json（提交 5c453c7）。
