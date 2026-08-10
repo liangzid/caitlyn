@@ -3,6 +3,7 @@ name: Cost-Triggered Escalation Coordinator
 description: Meta-controller that decides when to escalate to deeper scanning based on cost/risk heuristics
 category: unknown
 tier: 1
+role: non_detector
 created_at: "2026-07-25"
 threshold: 0.6
 prompt: "You are an escalation coordinator for a multi-tier antibody system.\nYour role is NOT to detect attacks directly,\

@@ -3,6 +3,7 @@ name: Permission Gating Guard
 description: Verifies tool calls against safety policy before execution, based on ClawGuard and SafeMCP patterns
 category: tool_misuse
 tier: 1
+role: non_detector
 created_at: "2026-07-25"
 threshold: 0.6
 prompt: "You are a tool-use safety gate. Your role is to evaluate proposed tool\ncalls against the agent's safety policy BEFORE\
