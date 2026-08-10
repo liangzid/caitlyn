@@ -179,11 +179,18 @@ class BenchmarkRunner:
             f"agent={self.args.agent} | defense={self.args.defense}"
         )
 
-        for i, tc in enumerate(test_cases):
-            logger.info(f"[{i+1}/{len(test_cases)}] {tc.task_id} ({tc.label})")
-            result = self._run_one(tc)
-            self.results.append(result)
-            self._update_metrics(result, tc)
+        try:
+            for i, tc in enumerate(test_cases):
+                logger.info(f"[{i+1}/{len(test_cases)}] {tc.task_id} ({tc.label})")
+                result = self._run_one(tc)
+                self.results.append(result)
+                self._update_metrics(result, tc)
+                if (i + 1) % 25 == 0:
+                    self._save_results(suffix=".partial")
+        except BaseException:
+            # Long runs must not lose completed cases on a crash.
+            self._save_results(suffix=".partial")
+            raise
 
         # Compute aggregate
         if len(self.results) > 0:
@@ -614,7 +621,7 @@ class BenchmarkRunner:
                     print(f"    {tmpl:40s}: {asr:.1%} "
                           f"({stats['compromised']}/{stats['total']})")
 
-    def _save_results(self) -> None:
+    def _save_results(self, suffix: str = "") -> None:
         if not self.args.output:
             return
 
@@ -636,7 +643,7 @@ class BenchmarkRunner:
             "results": self.results,
         }
 
-        out_path = Path(self.args.output)
+        out_path = Path(self.args.output + suffix)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w") as f:
             json.dump(output, f, indent=2, default=str)
