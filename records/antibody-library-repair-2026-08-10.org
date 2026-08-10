@@ -1,0 +1,71 @@
+#+TITLE: 抗体库断线修复（Antibody Library Repair）
+#+AUTHOR: Zi Liang (团长) + Agent
+#+DATE: 2026-08-10
+
+* 背景
+
+团长问"caitlyn 的 antibodies library 能否提升"。审计发现：20 个抗体中
+15 个只有 config.yaml（prompt 字段不在 schema 里、运行时从未被读取），
+Tier 1 提示词用的是 README 而全库 README 数量为 0，Tier 1 判定从不
+归因到具体抗体。正式 sweep 显示 caitlyn ≈ 更贵更慢的 llm_judge
+（TPR 96.8/60.2/32.9/72.4，FPR 6.0% vs llm_judge 0.4%）。红队 Tier 0
+仅 36.9%，exfil 0%。
+
+* 根因（不是崩溃级 bug，是功能断线）
+
+1. config.prompt 是死数据：schema 无 prompt 字段，validate 时丢弃。
+2. Tier 1 用 ab.readme 组装提示词，而真实库 0 个 README → 空库提示词。
+3. recordScanFeedback 只统计 Tier 0 命中抗体，Tier 1 无归因。
+4. 15 个 config-only 抗体没有任何可执行实现；evolution 产出的纯签名
+   抗体也没有 detect.ts，扫描器同样不执行。
+5. 测试用 mock readme 构造抗体，全绿但没有覆盖真实库的上述断线。
+
+* 修复方案与提交
+
+按三个单元提交，每单元独立可编译、可测试：
+
+1. 8fac4ed fix(library): prompt/role 一等字段、逐抗体反馈归因、完整性审计
+   - AntibodyConfig 增加 prompt、role（detector | non_detector），保存时
+     不再丢 prompt（此前 saveAntibody 会重写并删除 prompt 字段）。
+   - recordScanFeedback 改为接收所有参与扫描的抗体（含未命中者）：
+     total_scans 记录真实参与；fired 且最终 malicious → TP，否则 FP。
+   - checkLibraryIntegrity()：tier0 检测器必须有 detect.ts 或 signatures；
+     tier1/2 检测器必须有 prompt；非检测器至少有一个实现；查重 id 与
+     重复 runtime 签名。
+   - 新增 npm run audit:library。
+2. f43d35d fix(scanner): Tier1 真实抗体集成 + Tier0 通用签名引擎
+   - 删除"空库聚合提示词"（buildTier1Prompt），改为 buildAntibodyPrompt：
+     每个 role=detector 的 tier1/2 抗体用自己的 prompt 独立并行调用，
+     逐抗体返回 verdict/confidence/tokens，归因到抗体。
+   - aggregateTier1：任一 fired（malicious 且 confidence ≥ 自身 threshold）
+     即整体 malicious，否则 suspicious，否则 benign。
+   - runTier0 增加 matchSignatures 通用引擎：无 detect.ts 但有 signatures
+     的 Tier 0 抗体（含 evolution 产物）直接进程内执行；脚本类仍走脚本。
+   - 库中无 tier1 检测器时不再空调 LLM，直接 Tier 0 降级。
+3. 796d67a feat(antibodies): 角色标注 + exfiltration 检测器
+   - 5 个非内容检测类抗体（escalation-coordinator / execution-tracer /
+     hardened-prompt / permission-gating / self-examination）显式标记
+     non_detector，不再伪装成内容扫描抗体。
+   - 新增 ab-exfiltration（Tier 0 纯签名，走通用引擎），覆盖
+     email / URL / secrets / context / paste / tool 六类外泄通道。
+
+* 验证（真实数据，无 mock）
+
+- 全量测试：377 passed（原 364，净增 13）。
+- npm run audit:library：21 抗体、16 detectors，0 issue。
+- Tier 1 冒烟（真实 deepseek-v4-pro，隔离临时库 + 临时 HOME）：
+  inj/jb/exfil 均 Tier 0 命中；两个 benign 全抗体 benign，无 FP 票；
+  单样本 9 个并行检测器 ≈ 4390 tokens，延迟 1.8s / 12.2s。
+- Tier 0 红队 244 条：36.9% → 55.3%（135/244）。
+  分项：injection 63.5%、poisoning 65.2%、exfil 59.1%（原 0%）、
+  jailbreak 40.0%、tool_misuse 31.0%。
+
+* 遗留（下一迭代候选）
+
+- 签名级 FP 校准：在共享 benign 250 上回归，单词级签名与阈值待校准。
+- 9 个 tier1 检测器全部每扫描并行执行，成本偏高；下一步应把
+  escalation-coordinator 真正接成分级触发。
+- Tier 1 结果统计的 TP/FP 是相对最终判定的代理标签；有 ground truth
+  的评测（AgentEval）应覆盖此统计。
+- 团长未提交的 eval 统计增量（5 个 detector config + index.json）保留
+  在工作区未动；index.json 已补 ab-exfiltration 条目但未随提交。
