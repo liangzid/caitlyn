@@ -574,12 +574,12 @@ def plot_roc_pr_grid(
     plt.rcParams.update({
         "font.family": "serif",
         "font.serif": ["Liberation Serif", "DejaVu Serif", "Times New Roman"],
-        "font.size": 13.5,
-        "axes.titlesize": 13.5,
-        "axes.labelsize": 13.5,
-        "legend.fontsize": 12.5,
-        "xtick.labelsize": 13,
-        "ytick.labelsize": 13,
+        "font.size": 12.5,
+        "axes.titlesize": 12.5,
+        "axes.labelsize": 12.5,
+        "legend.fontsize": 11.5,
+        "xtick.labelsize": 12,
+        "ytick.labelsize": 12,
     })
 
     datasets = list(all_data.keys())
@@ -639,11 +639,11 @@ def plot_roc_pr_grid(
         )
         ax_roc.set_title(
             f"({letters[i]}) {titles[dataset]}",
-            fontsize=13.5, fontweight="bold", pad=6,
+            fontsize=12.5, fontweight="bold", pad=6,
         )
         ax_pr.set_title(
             f"({letters[4 + i]}) {titles[dataset]}",
-            fontsize=13.5, fontweight="bold", pad=6,
+            fontsize=12.5, fontweight="bold", pad=6,
         )
         _style_axes(ax_roc, "FPR", "TPR", (-0.02, 1.02), (-0.02, 1.06))
         _style_axes(ax_pr, "Recall", "Precision", (-0.02, 1.02), (-0.02, 1.06))
@@ -669,14 +669,14 @@ def plot_roc_pr_grid(
     )
     fig.text(
         0.012, 0.66, "ROC", rotation=90, va="center", ha="center",
-        fontsize=13.5, fontweight="bold",
+        fontsize=12.5, fontweight="bold",
     )
     fig.text(
         0.012, 0.29, "PR", rotation=90, va="center", ha="center",
-        fontsize=13.5, fontweight="bold",
+        fontsize=12.5, fontweight="bold",
     )
     fig.subplots_adjust(
-        wspace=0.60, hspace=0.85, left=0.13,
+        wspace=0.60, hspace=0.60, left=0.13,
         right=0.985, top=0.94, bottom=0.19,
     )
     fig.savefig(out_path, bbox_inches="tight", pad_inches=0.02)
@@ -691,12 +691,12 @@ def plot_pareto_grid(
     plt.rcParams.update({
         "font.family": "serif",
         "font.serif": ["Liberation Serif", "DejaVu Serif", "Times New Roman"],
-        "font.size": 13.5,
-        "axes.titlesize": 13.5,
-        "axes.labelsize": 13.5,
-        "legend.fontsize": 12.5,
-        "xtick.labelsize": 12.5,
-        "ytick.labelsize": 12.5,
+        "font.size": 12.5,
+        "axes.titlesize": 12.5,
+        "axes.labelsize": 12.5,
+        "legend.fontsize": 11.5,
+        "xtick.labelsize": 12,
+        "ytick.labelsize": 12,
     })
     fig, (ax_lat, ax_cost) = plt.subplots(
         1, 2, figsize=(10.0, 3.5), dpi=200
@@ -769,10 +769,10 @@ def plot_pareto_grid(
             zorder=3,
         )
     ax_lat.set_title(
-        "(a) Latency Pareto", fontsize=13.5, fontweight="bold", pad=6
+        "(a) Latency Pareto", fontsize=12.5, fontweight="bold", pad=6
     )
     ax_cost.set_title(
-        "(b) Cost Pareto", fontsize=13.5, fontweight="bold", pad=6
+        "(b) Cost Pareto", fontsize=12.5, fontweight="bold", pad=6
     )
     _style_axes(
         ax_lat, "Avg Latency (ms)", "TPR at default",
@@ -812,14 +812,14 @@ def plot_pareto_grid(
     fig.legend(
         handles=handles_methods,
         loc="lower center", ncol=1, frameon=False,
-        fontsize=12.5, bbox_to_anchor=(0.40, -0.28),
+        fontsize=11.5, bbox_to_anchor=(0.40, -0.28),
         handlelength=2.6, handletextpad=0.7,
         borderaxespad=0.2, labelspacing=0.4,
     )
     fig.legend(
         handles=handles_datasets,
         loc="lower center", ncol=1, frameon=False,
-        fontsize=12.5, bbox_to_anchor=(0.65, -0.28),
+        fontsize=11.5, bbox_to_anchor=(0.65, -0.28),
         handlelength=2.2, handletextpad=0.7,
         borderaxespad=0.2, labelspacing=0.4,
     )
