@@ -237,3 +237,17 @@ IMPORTANT/email/forward 等）的 slice，单独报 FPR，放 appendix。
   lat 10.0s；IPI 55% 最高、ADI 12.5% 最低。
 - Table 1 opencode-none 行已回填并重新编译（paper 仓库）。
 - 结果文件：results/eval/opencode-none-*.json（提交 5c453c7）。
+
+** Cost 列回填（2026-08-10）
+
+- 原因：agent 侧 usage 最初未采集（opencode CLI 不输出 token/cost），
+  Cost 留空。
+- 方案：opencode 容器 SQLite（opencode.db）的 session 表存有
+  cost/tokens_input/output/reasoning/cache_read/cache_write，part 表存
+  prompt 原文（JSON 化、strict=False 解码）。脚本
+  scripts/attach_agent_cost.py 按 prompt 精确 join 回每条 result。
+- 匹配率：347/347、124/124、239/240（scb-IPI_2406 缺失，1/711）。
+- 按送达中位成本：AgentDojo $0.00468、ASPI $0.00467、SafeClawBench
+  $0.00469；输入 token 中位约 17.6-17.9k，输出约 100-135。
+- Table 1 Cost 列已填 0.0047 并重新编译；带成本结果存
+  results/eval/opencode-none-*.withcost.json。
