@@ -346,7 +346,7 @@ def _style_axes(
     if logx:
         ax.set_xscale("log")
     ax.grid(alpha=grid_alpha, linewidth=0.6)
-    ax.tick_params(labelsize=6.5)
+    ax.tick_params(labelsize=14.5)
 
 
 def plot_combined_figure(
@@ -357,31 +357,31 @@ def plot_combined_figure(
     plt.rcParams.update({
         "font.family": "serif",
         "font.serif": ["Liberation Serif", "DejaVu Serif", "Times New Roman"],
-        "font.size": 9,
-        "axes.titlesize": 9.5,
-        "axes.labelsize": 9,
-        "legend.fontsize": 8.5,
-        "xtick.labelsize": 7.5,
-        "ytick.labelsize": 7.5,
+        "font.size": 15,
+        "axes.titlesize": 14,
+        "axes.labelsize": 15,
+        "legend.fontsize": 14,
+        "xtick.labelsize": 14,
+        "ytick.labelsize": 14,
     })
 
     datasets = list(all_data.keys())
     titles = {
-        "agentdojo": "AgentDojo-S250",
+        "agentdojo": "AgentDojo",
         "aspi": "ASPI-S",
-        "safeclawbench": "SafeClawBench-S240",
-        "agentdefense": "AgentDefense-S250",
+        "safeclawbench": "SafeClawBench",
+        "agentdefense": "AgentDefense",
     }
     letters = "abcdefghij"
-    fig, axes = plt.subplots(2, 5, figsize=(16.2, 7.0), dpi=200)
+    fig, axes = plt.subplots(2, 5, figsize=(9.5, 4.6), dpi=200)
 
     for i, dataset in enumerate(datasets):
         data = all_data[dataset]
         ax_roc = axes[0, i]
         ax_pr = axes[1, i]
         for detector, d in data.items():
-            fprs, tprs, _ = roc_points(d["scores"], d["labels"])
-            recalls, precisions, _ = pr_points(d["scores"], d["labels"])
+            fprs, tprs, auroc = roc_points(d["scores"], d["labels"])
+            recalls, precisions, auprc = pr_points(d["scores"], d["labels"])
             color = DETECTOR_COLORS[detector]
             linestyle = DETECTOR_LINESTYLES[detector]
             linewidth = 1.6 if detector == "caitlyn" else 1.1
@@ -410,15 +410,15 @@ def plot_combined_figure(
             linestyle="--", zorder=0,
         )
         ax_roc.set_title(
-            f"({letters[i]}) {titles[dataset]} ROC",
-            fontsize=9.5, fontweight="bold", pad=3,
+            f"({letters[i]}) {titles[dataset]}",
+            fontsize=15.5, fontweight="bold", pad=5,
         )
         ax_pr.set_title(
-            f"({letters[5 + i]}) {titles[dataset]} PR",
-            fontsize=9.5, fontweight="bold", pad=3,
+            f"({letters[5 + i]}) {titles[dataset]}",
+            fontsize=15.5, fontweight="bold", pad=5,
         )
-        _style_axes(ax_roc, "FPR", "TPR", (0.0, 1.0), (0.0, 1.0))
-        _style_axes(ax_pr, "Recall", "Precision", (0.0, 1.0), (0.0, 1.0))
+        _style_axes(ax_roc, "FPR", "TPR", (-0.02, 1.02), (-0.02, 1.06))
+        _style_axes(ax_pr, "Recall", "Precision", (-0.02, 1.02), (-0.02, 1.06))
         for ax in (ax_roc, ax_pr):
             ax.set_xticks([0.0, 0.25, 0.5, 0.75, 1.0])
             ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
@@ -444,19 +444,23 @@ def plot_combined_figure(
             lat_x = max(lat * (1.0 + jitter), 0.01)
             cost_x = (cost + jitter * max_cost) * 1000.0
             ax_lat.scatter(
-                lat_x, d["op_tpr"], s=38,
+                lat_x, d["op_tpr"], s=40,
                 color=DETECTOR_COLORS[detector], marker=marker,
                 edgecolor="white", linewidth=0.5, zorder=3,
             )
             ax_cost.scatter(
-                cost_x, d["op_tpr"], s=38,
+                cost_x, d["op_tpr"], s=40,
                 color=DETECTOR_COLORS[detector],
                 marker=marker, edgecolor="white", linewidth=0.5, zorder=3,
             )
-    ax_lat.set_title("(e) Latency Pareto", fontsize=9.5, fontweight="bold", pad=3)
-    ax_cost.set_title("(j) Cost Pareto", fontsize=9.5, fontweight="bold", pad=3)
+    ax_lat.set_title(
+        "(e) Latency", fontsize=15.5, fontweight="bold", pad=5
+    )
+    ax_cost.set_title(
+        "(j) Cost", fontsize=15.5, fontweight="bold", pad=5
+    )
     _style_axes(
-        ax_lat, "Avg Latency (ms)", "TPR @ default",
+        ax_lat, "Avg Latency (ms)", "TPR at default",
         (0.1, 3.0e4), (-0.02, 1.05), logx=True, grid_alpha=0.15,
     )
     ax_lat.xaxis.set_major_locator(
@@ -464,7 +468,7 @@ def plot_combined_figure(
     )
     ax_lat.xaxis.set_minor_locator(NullLocator())
     _style_axes(
-        ax_cost, "Avg Cost ($\\times 10^{-3}$ USD)", "TPR @ default",
+        ax_cost, "Avg Cost ($\\times 10^{-3}$ USD)", "TPR at default",
         (0.0, max_cost * 1000.0 * 1.1), (-0.02, 1.05), grid_alpha=0.15,
     )
     handles_methods = [
@@ -486,22 +490,238 @@ def plot_combined_figure(
         Line2D(
             [0], [0], marker=DATASET_MARKERS[ds], color="none",
             markerfacecolor="#333333", markeredgecolor="#333333",
-            markersize=6, linestyle="None", label=dataset_labels[ds],
+            markersize=9, linestyle="None", label=dataset_labels[ds],
         )
         for ds in datasets
     ]
     handles = handles_methods + handles_datasets
     fig.legend(
-        handles=handles, loc="lower center", ncol=5, frameon=False,
-        fontsize=8.5, bbox_to_anchor=(0.5, -0.08),
-        columnspacing=1.8, handlelength=2.4, handletextpad=0.6,
-        borderaxespad=0.2,
+        handles=handles, loc="upper center", ncol=4, frameon=False,
+        fontsize=14.5, bbox_to_anchor=(0.5, 1.0),
+        columnspacing=2.0, handlelength=2.6, handletextpad=0.7,
+        borderaxespad=0.2, labelspacing=0.5, handleheight=2.2,
+    )
+    fig.text(
+        0.012, 0.66, "ROC", rotation=90, va="center", ha="center",
+        fontsize=15, fontweight="bold",
+    )
+    fig.text(
+        0.012, 0.29, "PR", rotation=90, va="center", ha="center",
+        fontsize=15, fontweight="bold",
     )
     fig.subplots_adjust(
-        wspace=0.34, hspace=0.55, left=0.045,
-        right=0.985, top=0.93, bottom=0.24,
+        wspace=0.50, hspace=0.42, left=0.085,
+        right=0.985, top=0.80, bottom=0.10,
     )
-    fig.savefig(out_path, bbox_inches="tight")
+    fig.savefig(out_path, bbox_inches="tight", pad_inches=0.02)
+    plt.close(fig)
+
+
+def plot_roc_pr_grid(
+    all_data: dict[str, dict[str, dict[str, Any]]],
+    out_path: Path,
+) -> None:
+    """Save the main 2x4 ROC/PR figure with large, print-ready fonts."""
+    plt.rcParams.update({
+        "font.family": "serif",
+        "font.serif": ["Liberation Serif", "DejaVu Serif", "Times New Roman"],
+        "font.size": 16,
+        "axes.titlesize": 16,
+        "axes.labelsize": 16,
+        "legend.fontsize": 15,
+        "xtick.labelsize": 15,
+        "ytick.labelsize": 15,
+    })
+
+    datasets = list(all_data.keys())
+    titles = {
+        "agentdojo": "AgentDojo",
+        "aspi": "ASPI-S",
+        "safeclawbench": "SafeClawBench",
+        "agentdefense": "AgentDefense",
+    }
+    letters = "abcdefgh"
+    fig, axes = plt.subplots(2, 4, figsize=(10.0, 4.8), dpi=200)
+
+    for i, dataset in enumerate(datasets):
+        data = all_data[dataset]
+        ax_roc = axes[0, i]
+        ax_pr = axes[1, i]
+        for detector, d in data.items():
+            fprs, tprs, _ = roc_points(d["scores"], d["labels"])
+            recalls, precisions, _ = pr_points(d["scores"], d["labels"])
+            color = DETECTOR_COLORS[detector]
+            linestyle = DETECTOR_LINESTYLES[detector]
+            linewidth = 1.7 if detector == "caitlyn" else 1.2
+            ax_roc.plot(
+                fprs, tprs, color=color, linewidth=linewidth,
+                linestyle=linestyle, solid_capstyle="round", zorder=3,
+            )
+            ax_roc.plot(
+                d["op_fpr"], d["op_tpr"], marker="D", markersize=5.5,
+                color=color, markerfacecolor=color,
+                markeredgecolor="white", markeredgewidth=0.7,
+                linestyle="None", zorder=4,
+            )
+            ax_pr.plot(
+                recalls, precisions, color=color, linewidth=linewidth,
+                linestyle=linestyle, solid_capstyle="round", zorder=3,
+            )
+            ax_pr.plot(
+                d["op_recall"], d["op_precision"], marker="D", markersize=5.5,
+                color=color, markerfacecolor=color,
+                markeredgecolor="white", markeredgewidth=0.7,
+                linestyle="None", zorder=4,
+            )
+        ax_roc.plot(
+            [0, 1], [0, 1], color="#bbbbbb", linewidth=1.0,
+            linestyle="--", zorder=0,
+        )
+        ax_roc.set_title(
+            f"({letters[i]}) {titles[dataset]}",
+            fontsize=16, fontweight="bold", pad=6,
+        )
+        ax_pr.set_title(
+            f"({letters[4 + i]}) {titles[dataset]}",
+            fontsize=16, fontweight="bold", pad=6,
+        )
+        _style_axes(ax_roc, "FPR", "TPR", (-0.02, 1.02), (-0.02, 1.06))
+        _style_axes(ax_pr, "Recall", "Precision", (-0.02, 1.02), (-0.02, 1.06))
+        for ax in (ax_roc, ax_pr):
+            ax.set_xticks([0.0, 0.25, 0.5, 0.75, 1.0])
+            ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
+
+    handles_methods = [
+        Line2D(
+            [0], [0], color=DETECTOR_COLORS[d],
+            linewidth=2.2 if d == "caitlyn" else 1.5,
+            linestyle=DETECTOR_LINESTYLES[d],
+            label=DETECTOR_LABELS[d],
+        )
+        for d in DETECTORS
+    ]
+    fig.legend(
+        handles=handles_methods,
+        loc="lower center", ncol=5, frameon=False,
+        fontsize=14.5, bbox_to_anchor=(0.5, -0.07),
+        columnspacing=2.2, handlelength=2.8, handletextpad=0.7,
+        borderaxespad=0.2,
+    )
+    fig.text(
+        0.012, 0.66, "ROC", rotation=90, va="center", ha="center",
+        fontsize=16, fontweight="bold",
+    )
+    fig.text(
+        0.012, 0.29, "PR", rotation=90, va="center", ha="center",
+        fontsize=16, fontweight="bold",
+    )
+    fig.subplots_adjust(
+        wspace=0.42, hspace=0.45, left=0.09,
+        right=0.985, top=0.94, bottom=0.19,
+    )
+    fig.savefig(out_path, bbox_inches="tight", pad_inches=0.02)
+    plt.close(fig)
+
+
+def plot_pareto_grid(
+    all_data: dict[str, dict[str, dict[str, Any]]],
+    out_path: Path,
+) -> None:
+    """Save the 1x2 latency/cost Pareto figure with large fonts."""
+    plt.rcParams.update({
+        "font.family": "serif",
+        "font.serif": ["Liberation Serif", "DejaVu Serif", "Times New Roman"],
+        "font.size": 16,
+        "axes.titlesize": 16,
+        "axes.labelsize": 16,
+        "legend.fontsize": 15,
+        "xtick.labelsize": 15,
+        "ytick.labelsize": 15,
+    })
+    fig, (ax_lat, ax_cost) = plt.subplots(
+        1, 2, figsize=(10.0, 3.5), dpi=200
+    )
+    max_cost = 0.0
+    dataset_jitter = {
+        "agentdojo": -0.035,
+        "aspi": -0.012,
+        "safeclawbench": 0.012,
+        "agentdefense": 0.035,
+    }
+    for dataset, data in all_data.items():
+        marker = DATASET_MARKERS[dataset]
+        jitter = dataset_jitter[dataset]
+        for detector, d in data.items():
+            lat = d["avg_latency_ms"]
+            cost = d["avg_cost_usd"]
+            if lat is None or cost is None:
+                continue
+            max_cost = max(max_cost, cost)
+            lat_x = max(lat * (1.0 + jitter), 0.01)
+            cost_x = (cost + jitter * max_cost) * 1000.0
+            ax_lat.scatter(
+                lat_x, d["op_tpr"], s=70,
+                color=DETECTOR_COLORS[detector], marker=marker,
+                edgecolor="white", linewidth=0.7, zorder=3,
+            )
+            ax_cost.scatter(
+                cost_x, d["op_tpr"], s=70,
+                color=DETECTOR_COLORS[detector],
+                marker=marker, edgecolor="white", linewidth=0.7, zorder=3,
+            )
+    ax_lat.set_title("(a) Latency Pareto", fontsize=16, fontweight="bold", pad=6)
+    ax_cost.set_title("(b) Cost Pareto", fontsize=16, fontweight="bold", pad=6)
+    _style_axes(
+        ax_lat, "Avg Latency (ms)", "TPR at default",
+        (0.1, 3.0e4), (-0.02, 1.08), logx=True, grid_alpha=0.15,
+    )
+    ax_lat.xaxis.set_major_locator(LogLocator(base=10, numticks=6))
+    ax_lat.xaxis.set_minor_locator(NullLocator())
+    _style_axes(
+        ax_cost, "Avg Cost ($\\times 10^{-3}$ USD)", "TPR at default",
+        (0.0, max_cost * 1000.0 * 1.1), (-0.02, 1.08), grid_alpha=0.15,
+    )
+    handles_methods = [
+        Line2D(
+            [0], [0], color=DETECTOR_COLORS[d],
+            linewidth=2.2 if d == "caitlyn" else 1.5,
+            linestyle=DETECTOR_LINESTYLES[d],
+            label=DETECTOR_LABELS[d],
+        )
+        for d in DETECTORS
+    ]
+    dataset_labels = {
+        "agentdojo": "AgentDojo-S250",
+        "aspi": "ASPI-S",
+        "safeclawbench": "SafeClawBench-S240",
+        "agentdefense": "AgentDefense-S250",
+    }
+    handles_datasets = [
+        Line2D(
+            [0], [0], marker=DATASET_MARKERS[ds], color="none",
+            markerfacecolor="#333333", markeredgecolor="#333333",
+            markersize=10, linestyle="None", label=dataset_labels[ds],
+        )
+        for ds in all_data
+    ]
+    fig.legend(
+        handles=handles_methods,
+        loc="lower center", ncol=1, frameon=False,
+        fontsize=14, bbox_to_anchor=(0.40, -0.28),
+        handlelength=2.6, handletextpad=0.7,
+        borderaxespad=0.2, labelspacing=0.4,
+    )
+    fig.legend(
+        handles=handles_datasets,
+        loc="lower center", ncol=1, frameon=False,
+        fontsize=14, bbox_to_anchor=(0.65, -0.28),
+        handlelength=2.2, handletextpad=0.7,
+        borderaxespad=0.2, labelspacing=0.4,
+    )
+    fig.subplots_adjust(
+        wspace=0.34, left=0.09, right=0.985, top=0.90, bottom=0.44,
+    )
+    fig.savefig(out_path, bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
 
 
@@ -532,15 +752,15 @@ def main() -> None:
 
     pareto_pdf = outdir / "detection_pareto.pdf"
     pareto_png = outdir / "detection_pareto.png"
-    plot_pareto_figure(all_data, pareto_pdf)
-    plot_pareto_figure(all_data, pareto_png)
+    plot_pareto_grid(all_data, pareto_pdf)
+    plot_pareto_grid(all_data, pareto_png)
     print(f"saved {pareto_pdf} / {pareto_png}")
 
-    combined_pdf = outdir / "detection_combined.pdf"
-    combined_png = outdir / "detection_combined.png"
-    plot_combined_figure(all_data, combined_pdf)
-    plot_combined_figure(all_data, combined_png)
-    print(f"saved {combined_pdf} / {combined_png}")
+    roc_pr_pdf = outdir / "detection_roc_pr.pdf"
+    roc_pr_png = outdir / "detection_roc_pr.png"
+    plot_roc_pr_grid(all_data, roc_pr_pdf)
+    plot_roc_pr_grid(all_data, roc_pr_png)
+    print(f"saved {roc_pr_pdf} / {roc_pr_png}")
 
 
 if __name__ == "__main__":
