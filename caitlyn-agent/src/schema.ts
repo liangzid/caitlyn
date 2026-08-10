@@ -12,6 +12,9 @@ export interface AntibodyStats {
   avg_latency_us: number;
 }
 
+/** Execution role of an antibody in the defense pipeline. */
+export type AntibodyRole = "detector" | "non_detector";
+
 export interface AntibodyConfig {
   id: string;
   name: string;
@@ -20,6 +23,10 @@ export interface AntibodyConfig {
   tier: 0 | 1 | 2;
   threshold: number;
   description: string;
+  /** Full detector/hardener prompt; the executable knowledge for Tier 1/2. */
+  prompt: string;
+  /** detector = participates in content scanning; non_detector = other role. */
+  role: AntibodyRole;
   affinity_score: number;
   created_at: string;
   generation: number;

@@ -12,6 +12,7 @@
     "build": "tsc -p tsconfig.json && npm run build-antibodies && npm run build-plugins",
     "build-antibodies": "npx tsx src/scripts/precompile-antibodies.ts",
     "build-plugins": "mkdir -p dist/plugins && cp src/plugins/opencode-plugin.ts dist/plugins/opencode-plugin.js && cp src/plugins/openclaw-plugin.ts dist/plugins/openclaw-plugin.js",
+    "audit:library": "npx tsx src/scripts/audit-library.ts",
     "test": "vitest run"
   },
   "dependencies": {

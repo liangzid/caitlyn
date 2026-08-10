@@ -176,6 +176,8 @@ export async function doAntibodyAddFull(
       category: category as AntibodyEntry["config"]["category"],
       tier: tier as 0 | 1 | 2,
       threshold: 0.6,
+      prompt: "",
+      role: "detector",
       affinity_score: 0,
       created_at: new Date().toISOString(),
       parent_id: null,

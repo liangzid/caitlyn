@@ -28,6 +28,7 @@ import {
   saveAntibodyIndex,
   loadAntibodies,
   recordScanFeedback,
+  checkLibraryIntegrity,
   antibodiesDir,
 } from "../src/library.js";
 
@@ -62,6 +63,8 @@ function makeAntibodyConfig(overrides: Partial<AntibodyConfig> = {}): AntibodyCo
     generation: 0,
     deps: [],
     signatures: [],
+    prompt: "",
+    role: "detector",
     stats: { total_scans: 0, true_positives: 0, false_positives: 0, avg_latency_us: 0 },
     ...overrides,
   };
@@ -100,6 +103,54 @@ describe("validateAntibodyConfig", () => {
     expect(config.name).toBe("Minimal");
     expect(config.category).toBe("injection");
     expect(config.tier).toBe(1);
+    expect(config.prompt).toBe("");
+    expect(config.role).toBe("detector");
+  });
+
+  it("parses prompt and role as first-class fields", () => {
+    const raw: Record<string, unknown> = {
+      id: "ab-prompted",
+      name: "Prompted",
+      category: "injection",
+      tier: 1,
+      threshold: 0.7,
+      description: "Uses an LLM prompt",
+      prompt: "You are a detector.\nOutput a verdict.",
+      role: "detector",
+      affinity_score: 0.3,
+      created_at: "2025-01-01",
+      generation: 1,
+      stats: { total_scans: 0, true_positives: 0, false_positives: 0, avg_latency_us: 0 },
+      deps: [],
+      signatures: [],
+    };
+
+    const config = validateAntibodyConfig(raw);
+    expect(config.prompt).toBe("You are a detector.\nOutput a verdict.");
+    expect(config.role).toBe("detector");
+  });
+
+  it("defaults role to detector and rejects invalid roles", () => {
+    const raw = {
+      id: "ab-role",
+      name: "Role",
+      category: "injection",
+      tier: 1,
+      threshold: 0.5,
+      description: "role test",
+      affinity_score: 0.3,
+      created_at: "2025-01-01",
+      generation: 1,
+      stats: { total_scans: 0, true_positives: 0, false_positives: 0, avg_latency_us: 0 },
+      deps: [],
+      signatures: [],
+    };
+    expect(validateAntibodyConfig(raw).role).toBe("detector");
+
+    const nonDetector = validateAntibodyConfig({ ...raw, role: "non_detector" });
+    expect(nonDetector.role).toBe("non_detector");
+
+    expect(() => validateAntibodyConfig({ ...raw, role: "watcher" })).toThrow("role");
   });
 
   it("rejects missing required fields", () => {
@@ -338,18 +389,100 @@ describe("index persistence", () => {
 });
 
 describe("recordScanFeedback", () => {
-  it("updates stats for existing antibodies (does not throw)", () => {
+  it("handles non-existent antibody ids gracefully", () => {
     // recordScanFeedback calls loadAntibodies() internally.
     // We test that it handles non-existent IDs gracefully.
     // It should not throw for missing antibodies (continue on !antibody).
     expect(() => {
-      recordScanFeedback(["nonexistent-ab-id"], "malicious", 5000);
+      recordScanFeedback(
+        [
+          {
+            antibody_id: "nonexistent-ab-id",
+            verdict: "malicious",
+            confidence: 0.9,
+            latency_us: 5000,
+            fired: true,
+          },
+        ],
+        "malicious",
+      );
     }).not.toThrow();
   });
 
   it("handles benign verdict without throwing", () => {
     expect(() => {
-      recordScanFeedback(["nonexistent-ab-id"], "benign", 3000);
+      recordScanFeedback(
+        [
+          {
+            antibody_id: "nonexistent-ab-id",
+            verdict: "benign",
+            confidence: 0.1,
+            latency_us: 3000,
+            fired: false,
+          },
+        ],
+        "benign",
+      );
     }).not.toThrow();
+  });
+});
+
+describe("checkLibraryIntegrity", () => {
+  it("accepts a sound library", () => {
+    const tier0 = makeAntibodyEntry({
+      id: "ab-t0",
+      tier: 0,
+      signatures: [{ pattern: "ignore previous", type: "exact", label: "ignore" }],
+    });
+    tier0.scriptPath = "/fake/antibodies/ab-t0/detect.ts";
+
+    const tier1 = makeAntibodyEntry({
+      id: "ab-t1",
+      tier: 1,
+      prompt: "You are a detector.",
+    });
+
+    const hardener = makeAntibodyEntry({
+      id: "ab-hardener",
+      tier: 1,
+      role: "non_detector",
+      prompt: "You harden prompts.",
+    });
+
+    expect(checkLibraryIntegrity([tier0, tier1, hardener])).toEqual([]);
+  });
+
+  it("flags tier 0 detectors without any executable artifact", () => {
+    const ab = makeAntibodyEntry({ id: "ab-dead-t0", tier: 0 });
+    const issues = checkLibraryIntegrity([ab]);
+    expect(issues.join("\n")).toContain("ab-dead-t0");
+    expect(issues.join("\n")).toContain("without detect.ts or signatures");
+  });
+
+  it("flags tier 1/2 detectors without a prompt", () => {
+    const ab = makeAntibodyEntry({ id: "ab-dead-t1", tier: 1, prompt: "" });
+    const issues = checkLibraryIntegrity([ab]);
+    expect(issues.join("\n")).toContain("ab-dead-t1");
+    expect(issues.join("\n")).toContain("without prompt");
+  });
+
+  it("flags duplicate ids and duplicate runtime signatures", () => {
+    const sig = { pattern: "send.*to", type: "regex", label: "exfil" };
+    const a = makeAntibodyEntry({
+      id: "ab-dup",
+      tier: 0,
+      signatures: [sig],
+    });
+    a.scriptPath = null;
+    const b = makeAntibodyEntry({
+      id: "ab-dup",
+      tier: 0,
+      signatures: [sig],
+    });
+    b.scriptPath = null;
+
+    const issues = checkLibraryIntegrity([a, b]);
+    expect(issues.join("\n")).toContain("duplicate antibody id: ab-dup");
+    expect(issues.join("\n")).toContain("duplicate tier 0 signature");
   });
 });

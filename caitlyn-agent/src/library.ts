@@ -20,6 +20,8 @@ import type {
   AntigenConfig,
   AntibodyIndex,
   AntibodyStats,
+  AntibodyRole,
+  Verdict,
 } from "./schema.js";
 
 // ── Paths ─────────────────────────────────────────────────────────
@@ -137,6 +139,13 @@ function assertTier(v: unknown): 0 | 1 | 2 {
   throw new Error(`Invalid tier: ${n}. Must be 0, 1, or 2.`);
 }
 
+function assertRole(v: unknown): AntibodyRole {
+  if (v === undefined || v === null) return "detector";
+  const s = String(v);
+  if (s === "detector" || s === "non_detector") return s;
+  throw new Error(`Invalid role: "${s}". Must be detector or non_detector.`);
+}
+
 function defaultStats(raw: unknown): AntibodyStats {
   if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
     const s = raw as Record<string, unknown>;
@@ -163,6 +172,10 @@ export function validateAntibodyConfig(raw: Record<string, unknown>): AntibodyCo
     tier: assertTier(raw.tier),
     threshold: assertNumber(raw.threshold, "threshold"),
     description: typeof raw.description === "string" ? raw.description : String(raw.description ?? ""),
+    // The prompt is the executable knowledge for Tier 1/2 antibodies.
+    // Keep it first-class so saves never drop it (this was previously dead data).
+    prompt: typeof raw.prompt === "string" ? raw.prompt : "",
+    role: assertRole(raw.role),
     affinity_score: typeof raw.affinity_score === "number" ? raw.affinity_score : 0,
     created_at: assertString(raw.created_at, "created_at"),
     generation: typeof raw.generation === "number" ? raw.generation : 0,
@@ -439,32 +452,104 @@ export function loadAntibodyIndex(): AntibodyIndex | null {
   }
 }
 
+/** One antibody's participation in a scan, for feedback accounting. */
+export interface AntibodyFeedback {
+  antibody_id: string;
+  verdict: Verdict;
+  confidence: number;
+  latency_us: number;
+  /** True when this antibody's verdict is a hard malicious vote. */
+  fired: boolean;
+}
+
 /**
  * Record scan feedback to update antibody stats.
- * Called after each scan to close the evolution feedback loop.
+ *
+ * Called after each scan with EVERY participating antibody (Tier 0 and
+ * Tier 1), so total_scans reflects real participation instead of only
+ * counting antibodies that happened to fire. TP/FP are counted only for
+ * fired votes: a fired vote on a scan that ended malicious is a true
+ * positive; a fired vote on a scan that did not end malicious is a
+ * false positive. This gives the evolution loop per-antibody signal.
+ *
+ * REVIEW(团长): TP/FP 是相对"最终判定"的代理标签，不是 ground truth；
+ * 有标注的评测集（如 AgentEval）下应优先用真实标签覆盖此统计。
  */
 export function recordScanFeedback(
-  antibodyIds: string[],
-  verdict: string,
-  latencyUs: number,
+  results: AntibodyFeedback[],
+  finalVerdict: Verdict,
 ): void {
-  for (const id of antibodyIds) {
-    const antibody = loadAntibodies().find((a) => a.config.id === id);
+  for (const r of results) {
+    const antibody = loadAntibodies().find((a) => a.config.id === r.antibody_id);
     if (!antibody) continue;
     const stats = antibody.config.stats;
     stats.total_scans = (stats.total_scans ?? 0) + 1;
-    if (verdict === "malicious") {
-      stats.true_positives = (stats.true_positives ?? 0) + 1;
-    } else {
-      // The antibody fired (reported malicious) but the final verdict was
-      // not malicious — count it as a false positive.
-      stats.false_positives = (stats.false_positives ?? 0) + 1;
+    if (r.fired) {
+      if (finalVerdict === "malicious") {
+        stats.true_positives = (stats.true_positives ?? 0) + 1;
+      } else {
+        stats.false_positives = (stats.false_positives ?? 0) + 1;
+      }
     }
     // Update rolling average latency
     stats.avg_latency_us = stats.total_scans > 1
-      ? (stats.avg_latency_us * (stats.total_scans - 1) + latencyUs) / stats.total_scans
-      : latencyUs;
+      ? (stats.avg_latency_us * (stats.total_scans - 1) + r.latency_us) / stats.total_scans
+      : r.latency_us;
     // Persist immediately so stats survive the library cache and restarts.
     saveAntibody(antibody);
   }
+}
+
+/**
+ * Check that every antibody in the library is actually executable by the
+ * scanner: Tier 0 detectors need detect.ts or signatures; Tier 1/2
+ * detectors need a prompt; non-detectors need at least one artifact.
+ * Also catches duplicate ids and duplicate runtime signatures.
+ *
+ * Returns a list of issues; an empty list means the library is sound.
+ */
+export function checkLibraryIntegrity(entries: AntibodyEntry[]): string[] {
+  const issues: string[] = [];
+  const seenIds = new Set<string>();
+  const seenTier0Signatures = new Set<string>();
+
+  for (const ab of entries) {
+    if (seenIds.has(ab.config.id)) {
+      issues.push(`duplicate antibody id: ${ab.config.id}`);
+    }
+    seenIds.add(ab.config.id);
+
+    const hasScript = Boolean(ab.scriptPath);
+    const hasPrompt = ab.config.prompt.trim().length > 0;
+    const hasSignatures = ab.config.signatures.length > 0;
+
+    if (ab.config.role === "detector") {
+      if (ab.config.tier === 0 && !hasScript && !hasSignatures) {
+        issues.push(
+          `${ab.config.id}: tier 0 detector without detect.ts or signatures`,
+        );
+      }
+      if (ab.config.tier > 0 && !hasPrompt) {
+        issues.push(`${ab.config.id}: tier ${ab.config.tier} detector without prompt`);
+      }
+      // Runtime signatures matter for signature-only Tier 0 detectors;
+      // duplicate patterns there waste votes and skew stats.
+      if (ab.config.tier === 0 && !hasScript) {
+        for (const sig of ab.config.signatures) {
+          const key = `${sig.type}:${sig.pattern}`;
+          if (seenTier0Signatures.has(key)) {
+            issues.push(
+              `duplicate tier 0 signature ${key} (${ab.config.id})`,
+            );
+          }
+          seenTier0Signatures.add(key);
+        }
+      }
+    } else if (!hasPrompt && !hasScript && !hasSignatures) {
+      issues.push(
+        `${ab.config.id}: non-detector without any implementation (prompt/script/signatures)`,
+      );
+    }
+  }
+  return issues;
 }
