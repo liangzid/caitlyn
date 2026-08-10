@@ -76,3 +76,123 @@
 
 三选一：A 数据集构建细节（推荐，critical path）| B 论文写作骨架 |
 C 工程实现排期
+
+* 主表结构细化（2026-08-09）
+
+** pattern 定义（已澄清）
+
+攻击案例拆三层：投递场景（vector：邮箱/日历/文件/网页/MCP 输出/schema/
+skill 文件/agent 消息/终端）、注入手法（trick：direct follow/ignore
+previous/role spoof/hidden instruction/format hijack/data-as-instruction/
+subtle override/链式/编码规避）、攻击目标（objective）。
+pattern 拟定义为 trick；T1 行按 dataset × vector 组织；case schema 显式
+带 pattern/vector/objective 三字段。
+
+** 主表 = 两张表（团长 2026-08-09 提出）
+
+- T1：行 = dataset × 注入场景；列 = agent × defense；指标 = ASR、latency、
+  详细 token（输入/输出/cached/金额）。
+- T2：固定 agent + 固定 attack 子集，对比不同 LLM API/模型的效果。
+
+** 呈现建议（待确认）
+
+- T1 拆成 1a（ASR/FPR 主矩阵）+ 1b（成本汇总：latency p50/p95、token
+  明细、金额/例），避免 6 指标 × 15 列的不可读墙。
+- per-trick 分析放附录或次级小块。
+
+** 可行性缺口（已核实）
+
+- defense 层目前只记 total_tokens；agent 自身 API usage 未采集。
+- 需给 AgentEval caller 层补 OpenRouter usage 捕获（prompt/completion/
+  cached）+ 模型价格表算金额。
+
+** 待决
+
+1. Q8：主表数据集构成（推荐 natural-100 + AgentDojo-fixed 48 + benign 50）。
+2. Q9：pattern = trick 定义（团长倾向认可，待最终确认）。
+3. Q10：T1 拆 1a/1b 呈现方案。
+4. T2 的模型清单与 attack 子集规模。
+5. Q5（挂起）：agent × model 矩阵。
+
+* 数据集选型最终决定（2026-08-10）
+
+主表数据集定为四个，全部已发表/有来源：
+
+1. AgentDojo（NeurIPS 2024，97 任务/629 security tests，MIT）——外部轨 1；
+2. ASPI（ScaleAI 2026，arXiv:2605.17324，728 条澄清注入，CC-BY-4.0）——
+   外部轨 2；
+3. SafeClawBench（2026，arXiv:2606.18356，600 条/6 族）——外部轨 3；
+4. AgentDefense-Bench（2025，35,546 攻击 + 443 benign，MCP 原生，Apache-2.0）
+   ——检测覆盖附表，不跑 agent。
+
+natural-N / InjecAgent / MCPTox 不进主表。known = 已发表 benchmark；
+emerging = 自建 human-expert 新数据集（与 SafeClawBench/ASPI 的 pattern
+做差集，避免重复）。
+
+harness 适配待核实：ASPI 需要澄清轮次（两轮交互）；SafeClawBench 三端点
+（semantic/audit/sandbox）需对齐 MCP 审计字段；AgentDojo 用官方包 + Fake
+MCP 工具映射；AgentDefense-Bench 直接扫。
+
+抽样方法（2026-08-10 讨论）：power-based 最小样本量（配对设计 McNemar，
+n=100 可检 ~18pp、n=200 可检 ~13pp 差异）+ 分层抽样保覆盖 + 级联抽样
+（Tier-1 只跑 Tier-0 漏检/存疑子集）+ 难度/严重度分层；全量留给
+AgentDefense-Bench 的 Tier-0（便宜）与 none-vs-caitlyn 两列（可选）。
+
+** 待决
+
+1. Q14/15：三轨抽样规模（推荐每轨分层 200-250；AgentDojo 是否全量跑
+   none vs caitlyn）。
+2. T2 模型清单与 attack 子集规模。
+3. Q5（挂起）：agent × model 矩阵。
+4. emerging 数据集 pattern 与 SafeClawBench/ASPI/AgentPIMA 等做差集。
+
+* 实验设置更新（2026-08-10，采纳外部 feedback）
+
+** 主线六块（adaptive/poisoning/long-term 降为 appendix，poisoning 保留）
+
+1. Main end-to-end evaluation（delivery-aware 口径）
+2. Detection-only sweep
+3. Emerging benchmark zero-shot evaluation
+4. System II evolution before/after（held-out variants）
+5. Ablation and cost
+6. Case study（单案例全生命周期）
+
+** Detection-only sweep（feedback 第一优先级）
+
+- 数据源：AgentDojo-S250、ASPI-S、SafeClawBench-S240、AgentDefense-S1908、
+  natural20，共五个。
+- 防御：regex / llm_judge / llm_judge_fewshot / pi_detector / CAITLYN。
+  spotlighting 与 tool_filter 不是内容分类器，不进 detection sweep。
+- 统一 benign 池：AgentDefense-Bench 250 条 benign + 默认工具输出，
+  避免跨数据集 FPR 不可比（AgentDojo benign 是用户 prompt，不能当
+  工具输出 benign 用）。
+- 指标：TPR、FPR、TPR@fixed FPR、p50/p95 latency、token/$ 成本。
+  AUROC/AUPRC 只对输出连续分数的防御报（regex 匹配数、CAITLYN
+  confidence；llm_judge 无分数则不报）。
+- 现有 run_detection_sweep.py 只覆盖 ADB × CAITLYN，需扩展为全矩阵。
+
+** Delivery-aware e2e 口径
+
+主表每格报：delivery rate、defense block rate、action ASR（按送达）、
+benign task success、latency/token。MCP-native 与 prompt-delivery 两类
+agent 分开报，delivery failure 不与 defense success 混淆。
+缺口：benign task success（任务完成质量）评分器尚未实现。
+
+** System II before/after（= E2b 细化）
+
+- seed k ∈ {1, 3, 5}；CAITLYN-static vs CAITLYN+evolution；
+  held-out 不进 generator/similar-cluster/redteam 上下文。
+- 指标：held-out detection rate / action ASR、benign FPR、
+  evolution rounds、token、wall-clock、accepted/rejected candidate 数。
+- 可选：pattern A 训练、pattern B 测试的 cross-pattern transfer。
+
+** Hard benign 降级
+
+不自建 HardBenign-50 benchmark。如需回应 keyword blocker 质疑，从公开
+benign 自动筛含 injection-like 表层词（curl/bash/execute/ignore/
+IMPORTANT/email/forward 等）的 slice，单独报 FPR，放 appendix。
+
+** 实施状态
+
+- 检测器评估扩展、benign task success 评分器：待做。
+- 主表空模板：~/paper_caitlyn/sections/table-main.tex（已建）。
