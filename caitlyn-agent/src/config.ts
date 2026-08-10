@@ -15,6 +15,40 @@ export interface CaitlynAgentConfig {
   smallModel: string;
 }
 
+// ── Scanning (Tier 1 Escalation) Config ────────────────────────────
+
+export type EscalationPolicy = "safe" | "aggressive" | "off";
+export type SourceTrust = "high" | "medium" | "low";
+
+/**
+ * Configuration for the Tier 1 escalation gate.
+ *
+ * safe: clean scans run the fast detector subset, weak signals run the
+ *       full ensemble (recall-preserving default).
+ * aggressive: trusted clean scans skip the LLM entirely; untrusted or
+ *       risky inputs still run the fast subset.
+ * off: always run the full ensemble (previous behavior, for sweeps).
+ */
+export interface ScanningConfig {
+  policy: EscalationPolicy;
+  fastDetectorIds: string[];
+  weakSignalThreshold: number;
+  sourceTrust: SourceTrust;
+  highRisk: boolean;
+}
+
+export const SCANNING_DEFAULTS: ScanningConfig = {
+  policy: "safe",
+  fastDetectorIds: [
+    "ab-classifier-injection",
+    "ab-classifier-jailbreak",
+    "ab-builtin-poisoning",
+  ],
+  weakSignalThreshold: 0.6,
+  sourceTrust: "medium",
+  highRisk: false,
+};
+
 // ── Evolution (Immune System 2) Config ─────────────────────────────
 
 export type EvolutionAutonomy = "record" | "candidate" | "auto";
@@ -218,6 +252,50 @@ function parseBoolean(raw: Record<string, string>, key: string, fallback: boolea
   if (value === "true") return true;
   if (value === "false") return false;
   return fallback;
+}
+
+const ESCALATION_POLICY_VALUES: readonly EscalationPolicy[] = [
+  "safe",
+  "aggressive",
+  "off",
+];
+const SOURCE_TRUST_VALUES: readonly SourceTrust[] = ["high", "medium", "low"];
+
+function parseStringList(
+  raw: Record<string, string>,
+  key: string,
+  fallback: string[],
+): string[] {
+  const value = raw[key]?.trim();
+  if (!value) return fallback;
+  const items = value
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  return items.length > 0 ? items : fallback;
+}
+
+/**
+ * Load the [scanning] TOML section with safe defaults.
+ *
+ * @param configPath 显式配置文件路径；缺省时沿 cwd 向上查找。
+ */
+export function loadScanningConfig(configPath?: string): ScanningConfig {
+  const resolved = configPath ?? findConfigUpward();
+  const raw = readTomlSection(resolved, "scanning");
+  const cfg: ScanningConfig = { ...SCANNING_DEFAULTS };
+
+  cfg.policy = parseEnum(raw, "escalation_policy", ESCALATION_POLICY_VALUES, cfg.policy);
+  cfg.fastDetectorIds = parseStringList(raw, "fast_detector_ids", cfg.fastDetectorIds);
+  cfg.weakSignalThreshold = parseNonNegativeNumber(
+    raw,
+    "weak_signal_threshold",
+    cfg.weakSignalThreshold,
+  );
+  cfg.sourceTrust = parseEnum(raw, "source_trust", SOURCE_TRUST_VALUES, cfg.sourceTrust);
+  cfg.highRisk = parseBoolean(raw, "high_risk", cfg.highRisk);
+
+  return cfg;
 }
 
 /**

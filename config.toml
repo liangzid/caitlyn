@@ -13,6 +13,17 @@ max_parallel_tier2 = 5
 tier1_timeout_ms = 500
 tier2_timeout_ms = 3000
 tier3_timeout_ms = 15000
+# Tier 1 分级触发：safe（默认，干净输入跑 fast 子集，弱信号跑全量）|
+# aggressive（信任的干净输入跳过 LLM，低信任/高风险跑 fast 子集）| off（全量）
+escalation_policy = "safe"
+# fast 子集检测器（干净输入也至少跑这些，保证召回不塌方）
+fast_detector_ids = "ab-classifier-injection,ab-classifier-jailbreak,ab-builtin-poisoning"
+# Tier 0 malicious 但置信度低于该值视为弱信号（suspicious 恒为弱信号）
+weak_signal_threshold = 0.6
+# 默认来源信任度：high | medium | low（daemon 请求可逐次覆盖）
+source_trust = "medium"
+# 任务是否高风险（代码执行/改数据/网络外发）；safe 下直接升全量
+high_risk = false
 
 [vaccination]
 min_samples = 5

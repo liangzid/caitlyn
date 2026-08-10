@@ -7,12 +7,19 @@
 import { scan as localScan, type LlmCallFn } from "./scanner.js";
 import { loadAntibodies, loadAntigens } from "./library.js";
 import type { ScanResult } from "./schema.js";
+import { loadScanningConfig } from "./config.js";
+import type { EscalationPolicy, SourceTrust } from "./escalation.js";
 
 // ── Types ─────────────────────────────────────────────────────────
 
 export interface HybridScanOptions {
   content: string;
   llmCall: LlmCallFn;
+  sourceTrust?: SourceTrust;
+  highRisk?: boolean;
+  escalationPolicy?: EscalationPolicy;
+  fastDetectorIds?: string[];
+  weakSignalThreshold?: number;
 }
 
 export interface HybridScanResult extends ScanResult {
@@ -24,11 +31,18 @@ export interface HybridScanResult extends ScanResult {
 
 /** Scan content using the local scanner. */
 export async function hybridScan(options: HybridScanOptions): Promise<HybridScanResult> {
+  const scanning = loadScanningConfig();
   const result = await localScan({
     content: options.content,
     llmCall: options.llmCall,
     antibodies: loadAntibodies(),
     antigens: loadAntigens(),
+    sourceTrust: options.sourceTrust ?? scanning.sourceTrust,
+    highRisk: options.highRisk ?? scanning.highRisk,
+    escalationPolicy: options.escalationPolicy ?? scanning.policy,
+    fastDetectorIds: options.fastDetectorIds ?? scanning.fastDetectorIds,
+    weakSignalThreshold:
+      options.weakSignalThreshold ?? scanning.weakSignalThreshold,
   });
 
   return {

@@ -277,7 +277,7 @@ export class DaemonServer {
 
   private async _scan(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
     const body = await readBody(req);
-    let parsed: { content?: string } = {};
+    let parsed: { content?: string; source?: string; high_risk?: boolean } = {};
     try { parsed = JSON.parse(body); } catch { /* invalid JSON handled below */ }
 
     if (!parsed.content) {
@@ -294,6 +294,11 @@ export class DaemonServer {
     result = await hybridScan({
       content,
       llmCall: this.llmCall ?? createUnavailableLlmCall("LLM not configured on daemon"),
+      sourceTrust:
+        parsed.source === "high" || parsed.source === "low"
+          ? parsed.source
+          : undefined,
+      highRisk: parsed.high_risk,
     });
 
     // Update stats

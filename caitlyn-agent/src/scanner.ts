@@ -1,9 +1,11 @@
 /**
  * CAITLYN Agent — Scanning Engine
  *
- * Two-tier scanning:
- *   Tier 0: Run detect.ts scripts in parallel sandboxes (fast, regex/heuristics)
- *   Tier 1: Assemble all antibodies + antigens into one LLM prompt, output single token
+ * Staged scanning:
+ *   Tier 0: scripts + in-process signature engine (fast, no LLM)
+ *   Tier 1: per-antibody LLM ensemble, gated by escalation policy
+ *     (safe: fast subset on clean, full on weak signals;
+ *      aggressive: skip LLM on trusted clean, fast on untrusted/risky)
  */
 
 import { spawn } from "node:child_process";
@@ -20,6 +22,13 @@ import { logScan } from "./history.js";
 import { recordScanFeedback } from "./library.js";
 import { recordShadowScans } from "./evolution/runtime.js";
 import { appendStatsEvent } from "./evolution/stats-events.js";
+import {
+  decideEscalation,
+  ESCALATION_DEFAULTS,
+  type EscalationPolicy,
+  type EscalationStage,
+  type SourceTrust,
+} from "./escalation.js";
 
 // ── Tier 0: Sandbox Script Runner ─────────────────────────────────
 
@@ -336,13 +345,18 @@ Do not output anything else.`;
   return { systemPrompt, userPrompt };
 }
 
-/** Tier 1 detectors that actually run in the ensemble. */
-export function selectTier1Detectors(antibodies: AntibodyEntry[]): AntibodyEntry[] {
+/** Tier 1 detectors that actually run in the ensemble (optionally a subset). */
+export function selectTier1Detectors(
+  antibodies: AntibodyEntry[],
+  ids?: string[],
+): AntibodyEntry[] {
+  const idSet = ids ? new Set(ids) : null;
   return antibodies.filter(
     (ab) =>
       ab.config.role === "detector" &&
       ab.config.tier > 0 &&
-      ab.config.prompt.trim().length > 0,
+      ab.config.prompt.trim().length > 0 &&
+      (!idSet || idSet.has(ab.config.id)),
   );
 }
 
@@ -363,8 +377,9 @@ export async function runTier1Ensemble(
   antibodies: AntibodyEntry[],
   content: string,
   llmCall: LlmCallFn,
+  ids?: string[],
 ): Promise<Tier1Result[]> {
-  const detectors = selectTier1Detectors(antibodies);
+  const detectors = selectTier1Detectors(antibodies, ids);
   if (detectors.length === 0) return [];
 
   const jobs = detectors.map(async (ab) => {
@@ -436,6 +451,93 @@ export function aggregateTier1(
   return { verdict: "benign", confidence: 0 };
 }
 
+// ── Staged Tier 1 Execution ───────────────────────────────────────
+
+export interface StagedTier1Result {
+  results: Tier1Result[];
+  aggregated: { verdict: "benign" | "suspicious" | "malicious"; confidence: number };
+  stage: EscalationStage;
+  reason: string;
+}
+
+/**
+ * Run the Tier 1 stage selected by the escalation decision.
+ *
+ * fast: run the fast detector subset; if it fires malicious, stop; if it
+ *       turns suspicious, escalate to the remaining detectors; if clean,
+ *       stop.
+ * full: run every configured Tier 1 detector.
+ *
+ * REVIEW(团长): 若 fast 子集配置为空（例如库中没有这些 id），这里会
+ * 静默降级为 full，绝不因为配置错误而跳过检测。
+ */
+export async function runStagedTier1(params: {
+  detectors: AntibodyEntry[];
+  content: string;
+  llmCall: LlmCallFn;
+  stage: EscalationStage;
+  fastDetectorIds: string[];
+  thresholds: ReadonlyMap<string, number>;
+}): Promise<StagedTier1Result> {
+  const { detectors, content, llmCall, stage, fastDetectorIds, thresholds } = params;
+
+  if (stage === "full") {
+    const results = await runTier1Ensemble(detectors, content, llmCall);
+    return {
+      results,
+      aggregated: aggregateTier1(results, thresholds),
+      stage,
+      reason: "full ensemble",
+    };
+  }
+
+  const fast = detectors.filter((d) => fastDetectorIds.includes(d.config.id));
+  if (fast.length === 0) {
+    const results = await runTier1Ensemble(detectors, content, llmCall);
+    return {
+      results,
+      aggregated: aggregateTier1(results, thresholds),
+      stage: "full",
+      reason: "fast detector set empty; fell back to full ensemble",
+    };
+  }
+
+  const fastResults = await runTier1Ensemble(fast, content, llmCall);
+  const fastAggregated = aggregateTier1(fastResults, thresholds);
+  if (fastAggregated.verdict === "malicious") {
+    return {
+      results: fastResults,
+      aggregated: fastAggregated,
+      stage: "fast",
+      reason: "fast subset fired malicious",
+    };
+  }
+  if (fastAggregated.verdict === "benign") {
+    return {
+      results: fastResults,
+      aggregated: fastAggregated,
+      stage: "fast",
+      reason: "fast subset clean",
+    };
+  }
+
+  // Fast subset is suspicious: escalate to the remaining detectors so the
+  // full ensemble still votes, without re-running the fast ones.
+  const fastIds = new Set(fast.map((d) => d.config.id));
+  const remaining = detectors.filter((d) => !fastIds.has(d.config.id));
+  const remainingResults =
+    remaining.length > 0
+      ? await runTier1Ensemble(remaining, content, llmCall)
+      : [];
+  const results = [...fastResults, ...remainingResults];
+  return {
+    results,
+    aggregated: aggregateTier1(results, thresholds),
+    stage: "full",
+    reason: "fast subset suspicious; escalated to full ensemble",
+  };
+}
+
 // ── Unified Scan Pipeline ─────────────────────────────────────────
 
 export interface ScanOptions {
@@ -444,6 +546,11 @@ export interface ScanOptions {
   content: string;
   llmCall: LlmCallFn;
   tier0TimeoutMs?: number;
+  escalationPolicy?: EscalationPolicy;
+  fastDetectorIds?: string[];
+  weakSignalThreshold?: number;
+  sourceTrust?: SourceTrust;
+  highRisk?: boolean;
 }
 
 /** Approximate token count (4 characters per token, like evolution). */
@@ -500,17 +607,15 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     options.antibodies.map((ab) => [ab.config.id, ab.config.threshold]),
   );
 
-  // Tier 1: real per-antibody LLM ensemble. If the library has no LLM
-  // detectors configured, degrade to the Tier 0 verdict instead of
-  // calling a generic judge with an empty library.
-  if (selectTier1Detectors(options.antibodies).length === 0) {
+  const detectors = selectTier1Detectors(options.antibodies);
+  if (detectors.length === 0) {
     const latency = Math.round(performance.now() - scanStart) * 1000;
     appendStatsEvent("evolution_self", "scan_latency_us", latency);
     const fallback = deriveTier0Verdict(t0.results);
     const result: ScanResult = {
       verdict: fallback.verdict,
       confidence: fallback.confidence,
-      tier: 1,
+      tier: 0,
       script_results: [
         ...t0.results,
         {
@@ -530,20 +635,75 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     return result;
   }
 
+  const decision = decideEscalation({
+    t0Results: t0.results,
+    policy: options.escalationPolicy ?? ESCALATION_DEFAULTS.policy,
+    fastDetectorIds: options.fastDetectorIds ?? ESCALATION_DEFAULTS.fastDetectorIds,
+    weakSignalThreshold:
+      options.weakSignalThreshold ?? ESCALATION_DEFAULTS.weakSignalThreshold,
+    sourceTrust: options.sourceTrust ?? ESCALATION_DEFAULTS.sourceTrust,
+    highRisk: options.highRisk ?? ESCALATION_DEFAULTS.highRisk,
+  });
+
+  if (decision.stage === "none") {
+    // Aggressive policy + trusted clean input: skip the LLM entirely.
+    const latency = Math.round(performance.now() - scanStart) * 1000;
+    appendStatsEvent("evolution_self", "scan_latency_us", latency);
+    const result: ScanResult = {
+      verdict: "benign",
+      confidence: 0,
+      tier: 0,
+      script_results: [
+        ...t0.results,
+        {
+          antibody_id: "escalation-skip",
+          verdict: "benign" as const,
+          confidence: 0,
+          reason: `Tier 1 skipped by escalation policy: ${decision.reason}`,
+          latency_us: 0,
+          error: null,
+        },
+      ],
+      total_latency_us: latency,
+      total_tokens: 0,
+    };
+    await logScan(result, options.content);
+    t0Feedback(result.verdict);
+    return result;
+  }
+
   try {
-    const t1 = await runTier1Ensemble(options.antibodies, options.content, options.llmCall);
+    const staged = await runStagedTier1({
+      detectors,
+      content: options.content,
+      llmCall: options.llmCall,
+      stage: decision.stage,
+      fastDetectorIds: options.fastDetectorIds ?? ESCALATION_DEFAULTS.fastDetectorIds,
+      thresholds,
+    });
+    const t1 = staged.results;
     totalTokens = t1.reduce((acc, r) => acc + r.tokens, 0);
-    const aggregated = aggregateTier1(t1, thresholds);
     const latency = Math.round(performance.now() - scanStart) * 1000;
     appendStatsEvent("evolution_self", "scan_latency_us", latency);
     appendStatsEvent("evolution_self", "scan_tokens", totalTokens);
 
     const t1ScriptResults: ScriptResult[] = t1.map(({ tokens: _tokens, ...rest }) => rest);
     const result: ScanResult = {
-      verdict: aggregated.verdict,
-      confidence: aggregated.confidence,
+      verdict: staged.aggregated.verdict,
+      confidence: staged.aggregated.confidence,
       tier: 1,
-      script_results: [...t0.results, ...t1ScriptResults],
+      script_results: [
+        ...t0.results,
+        ...t1ScriptResults,
+        {
+          antibody_id: "escalation",
+          verdict: "benign" as const,
+          confidence: 0,
+          reason: `tier1 stage=${staged.stage}: ${staged.reason}`,
+          latency_us: 0,
+          error: null,
+        },
+      ],
       total_latency_us: latency,
       total_tokens: totalTokens,
     };

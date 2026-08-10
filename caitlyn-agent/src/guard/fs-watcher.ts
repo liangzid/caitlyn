@@ -303,6 +303,8 @@ export class FSWatcher {
       const result = await Promise.race([
         hybridScan({
           content,
+          // File contents are untrusted external content.
+          sourceTrust: "low",
           llmCall: this.llmCall ?? createUnavailableLlmCall("LLM not configured"),
         }),
         new Promise<never>((_, reject) =>

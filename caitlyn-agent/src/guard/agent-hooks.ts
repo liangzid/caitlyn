@@ -187,6 +187,8 @@ export class AgentHooksEngine {
       const result = await Promise.race([
         hybridScan({
           content,
+          // Tool arguments/results are untrusted external content.
+          sourceTrust: "low",
           // Tier 0 scripts never need the LLM: without one, run the unified
           // pipeline with a failing Tier 1 so tool calls are still scanned.
           llmCall: this.llmCall ?? createUnavailableLlmCall("LLM not configured"),

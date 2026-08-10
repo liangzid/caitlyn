@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, vi } from "vitest";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 
 // Isolate HOME and stub recordScanFeedback so scan() integration tests
@@ -409,7 +410,7 @@ describe("scan() cost accounting", () => {
         return "benign 0.95";
       },
     });
-    expect(result.tier).toBe(1);
+    expect(result.tier).toBe(0);
     expect(calls).toBe(0);
     expect(result.total_tokens).toBe(0);
   });
@@ -426,5 +427,153 @@ describe("scan() cost accounting", () => {
     });
     expect(result.tier).toBe(1);
     expect(result.total_tokens).toBe(0);
+  });
+});
+
+describe("scan() Tier 1 escalation", () => {
+  const FAST_IDS = [
+    "ab-classifier-injection",
+    "ab-classifier-jailbreak",
+    "ab-builtin-poisoning",
+  ];
+  const FULL_IDS = [
+    ...FAST_IDS,
+    "ab-builtin-injection",
+    "ab-builtin-jailbreak",
+    "ab-context-aware",
+    "ab-instruction-hierarchy",
+    "ab-llm-judge",
+    "ab-semantic-similarity",
+  ];
+
+  function makeEnsemble(): AntibodyEntry[] {
+    return FULL_IDS.map((id) =>
+      makeAntibody(id, id, "readme", "You are a detector.", 1),
+    );
+  }
+
+  it("safe policy runs only the fast subset on a clean scan", async () => {
+    const called: string[] = [];
+    const result = await scan({
+      antibodies: makeEnsemble(),
+      antigens: [],
+      content: "hello",
+      llmCall: async (system) => {
+        const id = system.match(/\(([^)]+)\)/)![1];
+        called.push(id);
+        return "benign 0.1";
+      },
+      escalationPolicy: "safe",
+      fastDetectorIds: FAST_IDS,
+    });
+    expect(called.sort()).toEqual([...FAST_IDS].sort());
+    expect(result.verdict).toBe("benign");
+    expect(result.script_results.some((r) => r.reason?.includes("fast subset clean"))).toBe(true);
+  });
+
+  it("weak Tier 0 signals escalate to the full ensemble", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-weak-"));
+    const scriptPath = path.join(tmp, "weak.mjs");
+    fs.writeFileSync(
+      scriptPath,
+      'console.log(JSON.stringify({ verdict: "suspicious", confidence: 0.5, reason: "weak" }));',
+    );
+    const weakAb = makeAntibody("ab-weak", "Weak", "readme", "", 0);
+    weakAb.scriptPath = scriptPath;
+
+    const called: string[] = [];
+    const result = await scan({
+      antibodies: [...makeEnsemble(), weakAb],
+      antigens: [],
+      content: "hello",
+      llmCall: async (system) => {
+        const id = system.match(/\(([^)]+)\)/)![1];
+        called.push(id);
+        return "benign 0.1";
+      },
+      escalationPolicy: "safe",
+      fastDetectorIds: FAST_IDS,
+    });
+    expect(called.sort()).toEqual([...FULL_IDS].sort());
+    expect(result.verdict).toBe("benign");
+    expect(
+      result.script_results.some(
+        (r) => r.antibody_id === "escalation" && r.reason?.includes("full"),
+      ),
+    ).toBe(true);
+  });
+
+  it("aggressive policy skips the LLM on trusted clean input", async () => {
+    let calls = 0;
+    const result = await scan({
+      antibodies: makeEnsemble(),
+      antigens: [],
+      content: "hello",
+      llmCall: async () => {
+        calls += 1;
+        return "benign 0.1";
+      },
+      escalationPolicy: "aggressive",
+      fastDetectorIds: FAST_IDS,
+      sourceTrust: "high",
+    });
+    expect(calls).toBe(0);
+    expect(result.tier).toBe(0);
+    expect(result.verdict).toBe("benign");
+  });
+
+  it("aggressive policy still runs the fast subset on untrusted input", async () => {
+    const called: string[] = [];
+    const result = await scan({
+      antibodies: makeEnsemble(),
+      antigens: [],
+      content: "hello",
+      llmCall: async (system) => {
+        const id = system.match(/\(([^)]+)\)/)![1];
+        called.push(id);
+        return "benign 0.1";
+      },
+      escalationPolicy: "aggressive",
+      fastDetectorIds: FAST_IDS,
+      sourceTrust: "low",
+    });
+    expect(called.sort()).toEqual([...FAST_IDS].sort());
+    expect(result.verdict).toBe("benign");
+  });
+
+  it("fast subset that fires malicious blocks without running the rest", async () => {
+    const called: string[] = [];
+    const result = await scan({
+      antibodies: makeEnsemble(),
+      antigens: [],
+      content: "hello",
+      llmCall: async (system) => {
+        const id = system.match(/\(([^)]+)\)/)![1];
+        called.push(id);
+        return id === "ab-classifier-injection" ? "malicious 0.95" : "benign 0.1";
+      },
+      escalationPolicy: "safe",
+      fastDetectorIds: FAST_IDS,
+    });
+    expect(called.length).toBe(3);
+    expect(result.verdict).toBe("malicious");
+  });
+
+  it("suspicious fast subset escalates to the remaining detectors", async () => {
+    const called: string[] = [];
+    const result = await scan({
+      antibodies: makeEnsemble(),
+      antigens: [],
+      content: "hello",
+      llmCall: async (system) => {
+        const id = system.match(/\(([^)]+)\)/)![1];
+        called.push(id);
+        return FAST_IDS.includes(id) ? "suspicious 0.55" : "benign 0.1";
+      },
+      escalationPolicy: "safe",
+      fastDetectorIds: FAST_IDS,
+    });
+    expect(called.sort()).toEqual([...FULL_IDS].sort());
+    expect(result.verdict).toBe("suspicious");
   });
 });
