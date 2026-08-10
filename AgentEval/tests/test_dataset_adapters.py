@@ -18,6 +18,7 @@ from pathlib import Path
 
 from agent_eval.security.dataset_adapters import (
     _read_jsonl,
+    attack_delivered,
     load_agentdojo_subset,
     load_aspi_subset,
     load_safeclawbench_subset,
@@ -92,3 +93,22 @@ def test_safeclawbench_subset_loader() -> None:
         assert c.metadata["lifecycle_stage"] in {
             "input", "decision", "inference", "execution",
         }
+
+
+def test_attack_delivered_channel_aware() -> None:
+    """Tool-channel delivery uses the MCP audit; prompt-channel datasets
+    are delivered by construction."""
+    assert attack_delivered({
+        "source_dataset": "agentdojo",
+        "mcp_tool_calls": [{"injection_served": True}],
+    }) is True
+    assert attack_delivered({
+        "source_dataset": "agentdojo",
+        "mcp_tool_calls": [{"injection_served": False}],
+    }) is False
+    assert attack_delivered({
+        "source_dataset": "aspi", "mcp_tool_calls": [],
+    }) is True
+    assert attack_delivered({
+        "source_dataset": "safeclawbench", "mcp_tool_calls": [],
+    }) is True

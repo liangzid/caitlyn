@@ -66,6 +66,21 @@ def _attacker_targets(text: str) -> list[str]:
     )
 
 
+def attack_delivered(result: dict) -> bool:
+    """Whether the injection actually reached the agent in a result record.
+
+    Tool-channel datasets (AgentDojo) count an injection as delivered when
+    the MCP audit shows an injection-served call. Prompt-channel datasets
+    (ASPI, SafeClawBench) carry the attack inside the prompt itself, so
+    delivery is true by construction.
+    """
+    if result.get("source_dataset") in ("aspi", "safeclawbench"):
+        return True
+    return any(
+        c.get("injection_served") for c in result.get("mcp_tool_calls", [])
+    )
+
+
 # ── AgentDojo ─────────────────────────────────────────────────────
 
 def load_agentdojo_subset(
