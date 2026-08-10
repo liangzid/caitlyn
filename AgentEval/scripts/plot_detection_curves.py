@@ -34,6 +34,8 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.lines import Line2D  # noqa: E402
+from matplotlib.ticker import LogLocator, NullLocator  # noqa: E402
 
 DATASETS = ["agentdojo", "aspi", "safeclawbench", "agentdefense"]
 DETECTORS = [
@@ -49,6 +51,26 @@ DETECTOR_LABELS = {
     "llm_judge_fewshot": "LLM-Judge+FS",
     "pi_detector": "PI Detector",
     "caitlyn": "CAITLYN",
+}
+DETECTOR_COLORS = {
+    "regex_guard": "#4d4d4d",
+    "llm_judge": "#1f77b4",
+    "llm_judge_fewshot": "#17becf",
+    "pi_detector": "#ff7f0e",
+    "caitlyn": "#c1121f",
+}
+DETECTOR_LINESTYLES = {
+    "regex_guard": ":",
+    "llm_judge": "-",
+    "llm_judge_fewshot": (0, (3, 2)),
+    "pi_detector": (0, (5, 2, 1, 2)),
+    "caitlyn": "-",
+}
+DATASET_MARKERS = {
+    "agentdojo": "o",
+    "aspi": "s",
+    "safeclawbench": "^",
+    "agentdefense": "v",
 }
 
 # OpenRouter deepseek/deepseek-chat prices (USD per token), used only to
@@ -120,6 +142,9 @@ def pr_points(
         fp = sum(1 for s, l in zip(scores, labels) if not l and s >= t)
         recall = tp / total_p if total_p else 0.0
         precision = tp / (tp + fp) if (tp + fp) else 0.0
+        if recall == 0.0 and precision == 0.0:
+            # Skip the vertical drop artifact at the highest threshold.
+            continue
         recalls.append(recall)
         precisions.append(precision)
     recalls.append(1.0)
@@ -302,6 +327,184 @@ def plot_pareto_figure(
     plt.close(fig)
 
 
+def _style_axes(
+    ax: Any,
+    xlabel: str,
+    ylabel: str,
+    xlim: tuple[float, float],
+    ylim: tuple[float, float],
+    logx: bool = False,
+    grid_alpha: float = 0.25,
+) -> None:
+    """Apply a clean publication style to one panel."""
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_xlim(*xlim)
+    ax.set_ylim(*ylim)
+    if logx:
+        ax.set_xscale("log")
+    ax.grid(alpha=grid_alpha, linewidth=0.6)
+    ax.tick_params(labelsize=6.5)
+
+
+def plot_combined_figure(
+    all_data: dict[str, dict[str, dict[str, Any]]],
+    out_path: Path,
+) -> None:
+    """Save one publication-quality 2x5 figure (ROC / PR / Pareto)."""
+    plt.rcParams.update({
+        "font.family": "serif",
+        "font.serif": ["Liberation Serif", "DejaVu Serif", "Times New Roman"],
+        "font.size": 9,
+        "axes.titlesize": 9.5,
+        "axes.labelsize": 9,
+        "legend.fontsize": 8.5,
+        "xtick.labelsize": 7.5,
+        "ytick.labelsize": 7.5,
+    })
+
+    datasets = list(all_data.keys())
+    titles = {
+        "agentdojo": "AgentDojo-S250",
+        "aspi": "ASPI-S",
+        "safeclawbench": "SafeClawBench-S240",
+        "agentdefense": "AgentDefense-S250",
+    }
+    letters = "abcdefghij"
+    fig, axes = plt.subplots(2, 5, figsize=(16.2, 7.0), dpi=200)
+
+    for i, dataset in enumerate(datasets):
+        data = all_data[dataset]
+        ax_roc = axes[0, i]
+        ax_pr = axes[1, i]
+        for detector, d in data.items():
+            fprs, tprs, _ = roc_points(d["scores"], d["labels"])
+            recalls, precisions, _ = pr_points(d["scores"], d["labels"])
+            color = DETECTOR_COLORS[detector]
+            linestyle = DETECTOR_LINESTYLES[detector]
+            linewidth = 1.6 if detector == "caitlyn" else 1.1
+            ax_roc.plot(
+                fprs, tprs, color=color, linewidth=linewidth,
+                linestyle=linestyle, solid_capstyle="round", zorder=3,
+            )
+            ax_roc.plot(
+                d["op_fpr"], d["op_tpr"], marker="D", markersize=4.2,
+                color=color, markerfacecolor=color,
+                markeredgecolor="white", markeredgewidth=0.5,
+                linestyle="None", zorder=4,
+            )
+            ax_pr.plot(
+                recalls, precisions, color=color, linewidth=linewidth,
+                linestyle=linestyle, solid_capstyle="round", zorder=3,
+            )
+            ax_pr.plot(
+                d["op_recall"], d["op_precision"], marker="D", markersize=4.2,
+                color=color, markerfacecolor=color,
+                markeredgecolor="white", markeredgewidth=0.5,
+                linestyle="None", zorder=4,
+            )
+        ax_roc.plot(
+            [0, 1], [0, 1], color="#bbbbbb", linewidth=0.8,
+            linestyle="--", zorder=0,
+        )
+        ax_roc.set_title(
+            f"({letters[i]}) {titles[dataset]} ROC",
+            fontsize=9.5, fontweight="bold", pad=3,
+        )
+        ax_pr.set_title(
+            f"({letters[5 + i]}) {titles[dataset]} PR",
+            fontsize=9.5, fontweight="bold", pad=3,
+        )
+        _style_axes(ax_roc, "FPR", "TPR", (0.0, 1.0), (0.0, 1.0))
+        _style_axes(ax_pr, "Recall", "Precision", (0.0, 1.0), (0.0, 1.0))
+        for ax in (ax_roc, ax_pr):
+            ax.set_xticks([0.0, 0.25, 0.5, 0.75, 1.0])
+            ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
+
+    ax_lat = axes[0, 4]
+    ax_cost = axes[1, 4]
+    max_cost = 0.0
+    dataset_jitter = {
+        "agentdojo": -0.035,
+        "aspi": -0.012,
+        "safeclawbench": 0.012,
+        "agentdefense": 0.035,
+    }
+    for dataset, data in all_data.items():
+        marker = DATASET_MARKERS[dataset]
+        jitter = dataset_jitter[dataset]
+        for detector, d in data.items():
+            lat = d["avg_latency_ms"]
+            cost = d["avg_cost_usd"]
+            if lat is None or cost is None:
+                continue
+            max_cost = max(max_cost, cost)
+            lat_x = max(lat * (1.0 + jitter), 0.01)
+            cost_x = (cost + jitter * max_cost) * 1000.0
+            ax_lat.scatter(
+                lat_x, d["op_tpr"], s=38,
+                color=DETECTOR_COLORS[detector], marker=marker,
+                edgecolor="white", linewidth=0.5, zorder=3,
+            )
+            ax_cost.scatter(
+                cost_x, d["op_tpr"], s=38,
+                color=DETECTOR_COLORS[detector],
+                marker=marker, edgecolor="white", linewidth=0.5, zorder=3,
+            )
+    ax_lat.set_title("(e) Latency Pareto", fontsize=9.5, fontweight="bold", pad=3)
+    ax_cost.set_title("(j) Cost Pareto", fontsize=9.5, fontweight="bold", pad=3)
+    _style_axes(
+        ax_lat, "Avg Latency (ms)", "TPR @ default",
+        (0.1, 3.0e4), (-0.02, 1.05), logx=True, grid_alpha=0.15,
+    )
+    ax_lat.xaxis.set_major_locator(
+        LogLocator(base=10, numticks=6)
+    )
+    ax_lat.xaxis.set_minor_locator(NullLocator())
+    _style_axes(
+        ax_cost, "Avg Cost ($\\times 10^{-3}$ USD)", "TPR @ default",
+        (0.0, max_cost * 1000.0 * 1.1), (-0.02, 1.05), grid_alpha=0.15,
+    )
+    handles_methods = [
+        Line2D(
+            [0], [0], color=DETECTOR_COLORS[d],
+            linewidth=2.0 if d == "caitlyn" else 1.4,
+            linestyle=DETECTOR_LINESTYLES[d],
+            label=DETECTOR_LABELS[d],
+        )
+        for d in DETECTORS
+    ]
+    dataset_labels = {
+        "agentdojo": "AgentDojo-S250",
+        "aspi": "ASPI-S",
+        "safeclawbench": "SafeClawBench-S240",
+        "agentdefense": "AgentDefense-S250",
+    }
+    handles_datasets = [
+        Line2D(
+            [0], [0], marker=DATASET_MARKERS[ds], color="none",
+            markerfacecolor="#333333", markeredgecolor="#333333",
+            markersize=6, linestyle="None", label=dataset_labels[ds],
+        )
+        for ds in datasets
+    ]
+    handles = handles_methods + handles_datasets
+    fig.legend(
+        handles=handles, loc="lower center", ncol=5, frameon=False,
+        fontsize=8.5, bbox_to_anchor=(0.5, -0.08),
+        columnspacing=1.8, handlelength=2.4, handletextpad=0.6,
+        borderaxespad=0.2,
+    )
+    fig.subplots_adjust(
+        wspace=0.34, hspace=0.55, left=0.045,
+        right=0.985, top=0.93, bottom=0.24,
+    )
+    fig.savefig(out_path, bbox_inches="tight")
+    plt.close(fig)
+
+
 def main() -> None:
     """Generate ROC/PR figures and the Pareto figure."""
     args = parse_args()
@@ -313,6 +516,14 @@ def main() -> None:
     for dataset in args.datasets:
         data = per_detector_arrays(records, dataset)
         all_data[dataset] = data
+        if "caitlyn" in data:
+            fprs, tprs, auroc = roc_points(
+                data["caitlyn"]["scores"], data["caitlyn"]["labels"]
+            )
+            recalls, precisions, auprc = pr_points(
+                data["caitlyn"]["scores"], data["caitlyn"]["labels"]
+            )
+            print(f"CAITLYN {dataset}: AUROC={auroc:.3f} AUPRC={auprc:.3f}")
         pdf = outdir / f"detection_{dataset}_roc_pr.pdf"
         png = outdir / f"detection_{dataset}_roc_pr.png"
         plot_dataset_figure(data, dataset, pdf)
@@ -324,6 +535,12 @@ def main() -> None:
     plot_pareto_figure(all_data, pareto_pdf)
     plot_pareto_figure(all_data, pareto_png)
     print(f"saved {pareto_pdf} / {pareto_png}")
+
+    combined_pdf = outdir / "detection_combined.pdf"
+    combined_png = outdir / "detection_combined.png"
+    plot_combined_figure(all_data, combined_pdf)
+    plot_combined_figure(all_data, combined_png)
+    print(f"saved {combined_pdf} / {combined_png}")
 
 
 if __name__ == "__main__":
