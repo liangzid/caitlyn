@@ -61,7 +61,7 @@ DETECTOR_COLORS = {
     "caitlyn": "#c1121f",
 }
 DETECTOR_LINESTYLES = {
-    "regex_guard": ":",
+    "regex_guard": "-",
     "llm_judge": "-",
     "llm_judge_fewshot": (0, (3, 2)),
     "pi_detector": (0, (5, 2, 1, 2)),
@@ -613,24 +613,40 @@ def plot_roc_pr_grid(
         roc_ops = spread_points(
             [(data[det]["op_fpr"], data[det]["op_tpr"])
              for det in detector_order],
-            min_dx=0.06, min_dy=0.05, max_r=0.45,
+            min_dx=0.12, min_dy=0.10, max_r=1.00,
+        )
+        pr_ops = spread_points(
+            [(data[det]["op_recall"], data[det]["op_precision"])
+             for det in detector_order],
+            min_dx=0.12, min_dy=0.10, max_r=1.00,
         )
         for det, (x, y) in zip(detector_order, roc_ops):
+            face = (
+                "white"
+                if det in ("regex_guard", "llm_judge")
+                else DETECTOR_COLORS[det]
+            )
             ax_roc.plot(
-                x, y, marker=OP_MARKERS[det], markersize=5.0,
+                x, y, marker=OP_MARKERS[det], markersize=6.0,
                 color=DETECTOR_COLORS[det],
-                markerfacecolor=DETECTOR_COLORS[det],
-                markeredgecolor="white", markeredgewidth=0.7,
+                markerfacecolor=face,
+                markeredgecolor=DETECTOR_COLORS[det], markeredgewidth=1.2,
                 linestyle="None", zorder=4,
             )
-        if "caitlyn" in data:
-            cait = data["caitlyn"]
+        for det, (x, y) in zip(detector_order, pr_ops):
+            alpha = 1.0 if det == "caitlyn" else 0.65
+            face = (
+                "white"
+                if det in ("regex_guard", "llm_judge")
+                else DETECTOR_COLORS[det]
+            )
             ax_pr.plot(
-                cait["op_recall"], cait["op_precision"],
-                marker="D", markersize=6.0,
-                color=DETECTOR_COLORS["caitlyn"],
-                markerfacecolor=DETECTOR_COLORS["caitlyn"],
-                markeredgecolor="white", markeredgewidth=0.8,
+                x, y, marker=OP_MARKERS[det],
+                markersize=7.0 if det == "caitlyn" else 5.5,
+                color=DETECTOR_COLORS[det],
+                markerfacecolor=face,
+                markeredgecolor=DETECTOR_COLORS[det], markeredgewidth=1.2,
+                alpha=alpha,
                 linestyle="None", zorder=4,
             )
         ax_roc.plot(
@@ -639,14 +655,14 @@ def plot_roc_pr_grid(
         )
         ax_roc.set_title(
             f"({letters[i]}) {titles[dataset]}",
-            fontsize=12.5, fontweight="bold", pad=6,
+            fontsize=12.5, fontweight="bold", pad=8,
         )
         ax_pr.set_title(
             f"({letters[4 + i]}) {titles[dataset]}",
-            fontsize=12.5, fontweight="bold", pad=6,
+            fontsize=12.5, fontweight="bold", pad=8,
         )
-        _style_axes(ax_roc, "FPR", "TPR", (-0.02, 1.02), (-0.02, 1.06))
-        _style_axes(ax_pr, "Recall", "Precision", (-0.02, 1.02), (-0.02, 1.06))
+        _style_axes(ax_roc, "FPR", "TPR", (-0.08, 1.12), (-0.10, 1.20))
+        _style_axes(ax_pr, "Recall", "Precision", (-0.08, 1.12), (-0.10, 1.20))
         for ax in (ax_roc, ax_pr):
             ax.set_xticks([0.0, 0.25, 0.5, 0.75, 1.0])
             ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
@@ -656,6 +672,14 @@ def plot_roc_pr_grid(
             [0], [0], color=DETECTOR_COLORS[d],
             linewidth=2.2 if d == "caitlyn" else 1.5,
             linestyle=DETECTOR_LINESTYLES[d],
+            marker=OP_MARKERS[d],
+            markerfacecolor=(
+                "white"
+                if d in ("regex_guard", "llm_judge")
+                else DETECTOR_COLORS[d]
+            ),
+            markeredgecolor=DETECTOR_COLORS[d], markeredgewidth=1.2,
+            markersize=8,
             label=DETECTOR_LABELS[d],
         )
         for d in DETECTORS
@@ -663,21 +687,21 @@ def plot_roc_pr_grid(
     fig.legend(
         handles=handles_methods,
         loc="lower center", ncol=5, frameon=False,
-        fontsize=14.5, bbox_to_anchor=(0.5, -0.07),
-        columnspacing=2.2, handlelength=2.8, handletextpad=0.7,
-        borderaxespad=0.2,
+        fontsize=11, bbox_to_anchor=(0.5, -0.10),
+        columnspacing=1.8, handlelength=2.0, handletextpad=0.6,
+        borderaxespad=0.3, handleheight=1.8,
     )
     fig.text(
-        0.012, 0.66, "ROC", rotation=90, va="center", ha="center",
+        0.02, 0.66, "ROC", rotation=90, va="center", ha="center",
         fontsize=12.5, fontweight="bold",
     )
     fig.text(
-        0.012, 0.29, "PR", rotation=90, va="center", ha="center",
+        0.02, 0.29, "PR", rotation=90, va="center", ha="center",
         fontsize=12.5, fontweight="bold",
     )
     fig.subplots_adjust(
-        wspace=0.60, hspace=0.60, left=0.13,
-        right=0.985, top=0.94, bottom=0.19,
+        wspace=0.75, hspace=1.2, left=0.16,
+        right=0.985, top=0.95, bottom=0.23,
     )
     fig.savefig(out_path, bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
@@ -812,19 +836,19 @@ def plot_pareto_grid(
     fig.legend(
         handles=handles_methods,
         loc="lower center", ncol=1, frameon=False,
-        fontsize=11.5, bbox_to_anchor=(0.40, -0.28),
+        fontsize=11.5, bbox_to_anchor=(0.40, -0.18),
         handlelength=2.6, handletextpad=0.7,
         borderaxespad=0.2, labelspacing=0.4,
     )
     fig.legend(
         handles=handles_datasets,
         loc="lower center", ncol=1, frameon=False,
-        fontsize=11.5, bbox_to_anchor=(0.65, -0.28),
+        fontsize=11.5, bbox_to_anchor=(0.65, -0.18),
         handlelength=2.2, handletextpad=0.7,
         borderaxespad=0.2, labelspacing=0.4,
     )
     fig.subplots_adjust(
-        wspace=0.50, left=0.13, right=0.985, top=0.90, bottom=0.44,
+        wspace=0.55, left=0.13, right=0.985, top=0.90, bottom=0.42,
     )
     fig.savefig(out_path, bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
