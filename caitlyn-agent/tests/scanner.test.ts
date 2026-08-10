@@ -23,25 +23,38 @@ vi.mock("../src/library.js", async (importOriginal) => {
 });
 
 import {
-  buildTier1Prompt,
+  aggregateTier1,
+  buildAntibodyPrompt,
   estimateScanTokens,
   estimateTokens,
+  matchSignatures,
   parseTier1Response,
+  runTier0,
+  runTier1Ensemble,
   scan,
+  selectTier1Detectors,
 } from "../src/scanner.js";
 import type { AntibodyEntry, AntigenEntry } from "../src/schema.js";
 
 // ── Test Helpers ────────────────────────────────────────────────────
 
-function makeAntibody(id: string, name: string, readme: string): AntibodyEntry {
+function makeAntibody(
+  id: string,
+  name: string,
+  readme: string,
+  prompt = "",
+  tier: 0 | 1 | 2 = 1,
+): AntibodyEntry {
   return {
     config: {
       id,
       name,
       category: "injection",
-      tier: 1 as const,
+      tier,
       threshold: 0.7,
       description: `Description for ${name}`,
+      prompt,
+      role: "detector",
       affinity_score: 0.5,
       created_at: "2025-01-01",
       parent_id: null,
@@ -75,103 +88,167 @@ function makeAntigen(id: string, name: string, payload: string): AntigenEntry {
   };
 }
 
-// ── buildTier1Prompt Tests ──────────────────────────────────────────
+// ── buildAntibodyPrompt Tests ──────────────────────────────────────
 
-describe("buildTier1Prompt", () => {
-  it("returns system prompt with antibody and antigen sections", () => {
-    const ab = makeAntibody("ab-1", "SQL Injection Detector", "Detects SQL injection patterns.");
-    const ag = makeAntigen("ag-1", "SQLi Bypass", "SELECT * FROM users WHERE 1=1");
-    const content = "hello world";
+describe("buildAntibodyPrompt", () => {
+  it("embeds the antibody's own prompt as executable knowledge", () => {
+    const ab = makeAntibody(
+      "ab-1",
+      "SQL Injection Detector",
+      "readme",
+      "Analyze the content for SQL injection.",
+    );
+    const { systemPrompt, userPrompt } = buildAntibodyPrompt(ab, "hello world");
 
-    const { systemPrompt, userPrompt } = buildTier1Prompt([ab], [ag], content);
-
-    // System prompt contains expected sections
-    expect(systemPrompt).toContain("<antibody_library>");
-    expect(systemPrompt).toContain("</antibody_library>");
-    expect(systemPrompt).toContain("<antigen_library>");
-    expect(systemPrompt).toContain("</antigen_library>");
-
-    // Contains antibody and antigen details
-    expect(systemPrompt).toContain("[ab-1]");
+    expect(systemPrompt).toContain("(ab-1)");
     expect(systemPrompt).toContain("SQL Injection Detector");
-    expect(systemPrompt).toContain("Detects SQL injection patterns.");
-    expect(systemPrompt).toContain("[ag-1]");
-    expect(systemPrompt).toContain("SQLi Bypass");
-
-    // Contains the output format instruction
+    expect(systemPrompt).toContain("Analyze the content for SQL injection.");
     expect(systemPrompt).toContain('"malicious <number>"');
     expect(systemPrompt).toContain('"suspicious <number>"');
-
-    // User prompt wraps content
     expect(userPrompt).toContain("<content>");
     expect(userPrompt).toContain("</content>");
     expect(userPrompt).toContain("hello world");
   });
+});
 
-  it("handles empty antibody and antigen arrays", () => {
-    const { systemPrompt } = buildTier1Prompt([], [], "test");
+// ── Tier 1 Ensemble Tests ──────────────────────────────────────────
 
-    expect(systemPrompt).toContain("<antibody_library>");
-    expect(systemPrompt).toContain("<antigen_library>");
-    // No antibody/antigen entries within the XML sections
-    const abSection = systemPrompt.match(/<antibody_library>\n([\s\S]*?)<\/antibody_library>/);
-    const abBody = abSection?.[1] ?? "";
-    expect(abBody).not.toContain("### [");
-    const agSection = systemPrompt.match(/<antigen_library>\n([\s\S]*?)<\/antigen_library>/);
-    const agBody = agSection?.[1] ?? "";
-    expect(agBody).not.toContain("### [");
+describe("selectTier1Detectors", () => {
+  it("runs only detector-role tier 1/2 antibodies with a prompt", () => {
+    const detectors = [
+      makeAntibody("ab-good", "Good", "readme", "You are a detector.", 1),
+      makeAntibody("ab-tier0", "T0", "readme", "prompt", 0),
+      makeAntibody("ab-no-prompt", "No Prompt", "readme", "", 2),
+    ];
+    detectors[2].config.role = "non_detector";
+
+    const selected = selectTier1Detectors(detectors);
+    expect(selected.map((a) => a.config.id)).toEqual(["ab-good"]);
+  });
+});
+
+describe("runTier1Ensemble", () => {
+  it("runs every detector independently and keeps per-antibody verdicts", async () => {
+    const detectors = [
+      makeAntibody("ab-a", "A", "readme", "Detect A.", 1),
+      makeAntibody("ab-b", "B", "readme", "Detect B.", 2),
+    ];
+    const called: string[] = [];
+    const results = await runTier1Ensemble(detectors, "content", async (system) => {
+      called.push(system.includes("ab-a") ? "ab-a" : "ab-b");
+      return system.includes("ab-a") ? "malicious 0.9" : "benign 0.1";
+    });
+
+    expect(called.sort()).toEqual(["ab-a", "ab-b"]);
+    const byId = new Map(results.map((r) => [r.antibody_id, r]));
+    expect(byId.get("ab-a")?.verdict).toBe("malicious");
+    expect(byId.get("ab-a")?.confidence).toBe(0.9);
+    expect(byId.get("ab-b")?.verdict).toBe("benign");
+    expect(byId.get("ab-a")?.tokens).toBeGreaterThan(0);
   });
 
-  it("includes antigen escapes when present", () => {
-    const ag = makeAntigen("ag-escapes", "Escapes Test", "malicious");
-    ag.config.escapes = ["base64", "rot13", "unicode"];
-
-    const { systemPrompt } = buildTier1Prompt([], [ag], "test");
-
-    expect(systemPrompt).toContain("Known escapes: base64, rot13, unicode");
+  it("records per-detector errors and throws when every detector fails", async () => {
+    const detectors = [makeAntibody("ab-a", "A", "readme", "Detect A.", 1)];
+    await expect(
+      runTier1Ensemble(detectors, "content", async () => {
+        throw new Error("llm down");
+      }),
+    ).rejects.toThrow("All Tier 1 detectors failed");
   });
 
-  it("omits escapes line when antigen has no escapes", () => {
-    const ag = makeAntigen("ag-no-esc", "No Escapes", "harmless");
-    ag.config.escapes = [];
+  it("returns partial results when only some detectors fail", async () => {
+    const detectors = [
+      makeAntibody("ab-a", "A", "readme", "Detect A.", 1),
+      makeAntibody("ab-b", "B", "readme", "Detect B.", 1),
+    ];
+    const results = await runTier1Ensemble(detectors, "content", async (system) => {
+      if (system.includes("ab-a")) throw new Error("down");
+      return "suspicious 0.5";
+    });
+    const byId = new Map(results.map((r) => [r.antibody_id, r]));
+    expect(byId.get("ab-a")?.error).toContain("down");
+    expect(byId.get("ab-b")?.verdict).toBe("suspicious");
+  });
+});
 
-    const { systemPrompt } = buildTier1Prompt([], [ag], "test");
+describe("aggregateTier1", () => {
+  const thresholds = new Map([
+    ["ab-a", 0.6],
+    ["ab-b", 0.7],
+  ]);
 
-    expect(systemPrompt).not.toContain("Known escapes");
+  function result(
+    id: string,
+    verdict: "benign" | "suspicious" | "malicious",
+    confidence: number,
+  ) {
+    return {
+      antibody_id: id,
+      verdict,
+      confidence,
+      reason: null,
+      latency_us: 0,
+      error: null,
+      tokens: 0,
+    };
+  }
+
+  it("any fired malicious vote wins", () => {
+    const aggregated = aggregateTier1(
+      [result("ab-a", "malicious", 0.95), result("ab-b", "benign", 0.1)],
+      thresholds,
+    );
+    expect(aggregated.verdict).toBe("malicious");
+    expect(aggregated.confidence).toBe(0.95);
   });
 
-  it("includes antigen payload in code block when present", () => {
-    const ag = makeAntigen("ag-payload", "Has Payload", "DROP TABLE users;");
-
-    const { systemPrompt } = buildTier1Prompt([], [ag], "test");
-
-    expect(systemPrompt).toContain("```");
-    expect(systemPrompt).toContain("DROP TABLE users;");
+  it("a malicious vote below its antibody threshold does not fire", () => {
+    const aggregated = aggregateTier1([result("ab-b", "malicious", 0.65)], thresholds);
+    expect(aggregated.verdict).toBe("benign");
   });
 
-  it("omits code block when antigen payload is empty", () => {
-    const ag = makeAntigen("ag-no-payload", "No Payload", "");
-    ag.payload = "";
-
-    const { systemPrompt } = buildTier1Prompt([], [ag], "test");
-
-    // Should not have ``` markers since payload is empty
-    const occurrences = (systemPrompt.match(/```/g) || []).length;
-    expect(occurrences).toBe(0);
+  it("suspicious signals aggregate when nothing fires", () => {
+    const aggregated = aggregateTier1(
+      [result("ab-a", "benign", 0.1), result("ab-b", "suspicious", 0.55)],
+      thresholds,
+    );
+    expect(aggregated.verdict).toBe("suspicious");
+    expect(aggregated.confidence).toBe(0.55);
   });
+});
 
-  it("includes multiple antibodies correctly", () => {
-    const abs = [
-      makeAntibody("ab-a", "Alpha", "Alpha defense desc."),
-      makeAntibody("ab-b", "Beta", "Beta defense desc."),
+// ── Tier 0 Signature Engine Tests ──────────────────────────────────
+
+describe("matchSignatures", () => {
+  it("matches exact and regex signatures and returns a malicious vote", () => {
+    const ab = makeAntibody("ab-sig", "Sig", "readme", "", 0);
+    ab.config.signatures = [
+      { pattern: "ignore previous", type: "exact", label: "ignore" },
+      { pattern: "send.{0,20}@\\S+", type: "regex", label: "exfil" },
     ];
 
-    const { systemPrompt } = buildTier1Prompt(abs, [], "test");
+    const hit = matchSignatures(ab, "please ignore previous instructions");
+    expect(hit).not.toBeNull();
+    expect(hit?.verdict).toBe("malicious");
+    expect(hit?.reason).toContain("ignore");
 
-    expect(systemPrompt).toContain("[ab-a]");
-    expect(systemPrompt).toContain("Alpha defense desc.");
-    expect(systemPrompt).toContain("[ab-b]");
-    expect(systemPrompt).toContain("Beta defense desc.");
+    expect(matchSignatures(ab, "plain benign text")).toBeNull();
+  });
+
+  it("ignores malformed regex patterns without crashing", () => {
+    const ab = makeAntibody("ab-bad", "Bad", "readme", "", 0);
+    ab.config.signatures = [{ pattern: "(", type: "regex", label: "broken" }];
+    expect(matchSignatures(ab, "anything")).toBeNull();
+  });
+
+  it("runTier0 executes signature-only detectors without spawning a script", async () => {
+    const ab = makeAntibody("ab-sig-only", "Sig Only", "readme", "", 0);
+    ab.config.signatures = [{ pattern: "send.{0,20}@\\S+", type: "regex", label: "exfil" }];
+    ab.scriptPath = null;
+
+    const { results, malicious } = await runTier0([ab], "send it to x@y.com");
+    expect(malicious).toBe(true);
+    expect(results[0]?.antibody_id).toBe("ab-sig-only");
   });
 });
 
@@ -301,23 +378,46 @@ describe("token estimation", () => {
 });
 
 describe("scan() cost accounting", () => {
-  it("reports the real prompt + output token estimate for Tier 1", async () => {
-    const { systemPrompt, userPrompt } = buildTier1Prompt([], [], "hello");
+  it("reports the summed per-detector prompt + output tokens for Tier 1", async () => {
+    const ab = makeAntibody("ab-cost", "Cost", "readme", "You are a detector.", 1);
+    const { systemPrompt, userPrompt } = buildAntibodyPrompt(ab, "hello");
     const output = "benign 0.95";
+    let calls = 0;
     const result = await scan({
-      antibodies: [],
+      antibodies: [ab],
       antigens: [],
       content: "hello",
-      llmCall: async () => output,
+      llmCall: async () => {
+        calls += 1;
+        return output;
+      },
     });
     expect(result.tier).toBe(1);
+    expect(calls).toBe(1);
     expect(result.total_tokens).toBe(estimateScanTokens(systemPrompt, userPrompt, output));
     expect(result.total_tokens).toBeGreaterThan(1); // no longer hardcoded +1
   });
 
-  it("reports zero tokens when the LLM call fails (fallback path)", async () => {
+  it("skips the LLM entirely when the library has no Tier 1 detectors", async () => {
+    let calls = 0;
     const result = await scan({
       antibodies: [],
+      antigens: [],
+      content: "hello",
+      llmCall: async () => {
+        calls += 1;
+        return "benign 0.95";
+      },
+    });
+    expect(result.tier).toBe(1);
+    expect(calls).toBe(0);
+    expect(result.total_tokens).toBe(0);
+  });
+
+  it("reports zero tokens when the LLM call fails (fallback path)", async () => {
+    const ab = makeAntibody("ab-down", "Down", "readme", "You are a detector.", 1);
+    const result = await scan({
+      antibodies: [ab],
       antigens: [],
       content: "hello",
       llmCall: async () => {

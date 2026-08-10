@@ -78,8 +78,13 @@ export async function runRedTeam(
   tier0TimeoutMs: number = 500,
   tier0Runner: typeof runTier0 = runTier0,
 ): Promise<RedTeamReport> {
+  // Signature-only detectors participate too (evolution-created and
+  // new library entries without a hand-written script).
   const tier0Only = antibodies.filter(
-    (ab) => ab.config.tier === 0 && ab.scriptPath,
+    (ab) =>
+      ab.config.tier === 0 &&
+      ab.config.role === "detector" &&
+      (ab.scriptPath || ab.config.signatures.length > 0),
   );
   const missedIds: string[] = [];
   const perCategory = new Map<string, { total: number; detected: number }>();
