@@ -107,7 +107,10 @@ Examples:
     )
     p.add_argument(
         "--defense", type=str, default="none",
-        choices=["none", "caitlyn", "llm_judge", "llm_judge_fewshot", "regex_guard"],
+        choices=[
+            "none", "caitlyn", "llm_judge", "llm_judge_fewshot",
+            "regex_guard", "spotlighting", "tool_filter", "pi_detector",
+        ],
         help="Defense to apply (default: none)",
     )
     p.add_argument(

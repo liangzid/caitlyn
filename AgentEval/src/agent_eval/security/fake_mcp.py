@@ -114,9 +114,24 @@ class TestScenario:
         original_content = resp.content
         blocked = False
         if _active_defense is not None:
-            filtered, blocked = _active_defense.filter(
-                resp.content, source=tool_name
-            )
+            tool_gate = getattr(_active_defense, "filter_tool_call", None)
+            if tool_gate is not None and not tool_gate(tool_name, arguments):
+                # Permission-gating baselines (e.g. tool filter) block the
+                # call itself before any response is served.
+                filtered = (
+                    "[BLOCKED] Tool call not permitted by active "
+                    "defense policy."
+                )
+                resp = ToolResponse(
+                    content=filtered,
+                    is_injection=False,
+                    injection_id=resp.injection_id,
+                )
+                blocked = True
+            else:
+                filtered, blocked = _active_defense.filter(
+                    resp.content, source=tool_name
+                )
             if blocked:
                 resp = ToolResponse(
                     content=filtered,
