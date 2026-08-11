@@ -1,0 +1,59 @@
+#+TITLE: Hermes 主表（Table 4）正式运行记录
+#+AUTHOR: Zi Liang (团长) + Agent
+#+DATE: 2026-08-11
+#+STATUS: 运行中
+
+* 目标
+
+把 paper 主表 hermes 块 7 个 baseline 行（none / regex_guard /
+spotlighting / tool_filter / pi_detector / llm_judge / llm_judge_fewshot）
+跑完，含成本，回填 ~/paper_caitlyn/sections/table-main.tex。CAITLYN 行后补。
+
+* 现状核实
+
+- opencode 7 行已完成并回填；pi 7 行在跑（15:02 启动，预计 ~21h）。
+- hermes v0.18.2 在 agent-eval 容器可用，走 prompt 投递（NON_MCP_AGENTS），
+  ASR 由语义 judge 判定，benign FPR 构造上为 0。
+- hermes -z 原生支持 --usage-file（失败也写），但原 HermesCaller 未传，
+  主表 Cost 列需要它。
+
+* 代码改动（commit 1b25a8a 之后的新改动）
+
+1. callers.py HermesCaller：
+   - 每次调用传 --usage-file /tmp/hermes_usage_<uuid>.json；
+   - 超时后按 usage-file 路径 pkill 容器内进程（防 docker exec 超时泄漏，
+     与之前 opencode 泄漏同因）；
+   - 支持 HERMES_EVAL_WORKDIR 隔离工作目录（并行 worker 用）。
+2. run_benchmark.py：result 记录 agent_usage。
+3. scripts/attach_pi_cost.py：按 exact prompt 从 pi 会话 JSONL join 回
+   usage/cost（pi 已在跑，不能重跑）。
+4. scripts/attach_hermes_cost.py：把 hermes usage-file 归一化为
+   cost_usd / tokens_* 标准字段。
+5. scripts/analyze_row.py：新增 agent cost p50 输出。
+
+* 预检与测速
+
+- 清理 2 个 12-15h 前卡死的 opencode 残留进程（容器内 pkill）。
+- smoke：2 例 26s，usage 捕获成功（~$0.007/例，输入 token ~26k，hermes
+  系统提示较重）。
+- mini 12 例：平均 30.7s，含 1 个 180s 超时（8.3%）；ASR 10%（1/10）。
+  超时后容器内 hermes 进程泄漏，已加 pkill 修复。
+- 结论：串行 7 行约 20-24h；改 2 路并行（隔离工作目录 + 独立端口）约 12-14h。
+
+* 正式运行（15:46 启动）
+
+- worker A（port 9878，/workspace/hermes_a）：none、regex_guard、
+  spotlighting、tool_filter。
+- worker B（port 9879，/workspace/hermes_b）：pi_detector、llm_judge、
+  llm_judge_fewshot。
+- 模型 deepseek/deepseek-chat，timeout 180，输出 results/eval/hermes-*.json
+  （每 25 例写 .partial）。
+- 日志：/tmp/hermes_logs/worker_a.log、worker_b.log。
+
+* 待办
+
+1. 跑完后 attach_hermes_cost.py 生成 .withcost.json。
+2. analyze_row.py 汇总每行：ASR（prompt 通道用 raw judge ASR）、FPR=0、
+   latency p50、cost p50。
+3. 回填 table-main.tex hermes 8 行（含 CAITLYN 后补），编译验证。
+4. pi 跑完后 attach_pi_cost.py + 回填 pi 行。

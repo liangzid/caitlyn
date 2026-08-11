@@ -14,6 +14,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import uuid
 from abc import ABC, abstractmethod
@@ -33,6 +34,7 @@ class AgentResponse:
     error: str | None
     duration: float
     task_id: str
+    usage: dict[str, Any] | None = None
 
 
 class AgentCaller(ABC):
@@ -129,16 +131,75 @@ class OpenCodeCaller(AgentCaller):
 class HermesCaller(AgentCaller):
     """✅ Verified: hermes -z --provider openrouter --model {model}"""
     def call(self, task_input, timeout=300, model=DEFAULT_MODEL):
+        import time as _time
+
         prompt = task_input.get("problem_statement", task_input.get("task_id", ""))
         api_key = get_openrouter_api_key()
+        usage_path = f"/tmp/hermes_usage_{uuid.uuid4().hex}.json"
         cmd = [
-            "docker", "exec", "-e", f"OPENROUTER_API_KEY={api_key}",
+            "docker", "exec",
+        ]
+        # Parallel eval workers run hermes in isolated container workdirs so
+        # agent-created files cannot leak across workers. Default is the
+        # container /workspace, preserving the original single-worker setup.
+        workdir = os.environ.get("HERMES_EVAL_WORKDIR", "")
+        if workdir:
+            cmd += ["-w", workdir]
+        cmd += [
+            "-e", f"OPENROUTER_API_KEY={api_key}",
             CONTAINER,
             "hermes", "-z", prompt,
             "--provider", "openrouter",
             "--model", model,
+            "--usage-file", usage_path,
         ]
-        return _run_command(cmd, task_input.get("task_id", ""), timeout)
+        task_id = task_input.get("task_id", "")
+        start = _time.time()
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            result = AgentResponse(
+                success=proc.returncode == 0,
+                output=proc.stdout,
+                error=proc.stderr if proc.returncode != 0 else None,
+                duration=_time.time() - start,
+                task_id=task_id,
+            )
+        except subprocess.TimeoutExpired:
+            # docker exec timeout leaves the in-container hermes process
+            # running, which would keep spending API budget and pollute the
+            # workspace. Kill it by its unique --usage-file path, which is
+            # part of the process cmdline.
+            try:
+                subprocess.run(
+                    ["docker", "exec", CONTAINER, "pkill", "-f", usage_path],
+                    capture_output=True, timeout=15, check=False,
+                )
+            except Exception:
+                pass
+            result = AgentResponse(
+                success=False, output="",
+                error=f"Timeout after {timeout}s", duration=timeout,
+                task_id=task_id,
+            )
+        usage: dict[str, Any] | None = None
+        try:
+            read = subprocess.run(
+                ["docker", "exec", CONTAINER, "cat", usage_path],
+                capture_output=True, text=True, timeout=30,
+            )
+            if read.returncode == 0 and read.stdout.strip():
+                usage = json.loads(read.stdout)
+        except Exception:
+            usage = None
+        try:
+            subprocess.run(
+                ["docker", "exec", CONTAINER, "rm", "-f", usage_path],
+                capture_output=True, timeout=10, check=False,
+            )
+        except Exception:
+            pass
+        result.usage = usage
+        return result
 
 
 # ── Needs auth config ─────────────────────────────────────────────

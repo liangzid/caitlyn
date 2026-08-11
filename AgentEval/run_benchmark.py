@@ -553,6 +553,7 @@ class BenchmarkRunner:
             "success": response.success,
             "tool_calls": 0,
             "tool_details": [],
+            "agent_usage": response.usage,
         }
 
     def _build_agent_prompt(

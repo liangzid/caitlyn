@@ -83,6 +83,11 @@ def summarize(results: list[dict]) -> dict:
         r.get("defense_cost", {}).get("tokens", 0)
         for r in attacks
     ]
+    agent_costs = [
+        (r.get("agent_usage") or {}).get("cost_usd", 0.0)
+        for r in attacks
+        if (r.get("agent_usage") or {}).get("cost_usd") is not None
+    ]
 
     per_subclass: dict[str, dict] = defaultdict(
         lambda: {"total": 0, "delivered": 0, "raw": 0, "action": 0}
@@ -110,6 +115,13 @@ def summarize(results: list[dict]) -> dict:
         "latency_p50_s": statistics.median(durations) if durations else 0.0,
         "defense_latency_p50_ms": statistics.median(costs) if costs else 0.0,
         "defense_tokens_p50": statistics.median(tokens) if tokens else 0,
+        "agent_cost_p50_usd": (
+            statistics.median(agent_costs) if agent_costs else None
+        ),
+        "agent_cost_median_usd": (
+            statistics.median(agent_costs) if agent_costs else None
+        ),
+        "agent_usage_count": len(agent_costs),
         "per_subclass": {
             k: {
                 "total": v["total"],
@@ -137,6 +149,7 @@ def main() -> None:
             f"action ASR(delivered)={s['action_asr_delivered']:.1%} "
             f"FPR={fpr_str} "
             f"lat p50={s['latency_p50_s']:.1f}s"
+            f" agent$ p50={s['agent_cost_p50_usd']}"
         )
         for k, v in s["per_subclass"].items():
             print(
