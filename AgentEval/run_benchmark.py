@@ -32,6 +32,7 @@ import argparse
 import json
 import logging
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -69,6 +70,8 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+EVAL_CONTAINER = "agent-eval"
 
 
 # ── CLI ───────────────────────────────────────────────────────────
@@ -501,6 +504,21 @@ class BenchmarkRunner:
         Fake MCP Server on the Docker host (host.docker.internal).
         """
         from agent_eval import get_caller
+
+        # Attack cases may legitimately write /workspace/opencode.json
+        # (config-tampering scenarios). opencode refuses to start on an
+        # unknown key, so remove any agent-created project config before
+        # every case to keep the environment clean.
+        try:
+            subprocess.run(
+                ["docker", "exec", EVAL_CONTAINER, "rm", "-f",
+                 "/workspace/opencode.json"],
+                capture_output=True,
+                timeout=10,
+                check=False,
+            )
+        except Exception:  # noqa: BLE001 - cleanup is best effort
+            pass
 
         # Docker containers reach host via host.docker.internal
         mcp_host = "host.docker.internal"
