@@ -1,0 +1,91 @@
+#+TITLE: 抗体正确性审计 + 时间/token 效率测量
+#+AUTHOR: Zi Liang (团长) + Agent
+#+DATE: 2026-08-11
+
+* 目标
+
+1. 逐抗体确认正确性（不再出现"纸面抗体"或配置/实现不一致）。
+2. 量化检测的 token 与时间效率（低延迟目标）。
+3. 展示检测时的 context 组织形式。
+
+* 正确性审计方法与结论
+
+审计脚本对每个 Tier0 检测器真实执行 detect.mjs（攻击/良性/空串/20k 长串
+四类输入），断言：退出码、JSON 契约（verdict/confidence/reason）、
+confidence ∈ [0,1]；对 signature-only 检测器逐一编译 regex；检查
+index.json 与目录双向覆盖；检查 detect.ts 与 config.yaml 的签名标签
+完全一致（脚本为准）。
+
+结果：修复前发现三类问题，修复后 0 issue：
+
+1. config 签名与脚本漂移（5 个文件）：
+   ab-pattern-injection / ab-poisoning-general / ab-entropy-anomaly /
+   ab-injection-general / ab-jailbreak-general 的 config signatures 与
+   detect.ts 模式不一致（少标签、旧模式、词级旧签名）。已全部同步为
+   脚本镜像。注意：这 5 个文件含团长未提交的 eval 统计增量，随本次
+   提交一并入库。
+2. ab-delimiter-sandwich 角色错误：它是"定界预处理器"，却被当作
+   Tier0 独立检测器执行（`</user>`/``` 单独出现会误报）。已标记
+   non_detector。红队/良性回归无变化（其捕获与其他检测器重叠）。
+3. YAML 双引号多行标量未按规范还原转义：所有 prompt 型抗体的
+   system prompt 含字面 `\n` 和 `\ \` 续行残留。根因在 yaml-parser：
+   多行双引号标量绕过 coerceValue。已修复（行尾 `\` 为不折叠续行、
+   行首 `\ ` 为空格转义、`\n` 还原为换行），新增 2 个回归测试。
+
+最终：31 抗体（21 检测器 + 10 储备），audit 0 issue，398 tests 全绿，
+红队 194/244（79.5%），良性 318 条 0 FP（与修复前一致）。
+
+* 时间/token 效率实测
+
+** Tier 0（12 个检测器并行：10 子进程 + 2 进程内签名引擎）
+
+- 良性 318：p50=86.7ms，p95=100.0ms，max=131.4ms
+- 攻击 100：p50=90.5ms，p95=102.8ms，max=106.9ms
+- 瓶颈：node 子进程启动 ~40-55ms/个（并行），不是匹配本身
+  （单脚本匹配 <5ms）。
+
+** Tier 1（真实 deepseek-v4-pro，9 检测器并行）
+
+- fast 子集（3 检测器）：墙钟 ~1.6-1.8s，~1.35k tokens
+- full 集成（9 检测器）：墙钟 ~1.6s（典型；曾观测 10-12s，API 速率波动），
+  ~4.4k tokens（prompt 4.3k + 内容 + 输出）
+- 单检测器 LLM 调用 1.1-1.6s；并行墙钟 ≈ 最慢调用。
+- aggressive 策略 + 信任干净输入：仅 Tier 0，~90ms。
+
+结论：Tier 0 有 ~90ms 地板（子进程启动）；LLM 层主导延迟（1.6s+）。
+优化方向（未实施，待团长确认）：子进程池复用 node 进程（地板可降到
+~5-10ms）；LLM 层按 escalation 分级已实现，进一步可做检测器并行度
+控制与超时。
+
+* Context 组织形式（现状）
+
+** Tier 0 脚本（detect.ts/detect.mjs）
+
+- 输入：stdin 原始内容（无任何包装）。
+- 输出：单行 JSON：{"verdict":"benign|suspicious|malicious",
+  "confidence":0-1,"reason":"..."}。
+- 每个脚本内嵌自己的签名表 + 启发式；无 system prompt。
+
+** Tier 0 签名引擎（signature-only 抗体，如 ab-exfiltration）
+
+- 进程内编译 config.signatures（regex/exact），命中即恶意票 0.6。
+
+** Tier 1（每个检测器独立 LLM 调用，并行）
+
+- system prompt 结构：
+  "You are the defense skill \"NAME\" (id).\n\n<抗体自己的 prompt>\n\n
+   Output EXACTLY one line with a verdict and a confidence score:
+   \"benign <number>\", \"suspicious <number>\", or \"malicious <number>\".
+   Confidence must be 0.0-1.0. Do not output anything else."
+- user prompt 结构：<content>\n<原始内容>\n</content>
+- 期望输出：单行 "verdict confidence"（如 "malicious 0.92"）。
+- 聚合：任一 fired（malicious 且 confidence ≥ 自身 threshold）→ malicious；
+  否则任一 suspicious → suspicious；否则 benign。
+
+实测示例（ab-classifier-injection + 攻击样本）已写入本记录会话输出；
+prompt 修复后不再含 `\n` 字面量。
+
+* 提交
+
+1. fix(yaml): 双引号多行标量转义还原 + 2 个回归测试。
+2. fix(antibodies): 5 个 config 签名同步脚本 + delimiter 角色修正。
