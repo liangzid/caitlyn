@@ -20,6 +20,8 @@ export interface HybridScanOptions {
   escalationPolicy?: EscalationPolicy;
   fastDetectorIds?: string[];
   weakSignalThreshold?: number;
+  tier1TimeoutMs?: number;
+  maxParallelTier1?: number;
 }
 
 export interface HybridScanResult extends ScanResult {
@@ -43,6 +45,8 @@ export async function hybridScan(options: HybridScanOptions): Promise<HybridScan
     fastDetectorIds: options.fastDetectorIds ?? scanning.fastDetectorIds,
     weakSignalThreshold:
       options.weakSignalThreshold ?? scanning.weakSignalThreshold,
+    tier1TimeoutMs: options.tier1TimeoutMs ?? scanning.tier1TimeoutMs,
+    maxParallelTier1: options.maxParallelTier1 ?? scanning.maxParallelTier1,
   });
 
   return {

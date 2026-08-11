@@ -8,9 +8,10 @@
  *      aggressive: skip LLM on trusted clean, fast on untrusted/risky)
  */
 
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import type {
   AntibodyEntry,
   AntigenEntry,
@@ -165,6 +166,218 @@ function runScript(opts: RunScriptOptions): Promise<ScriptResult> {
   return promise;
 }
 
+// ── Tier 0: Resident Worker Pool (server mode) ────────────────────
+
+interface PoolEntry {
+  id: string;
+  scriptPath: string;
+}
+
+interface PendingRequest {
+  id: string;
+  resolve: (r: ScriptResult) => void;
+  timer: NodeJS.Timeout;
+}
+
+function workerFailure(
+  antibodyId: string,
+  error: string,
+  latencyUs: number,
+): ScriptResult {
+  return {
+    antibody_id: antibodyId,
+    verdict: "benign",
+    confidence: 0,
+    reason: null,
+    latency_us: latencyUs,
+    error,
+  };
+}
+
+/**
+ * Resident Tier 0 worker pool.
+ *
+ * One long-lived node process loads every detector module once and serves
+ * scan requests over stdin/stdout JSON lines, eliminating per-scan process
+ * startup (~40-55ms per detector). A request timeout or a worker crash
+ * kills the worker; the next scan restarts it transparently. If the worker
+ * cannot start (missing file, spawn failure), every request falls back to
+ * the one-shot spawn path so scanning never degrades.
+ */
+class Tier0Pool {
+  private worker: ChildProcess | null = null;
+  private readyPromise: Promise<boolean> | null = null;
+  private nextReqId = 1;
+  private pending = new Map<number, PendingRequest>();
+  private entries: PoolEntry[] = [];
+  private startPromise: Promise<boolean> | null = null;
+  private stdoutBuf = "";
+
+  constructor(private readonly workerPath: string) {}
+
+  private killWorker(): void {
+    if (this.worker) {
+      this.worker.kill("SIGKILL");
+      this.worker = null;
+    }
+    this.readyPromise = null;
+    this.stdoutBuf = "";
+  }
+
+  private startWorker(entries: PoolEntry[]): Promise<boolean> {
+    this.killWorker();
+    const args = entries.map((e) => `--detector=${e.id}=${e.scriptPath}`);
+    const worker = spawn(process.execPath, [this.workerPath, ...args], {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: { ...process.env },
+    });
+    worker.unref();
+    this.worker = worker;
+
+    let settled = false;
+    this.readyPromise = new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        this.killWorker();
+        resolve(false);
+      }, 3000);
+
+      worker.stdout?.on("data", (chunk: Buffer) => {
+        this.stdoutBuf += chunk.toString("utf-8");
+        const lines = this.stdoutBuf.split("\n");
+        this.stdoutBuf = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let msg: { ready?: boolean; reqId?: number; ok?: boolean; result?: ScriptResult; error?: string };
+          try {
+            msg = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (msg.ready) {
+            if (settled) continue;
+            settled = true;
+            clearTimeout(timer);
+            resolve(true);
+            continue;
+          }
+          if (typeof msg.reqId === "number") {
+            const req = this.pending.get(msg.reqId);
+            if (!req) continue;
+            clearTimeout(req.timer);
+            this.pending.delete(msg.reqId);
+            req.resolve(
+              msg.ok && msg.result
+                ? { ...msg.result, antibody_id: req.id, latency_us: msg.result.latency_us ?? 0 }
+                : workerFailure(req.id, msg.error ?? "worker error", 0),
+            );
+          }
+        }
+      });
+
+      const fail = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        this.killWorker();
+        resolve(false);
+      };
+      worker.on("error", fail);
+      worker.on("exit", () => {
+        for (const [, req] of this.pending) {
+          clearTimeout(req.timer);
+          req.resolve(workerFailure(req.id, "worker exited", 0));
+        }
+        this.pending.clear();
+        fail();
+      });
+    });
+    return this.readyPromise;
+  }
+
+  /** (Re)start the worker for the given entry set exactly once per call. */
+  async ensureEntries(entries: PoolEntry[]): Promise<boolean> {
+    const sameSet =
+      this.entries.length === entries.length &&
+      this.entries.every((e, i) => e.id === entries[i].id && e.scriptPath === entries[i].scriptPath);
+    if (this.worker && !sameSet) this.killWorker();
+    if (this.worker) return this.readyPromise ?? false;
+    if (this.startPromise) return this.startPromise;
+    this.entries = entries;
+    this.startPromise = this.startWorker(entries);
+    try {
+      return await this.startPromise;
+    } finally {
+      this.startPromise = null;
+    }
+  }
+
+  /** Run one detector in the resident worker, with one-shot fallback. */
+  async scan(entry: PoolEntry, content: string, timeoutMs: number): Promise<ScriptResult> {
+    const ready = await (this.readyPromise ?? Promise.resolve(false));
+    if (!ready || !this.worker) {
+      return runScript({
+        content,
+        scriptPath: entry.scriptPath,
+        antibodyId: entry.id,
+        timeoutMs,
+      });
+    }
+
+    const reqId = this.nextReqId++;
+    const resultPromise = new Promise<ScriptResult>((resolve) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(reqId);
+        // A hung detector blocks the whole worker; kill it so the next
+        // scan restarts fresh.
+        this.killWorker();
+        resolve(workerFailure(entry.id, `worker timeout after ${timeoutMs}ms`, timeoutMs * 1000));
+      }, timeoutMs);
+      this.pending.set(reqId, { id: entry.id, resolve, timer });
+      this.worker?.stdin?.write(
+        JSON.stringify({ reqId, id: entry.id, content }) + "\n",
+      );
+    });
+    return resultPromise.then((r) => {
+      // Detectors the worker could not load (e.g. plain one-shot scripts)
+      // fall back to the one-shot spawn path instead of failing the scan.
+      if (r.error?.includes("detector not loaded")) {
+        return runScript({
+          content,
+          scriptPath: entry.scriptPath,
+          antibodyId: entry.id,
+          timeoutMs,
+        });
+      }
+      return r;
+    });
+  }
+
+  /** Kill the resident worker (used by tests and daemon shutdown). */
+  shutdown(): void {
+    this.killWorker();
+    this.entries = [];
+    this.startPromise = null;
+  }
+}
+
+let _tier0Pool: Tier0Pool | null = null;
+
+function getTier0Pool(): Tier0Pool {
+  if (!_tier0Pool) {
+    const workerPath = fileURLToPath(new URL("./scripts/tier0-worker.mjs", import.meta.url));
+    _tier0Pool = new Tier0Pool(workerPath);
+  }
+  return _tier0Pool;
+}
+
+/** Kill the resident Tier 0 worker (test/daemon lifecycle). */
+export function shutdownTier0Pool(): void {
+  _tier0Pool?.shutdown();
+  _tier0Pool = null;
+}
+
 export async function runTier0(
   antibodies: AntibodyEntry[],
   content: string,
@@ -178,27 +391,28 @@ export async function runTier0(
     return { results: [], malicious: false };
   }
 
-  const results: ScriptResult[] = [];
-  const scriptPromises: Promise<ScriptResult>[] = [];
-  for (const ab of tier0Antibodies) {
-    if (ab.scriptPath) {
-      // Hand-written detectors (advanced heuristics) run as scripts.
-      scriptPromises.push(
-        runScript({
-          content,
-          scriptPath: ab.scriptPath,
-          antibodyId: ab.config.id,
-          timeoutMs,
-        }),
-      );
-    } else {
-      // Signature-only detectors (including evolution-created ones) run
-      // through the generic in-process signature engine.
-      const sigResult = matchSignatures(ab, content);
-      if (sigResult) results.push(sigResult);
-    }
+  const scriptEntries = tier0Antibodies
+    .filter((ab) => ab.scriptPath)
+    .map((ab) => ({ id: ab.config.id, scriptPath: ab.scriptPath! }));
+  const signatureOnly = tier0Antibodies.filter((ab) => !ab.scriptPath);
+
+  // Pre-warm the resident worker once for this entry set, then fire all
+  // detector requests in parallel.
+  if (scriptEntries.length > 0) {
+    await getTier0Pool().ensureEntries(scriptEntries);
   }
-  results.push(...(await Promise.all(scriptPromises)));
+  const [scriptResults] = await Promise.all([
+    scriptEntries.length > 0
+      ? Promise.all(
+          scriptEntries.map((entry) => getTier0Pool().scan(entry, content, timeoutMs)),
+        )
+      : Promise.resolve([] as ScriptResult[]),
+  ]);
+  const results: ScriptResult[] = [...scriptResults];
+  for (const ab of signatureOnly) {
+    const sigResult = matchSignatures(ab, content);
+    if (sigResult) results.push(sigResult);
+  }
 
   // Short-circuit: any high-confidence malicious from Tier 0
   const malicious = results.some(
@@ -364,6 +578,41 @@ export interface Tier1Result extends ScriptResult {
   tokens: number;
 }
 
+/** Run an async mapper over items with at most `limit` concurrent calls. */
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const idx = next++;
+      results[idx] = await fn(items[idx]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+/** Reject after `ms` if the promise has not settled (call keeps running). */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 /**
  * Run every Tier 1/2 detector as its own parallel LLM call, so each
  * antibody's prompt is genuinely executed and its verdict can be
@@ -378,27 +627,31 @@ export async function runTier1Ensemble(
   content: string,
   llmCall: LlmCallFn,
   ids?: string[],
+  options: { timeoutMs?: number; maxParallel?: number } = {},
 ): Promise<Tier1Result[]> {
   const detectors = selectTier1Detectors(antibodies, ids);
   if (detectors.length === 0) return [];
+  const timeoutMs = options.timeoutMs ?? 15_000;
+  const maxParallel = options.maxParallel ?? detectors.length;
 
-  const jobs = detectors.map(async (ab) => {
+  const jobs = (ab: AntibodyEntry): Promise<Tier1Result> => {
     const start = performance.now();
     const { systemPrompt, userPrompt } = buildAntibodyPrompt(ab, content);
-    try {
-      const raw = await llmCall(systemPrompt, userPrompt);
-      const parsed = parseTier1Response(raw.trim());
-      return {
-        antibody_id: ab.config.id,
-        verdict: parsed.verdict,
-        confidence: parsed.confidence,
-        reason: null,
-        latency_us: Math.round(performance.now() - start) * 1000,
-        error: null,
-        tokens: estimateScanTokens(systemPrompt, userPrompt, raw),
-      } satisfies Tier1Result;
-    } catch (err) {
-      return {
+    return Promise.resolve()
+      .then(() => withTimeout(llmCall(systemPrompt, userPrompt), timeoutMs))
+      .then((raw) => {
+        const parsed = parseTier1Response(raw.trim());
+        return {
+          antibody_id: ab.config.id,
+          verdict: parsed.verdict,
+          confidence: parsed.confidence,
+          reason: null,
+          latency_us: Math.round(performance.now() - start) * 1000,
+          error: null,
+          tokens: estimateScanTokens(systemPrompt, userPrompt, raw),
+        } satisfies Tier1Result;
+      })
+      .catch((err) => ({
         antibody_id: ab.config.id,
         verdict: "benign" as const,
         confidence: 0,
@@ -406,11 +659,10 @@ export async function runTier1Ensemble(
         latency_us: Math.round(performance.now() - start) * 1000,
         error: err instanceof Error ? err.message : String(err),
         tokens: estimateTokens(systemPrompt) + estimateTokens(userPrompt),
-      } satisfies Tier1Result;
-    }
-  });
+      }));
+  };
 
-  const results = await Promise.all(jobs);
+  const results = await mapLimit(detectors, maxParallel, jobs);
   if (results.every((r) => r.error)) {
     throw new Error(
       `All Tier 1 detectors failed: ${results.map((r) => r.error).join("; ")}`,
@@ -478,11 +730,12 @@ export async function runStagedTier1(params: {
   stage: EscalationStage;
   fastDetectorIds: string[];
   thresholds: ReadonlyMap<string, number>;
+  tier1Options?: { timeoutMs?: number; maxParallel?: number };
 }): Promise<StagedTier1Result> {
-  const { detectors, content, llmCall, stage, fastDetectorIds, thresholds } = params;
+  const { detectors, content, llmCall, stage, fastDetectorIds, thresholds, tier1Options } = params;
 
   if (stage === "full") {
-    const results = await runTier1Ensemble(detectors, content, llmCall);
+    const results = await runTier1Ensemble(detectors, content, llmCall, undefined, tier1Options);
     return {
       results,
       aggregated: aggregateTier1(results, thresholds),
@@ -493,7 +746,7 @@ export async function runStagedTier1(params: {
 
   const fast = detectors.filter((d) => fastDetectorIds.includes(d.config.id));
   if (fast.length === 0) {
-    const results = await runTier1Ensemble(detectors, content, llmCall);
+    const results = await runTier1Ensemble(detectors, content, llmCall, undefined, tier1Options);
     return {
       results,
       aggregated: aggregateTier1(results, thresholds),
@@ -502,7 +755,7 @@ export async function runStagedTier1(params: {
     };
   }
 
-  const fastResults = await runTier1Ensemble(fast, content, llmCall);
+  const fastResults = await runTier1Ensemble(fast, content, llmCall, undefined, tier1Options);
   const fastAggregated = aggregateTier1(fastResults, thresholds);
   if (fastAggregated.verdict === "malicious") {
     return {
@@ -527,7 +780,7 @@ export async function runStagedTier1(params: {
   const remaining = detectors.filter((d) => !fastIds.has(d.config.id));
   const remainingResults =
     remaining.length > 0
-      ? await runTier1Ensemble(remaining, content, llmCall)
+      ? await runTier1Ensemble(remaining, content, llmCall, undefined, tier1Options)
       : [];
   const results = [...fastResults, ...remainingResults];
   return {
@@ -551,6 +804,8 @@ export interface ScanOptions {
   weakSignalThreshold?: number;
   sourceTrust?: SourceTrust;
   highRisk?: boolean;
+  tier1TimeoutMs?: number;
+  maxParallelTier1?: number;
 }
 
 /** Approximate token count (4 characters per token, like evolution). */
@@ -680,6 +935,10 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       stage: decision.stage,
       fastDetectorIds: options.fastDetectorIds ?? ESCALATION_DEFAULTS.fastDetectorIds,
       thresholds,
+      tier1Options: {
+        timeoutMs: options.tier1TimeoutMs,
+        maxParallel: options.maxParallelTier1,
+      },
     });
     const t1 = staged.results;
     totalTokens = t1.reduce((acc, r) => acc + r.tokens, 0);

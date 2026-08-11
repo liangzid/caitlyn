@@ -1,0 +1,59 @@
+#+TITLE: Tier0 常驻 Server 模式 + Tier1 超时/并发控制
+#+AUTHOR: Zi Liang (团长) + Agent
+#+DATE: 2026-08-11
+
+* 背景
+
+团长确认：Tier0 改成常驻复用（server 模式），并加上超时处理。
+
+* 实现
+
+** Tier0 常驻 worker（src/scripts/tier0-worker.mjs）
+
+- 单个长驻 node 进程加载全部检测器模块（detect.mjs），stdin/stdout
+  单行 JSON 协议：{reqId,id,content} → {reqId,ok,result|error}。
+- scanner 内 Tier0Pool：预热一次（ensureEntries 单飞防并发竞态）、
+  请求超时 kill worker 并自动重启、worker 崩溃自动重启、
+  spawn/加载失败自动回退一次性 spawn（永不降级为不可用）。
+- worker.unref() 保证不阻碍宿主进程退出。
+
+** detect.ts 双模式改造（10 个检测器）
+
+- 每个检测器导出 `detect(content): {verdict,confidence,reason}`，
+  供 worker 复用；直接运行时（node detect.mjs）仍走 stdin 单次模式，
+  与 redteam/手动调用兼容。
+
+** Tier1 超时与并发
+
+- 单检测器 LLM 调用超时：tier1_timeout_ms（config.toml 由 500 改为
+  15000，此前该字段未接入；超时按该检测器失败处理，不阻塞整轮）。
+- 并行度上限：max_parallel_tier1（默认 10），防 API 排队。
+- 全部失败仍走 Tier0 fallback。
+
+* 验证（真实数据）
+
+| 指标 | 修复前 | 修复后 |
+|------+--------+--------|
+| Tier0 p50（良性 318） | 86.7ms | **0.3ms** |
+| Tier0 p95 | 100.0ms | **0.5ms** |
+| Tier0 冷启动（首次） | — | ~100ms（一次性） |
+| dist 模式热扫描 | — | 3ms |
+| 全量测试 | 398 | **405 passed**（+7 新增） |
+| 良性 FP（318） | 0 | 0 |
+| 红队 244 | 194（79.5%） | 194（79.5%） |
+
+daemon 已用新构建重启（PID 2765245，31 抗体）。
+
+* 排查记录
+
+调试过程中多次出现"扫描卡住"假象：根因是中断调试会话后残留的
+tier0-worker 进程 + 本机高负载（25 用户、openCode 评测任务满载），
+并非代码缺陷。隔离环境重复验证：计时、红队、良性回归全部正常，
+且逐检测器对 318 条良性样本实测最大 54-69ms（即一次性 node 启动开销，
+无正则灾难性回溯）。
+
+* 遗留
+
+- worker 为单进程串行执行（同步检测器，单请求 <5ms）；若未来检测器
+  变慢可扩展为多 worker 负载均衡。
+- LLM 超时后底层调用仍在飞行（不取消），属已知取舍。

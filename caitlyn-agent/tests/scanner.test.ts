@@ -170,6 +170,41 @@ describe("runTier1Ensemble", () => {
     expect(byId.get("ab-a")?.error).toContain("down");
     expect(byId.get("ab-b")?.verdict).toBe("suspicious");
   });
+
+  it("times out a hung detector call without blocking the ensemble", async () => {
+    const detectors = [
+      makeAntibody("ab-slow", "Slow", "readme", "Detect slow.", 1),
+      makeAntibody("ab-fast", "Fast", "readme", "Detect fast.", 1),
+    ];
+    const results = await runTier1Ensemble(detectors, "content", async (system) => {
+      if (system.includes("ab-slow")) {
+        return new Promise<string>(() => {});
+      }
+      return "benign 0.1";
+    }, undefined, { timeoutMs: 50 });
+
+    const byId = new Map(results.map((r) => [r.antibody_id, r]));
+    expect(byId.get("ab-slow")?.error).toContain("timeout after 50ms");
+    expect(byId.get("ab-fast")?.verdict).toBe("benign");
+  });
+
+  it("limits Tier 1 concurrency to maxParallel", async () => {
+    const detectors = Array.from({ length: 5 }, (_, i) =>
+      makeAntibody(`ab-p${i}`, `P${i}`, "readme", "Detect.", 1),
+    );
+    let active = 0;
+    let maxActive = 0;
+    const results = await runTier1Ensemble(detectors, "content", async () => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise((r) => setTimeout(r, 10));
+      active -= 1;
+      return "benign 0.1";
+    }, undefined, { maxParallel: 2 });
+
+    expect(results).toHaveLength(5);
+    expect(maxActive).toBe(2);
+  });
 });
 
 describe("aggregateTier1", () => {

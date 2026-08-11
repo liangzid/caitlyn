@@ -11,7 +11,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && npm run build-antibodies && npm run build-plugins",
     "build-antibodies": "npx tsx src/scripts/precompile-antibodies.ts",
-    "build-plugins": "mkdir -p dist/plugins && cp src/plugins/opencode-plugin.ts dist/plugins/opencode-plugin.js && cp src/plugins/openclaw-plugin.ts dist/plugins/openclaw-plugin.js",
+    "build-plugins": "mkdir -p dist/plugins dist/scripts && cp src/plugins/opencode-plugin.ts dist/plugins/opencode-plugin.js && cp src/plugins/openclaw-plugin.ts dist/plugins/openclaw-plugin.js && cp src/scripts/tier0-worker.mjs dist/scripts/tier0-worker.mjs",
     "audit:library": "npx tsx src/scripts/audit-library.ts",
     "test": "vitest run"
   },

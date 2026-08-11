@@ -35,6 +35,10 @@ export interface ScanningConfig {
   weakSignalThreshold: number;
   sourceTrust: SourceTrust;
   highRisk: boolean;
+  /** 单个 Tier 1 检测器 LLM 调用的超时（毫秒）。 */
+  tier1TimeoutMs: number;
+  /** Tier 1 检测器并行度上限（防 API 排队打爆延迟）。 */
+  maxParallelTier1: number;
 }
 
 export const SCANNING_DEFAULTS: ScanningConfig = {
@@ -47,6 +51,8 @@ export const SCANNING_DEFAULTS: ScanningConfig = {
   weakSignalThreshold: 0.6,
   sourceTrust: "medium",
   highRisk: false,
+  tier1TimeoutMs: 15_000,
+  maxParallelTier1: 10,
 };
 
 // ── Evolution (Immune System 2) Config ─────────────────────────────
@@ -294,6 +300,8 @@ export function loadScanningConfig(configPath?: string): ScanningConfig {
   );
   cfg.sourceTrust = parseEnum(raw, "source_trust", SOURCE_TRUST_VALUES, cfg.sourceTrust);
   cfg.highRisk = parseBoolean(raw, "high_risk", cfg.highRisk);
+  cfg.tier1TimeoutMs = parsePositiveNumber(raw, "tier1_timeout_ms", cfg.tier1TimeoutMs);
+  cfg.maxParallelTier1 = parsePositiveNumber(raw, "max_parallel_tier1", cfg.maxParallelTier1);
 
   return cfg;
 }

@@ -9,7 +9,8 @@
  * {"verdict":"malicious"|"suspicious"|"benign","confidence":0-1,"reason":"..."}
  */
 import { readFileSync } from "node:fs";
-const content = readFileSync(0, "utf-8");
+import { fileURLToPath } from "node:url";
+import * as path from "node:path";
 const signatures = [
     {
         pattern: /(?:you are now|you are|pretend(?: you are| you're)|act as(?: if)?|role-play as|assume the persona of|respond as)\b[^.!?\n]{0,80}\b(?:DAN|STAN|EVIL-GPT|Uncle Frank|Loki|no restrictions|no refusal|uncensored|without alignment|bypass(?:ed|ing)? all|safety checks? (?:bypassed|disabled)|never refuses?|never follows? rules|unethical|elevated privileges|red-team|debug mode|parallel universe|push boundaries|no ethical)/i,
@@ -22,29 +23,33 @@ const signatures = [
     { pattern: /(?:without|with no) (?:alignment|ethical constraints?|restrictions?|limitations?|censorship)/i, weight: 0.7, label: "no-constraints" },
     { pattern: /never (?:refuses?|warns?|hesitates?)/i, weight: 0.7, label: "never-refuse" },
 ];
-let bestMatch = null;
-for (const sig of signatures) {
-    if (sig.pattern.test(content)) {
-        if (!bestMatch || sig.weight > bestMatch.weight) {
-            bestMatch = { weight: sig.weight, label: sig.label };
+export function detect(content) {
+    let bestMatch = null;
+    for (const sig of signatures) {
+        if (sig.pattern.test(content)) {
+            if (!bestMatch || sig.weight > bestMatch.weight) {
+                bestMatch = { weight: sig.weight, label: sig.label };
+            }
         }
     }
+    const confidence = bestMatch?.weight ?? 0;
+    if (confidence >= 0.6) {
+        return {
+            verdict: "malicious",
+            confidence,
+            reason: `Matched signature "${bestMatch.label}" (weight=${bestMatch.weight})`,
+        };
+    }
+    if (confidence > 0.3) {
+        return {
+            verdict: "suspicious",
+            confidence,
+            reason: `Weak signal: "${bestMatch.label}"`,
+        };
+    }
+    return { verdict: "benign", confidence: 0, reason: null };
 }
-const confidence = bestMatch?.weight ?? 0;
-if (confidence >= 0.6) {
-    console.log(JSON.stringify({
-        verdict: "malicious",
-        confidence,
-        reason: `Matched signature "${bestMatch.label}" (weight=${bestMatch.weight})`,
-    }));
-}
-else if (confidence > 0.3) {
-    console.log(JSON.stringify({
-        verdict: "suspicious",
-        confidence,
-        reason: `Weak signal: "${bestMatch.label}"`,
-    }));
-}
-else {
-    console.log(JSON.stringify({ verdict: "benign", confidence: 0, reason: null }));
+const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isDirectRun) {
+    console.log(JSON.stringify(detect(readFileSync(0, "utf-8"))));
 }

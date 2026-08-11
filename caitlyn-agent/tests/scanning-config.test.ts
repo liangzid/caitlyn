@@ -31,6 +31,8 @@ describe("loadScanningConfig", () => {
         "weak_signal_threshold = 0.5",
         'source_trust = "low"',
         "high_risk = true",
+        "tier1_timeout_ms = 8000",
+        "max_parallel_tier1 = 4",
         "",
       ].join("\n"),
     );
@@ -41,6 +43,8 @@ describe("loadScanningConfig", () => {
     expect(cfg.weakSignalThreshold).toBe(0.5);
     expect(cfg.sourceTrust).toBe("low");
     expect(cfg.highRisk).toBe(true);
+    expect(cfg.tier1TimeoutMs).toBe(8000);
+    expect(cfg.maxParallelTier1).toBe(4);
   });
 
   it("falls back to defaults for invalid enum values", () => {

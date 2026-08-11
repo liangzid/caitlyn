@@ -10,7 +10,8 @@ small_model = "deepseek-v4-flash"
 [scanning]
 max_parallel_tier1 = 10
 max_parallel_tier2 = 5
-tier1_timeout_ms = 500
+# 单个 Tier 1 检测器 LLM 调用的超时（毫秒），超时按失败处理、不阻塞整轮
+tier1_timeout_ms = 15000
 tier2_timeout_ms = 3000
 tier3_timeout_ms = 15000
 # Tier 1 分级触发：safe（默认，干净输入跑 fast 子集，弱信号跑全量）|
