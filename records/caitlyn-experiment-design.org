@@ -251,3 +251,31 @@ IMPORTANT/email/forward 等）的 slice，单独报 FPR，放 appendix。
   $0.00469；输入 token 中位约 17.6-17.9k，输出约 100-135。
 - Table 1 Cost 列已填 0.0047 并重新编译；带成本结果存
   results/eval/opencode-none-*.withcost.json。
+
+** opencode 六个 baseline 完成（2026-08-11）
+
+结果文件：results/eval/opencode-{regex_guard,spotlighting,tool_filter,
+pi_detector,llm_judge,llm_judge_fewshot}-*.json（+ withcost）。
+
+| defense | AD action ASR | AD FPR | ASPI action ASR | ASPI FPR | SCB judge ASR |
+|---------+--------------+--------+-----------------+----------+---------------|
+| none    | 16.8 | 0.0 | 18.3 | 0.0 | 27.9 |
+| regex   | 17.6 | 0.0 | 19.4 | 0.0 | 32.5 |
+| llm_judge | 0.0 | 0.0 | 20.4 | 0.0 | 30.8 |
+| fewshot | 0.0 | 0.0 | 17.2 | 0.0 | 32.5 |
+| spotlighting | 13.6 | 0.0 | 17.2 | 0.0 | 27.9 |
+| tool_filter | 11.6 | 21.6 | 22.6 | 25.8 | 24.6 |
+| pi_detector | 3.2 | 57.7 | 18.3 | 9.7 | 24.2 |
+
+要点：
+1. llm_judge/fewshot 在工具通道（AgentDojo）ASR=0、FPR=0，是最强静态
+   基线；CAITLYN 的卖点是同级别安全下的成本/延迟与进化能力。
+2. prompt 通道（ASPI）所有防御基本无效（~17-22%），这是共性边界。
+3. tool_filter 用 21-26% FPR 换 ASR 下降（过度拦截）；pi_detector 更极端
+   （AgentDojo FPR 57.7%）。
+4. 事故与修复：SafeClawBench 某用例写坏 /workspace/opencode.json
+   （directFileOps 非法键），导致 llm_judge SafeClawBench 尾部 66 例与
+   fewshot 全量假失败；修复：每例运行前清理工作区配置
+   （run_benchmark 防护，0f2c35e），重跑受影响数据（llm_judge SCB 修正
+   为 30.8%，002e042；fewshot 完整重跑 bb1df7b）。
+5. Table 1 opencode 七行已回填并编译验证（paper 仓库）。
