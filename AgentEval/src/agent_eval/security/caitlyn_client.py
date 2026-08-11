@@ -129,7 +129,7 @@ class CaitlynClient:
         )
 
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=180) as resp:
                 data = json.loads(resp.read().decode())
         except urllib.error.HTTPError as e:
             error_body = e.read().decode()

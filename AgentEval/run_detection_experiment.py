@@ -569,9 +569,15 @@ def main() -> None:
     total_jobs = len(args.detectors) * len(samples)
     with records_path.open("w", encoding="utf-8") as fh:
         for detector_name in args.detectors:
-            # PI Detector shares a class-level HF pipeline; keep it sequential
-            # to avoid concurrent inference on the same pipeline object.
-            workers = 1 if detector_name == "pi_detector" else args.workers
+            # PI Detector shares a class-level HF pipeline; keep it sequential.
+            # CAITLYN's full Tier-1 ensemble is 17 LLM calls per scan, so cap
+            # client concurrency to avoid API throttling and timeouts.
+            if detector_name == "pi_detector":
+                workers = 1
+            elif detector_name == "caitlyn":
+                workers = 4
+            else:
+                workers = args.workers
             with ThreadPoolExecutor(max_workers=workers) as executor:
                 futures = [
                     executor.submit(

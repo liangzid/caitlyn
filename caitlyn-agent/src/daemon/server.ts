@@ -63,7 +63,7 @@ export interface DaemonStatus {
 /** Maximum accepted request body (1 MiB). */
 const MAX_BODY_BYTES = 1024 * 1024;
 /** Per-request timeout for the local HTTP server. */
-const REQUEST_TIMEOUT_MS = 30_000;
+const REQUEST_TIMEOUT_MS = 180_000;
 
 class BodyTooLargeError extends Error {
   constructor() {
