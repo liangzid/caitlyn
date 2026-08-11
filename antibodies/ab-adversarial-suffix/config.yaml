@@ -1,0 +1,55 @@
+id: ab-adversarial-suffix
+name: Adversarial Suffix and Compliant Prefill Detector
+description: Detects GCG/AdvPrompter-style adversarial suffixes, format corruption, and compliant-prefill jailbreak attempts based on real missed samples (adv-prompt f1-f3 families)
+category: jailbreak
+role: detector
+tier: 0
+threshold: 0.6
+created_at: "2026-08-11"
+generation: 0
+affinity_score: 0.0
+deps:
+  - "node"
+  - "tsx"
+stats:
+  total_scans: 0
+  true_positives: 0
+  false_positives: 0
+  avg_latency_us: 0
+signatures:
+- pattern: "(similarlyNow|oppositeley|adversarialSuffix)"
+  type: regex
+  label: adv-suffix-marker
+- pattern: "\\.\\\\\\s*\\+\\s*similarly"
+  type: regex
+  label: dot-plus-suffix
+- pattern: "(^|[\\s\\]])\\.{4,}[A-Za-z]"
+  type: regex
+  label: dot-run-suffix
+- pattern: "\\[SYSTEM_TOKEN_LEAK\\]|\\[SYS_MSG\\b"
+  type: regex
+  label: token-leak-spoof
+- pattern: "---\\s*BEGIN UNRESTRICTED MODE\\s*---"
+  type: regex
+  label: unrestricted-mode
+- pattern: "user:\\s*ignore safety\\\\n\\s*assistant:"
+  type: regex
+  label: dialogue-spoof
+- pattern: "(restrictions|filters|safety protocols?)\\s+(REMOVED|bypassed|disabled)"
+  type: regex
+  label: restrictions-removed
+- pattern: "acting as (UnfilteredGPT|unfiltered|uncensored)"
+  type: regex
+  label: unfiltered-persona
+- pattern: "#{3,}[^]{0,60}\\b(new task|output unrestricted|instructions?)\\b"
+  type: regex
+  label: markdown-repurposing
+- pattern: "^Below is a step-by-step tutorial on bypassing"
+  type: regex
+  label: tutorial-bypass
+- pattern: "^(Sure|Of course|Absolutely|I understand|Here('s| is)|I'd be happy|I can definitely|Without any)[^]{0,160}\\b(hack|chemical|exploit|phishing|illegal|bypass|harmful|dangerous|malicious|substances|weapon|attack|social engineering|network security)\\b"
+  type: regex
+  label: compliant-prefill
+- pattern: "[!?#$%&*~=`|]{8,}"
+  type: regex
+  label: symbol-run

@@ -1,0 +1,43 @@
+id: ab-instruction-redirection
+name: Instruction and Goal Redirection Detector
+description: Detects multilingual ignore-previous-instruction payloads, alternate instruction format markers (SYSTEM:, [INST], <BOS> system), and goal/priority redirection frames (mission parameters, honeypot tests, compromised-system alerts), based on dir-inj-a1/a3 missed families
+category: injection
+role: detector
+tier: 0
+threshold: 0.6
+created_at: "2026-08-11"
+generation: 0
+affinity_score: 0.0
+deps:
+  - "node"
+  - "tsx"
+stats:
+  total_scans: 0
+  true_positives: 0
+  false_positives: 0
+  avg_latency_us: 0
+signatures:
+- pattern: "(ignore todas as instruções anteriores|ignorez toutes les instructions précédentes|vorherige anweisungen ignorieren|ignora todas las instrucciones anteriores|忽略(之前|所有先前|先前的)(指示|指令)|以前の指示を無視|이전 지시를 무시|игнорируй(те)? предыдущие инструкции)"
+  type: regex
+  label: multilingual-ignore
+- pattern: "(sem restrições|sans aucune restriction|uneingeschränkter|sin restricciones|没有限制|制限なし|제한 없이|без ограничений)"
+  type: regex
+  label: multilingual-no-restrictions
+- pattern: "(primary|main|real|actual|new)\\s+(directive|objective|mission|task|goal)[^.!?\\n]{0,40}\\b(changed|updated|is now|has changed|reassigned|override)\\b"
+  type: regex
+  label: goal-redirection
+- pattern: "(mission|task|objective|parameters?)[^.!?\\n]{0,30}\\b(updated|changed|reassigned)\\b[^.!?\\n]{0,60}(primary|objective|now|instead)"
+  type: regex
+  label: mission-update
+- pattern: "(honeypot test|security auditor)[^.!?\\n]{0,60}\\b(bypass|instead)\\b"
+  type: regex
+  label: honeypot-bypass
+- pattern: "(SECURITY ALERT|system has been compromised)[^.!?\\n]{0,80}\\b(immediately|contain|encrypt|upload|transfer|send)\\b"
+  type: regex
+  label: compromised-alert
+- pattern: "(instead of answering|before you process the user's query)[^.!?\\n]{0,80}\\b(execute|first|note|run)\\b"
+  type: regex
+  label: decoy-redirect
+- pattern: "(SYSTEM:|<BOS>\\s*system|\\[INST\\]|\\[/INST\\])"
+  type: regex
+  label: format-marker

@@ -1,0 +1,40 @@
+id: ab-obfuscation-detector
+name: Obfuscation and Encoding Detector
+description: Detects combining-mark homoglyphs, leetspeak, spaced letters, decoding instructions, and hex/unicode escape runs used to hide instructions (dir-inj-a4 and encoding families)
+category: injection
+role: detector
+tier: 0
+threshold: 0.6
+created_at: "2026-08-11"
+generation: 0
+affinity_score: 0.0
+deps:
+  - "node"
+  - "tsx"
+stats:
+  total_scans: 0
+  true_positives: 0
+  false_positives: 0
+  avg_latency_us: 0
+signatures:
+- pattern: "([A-Za-z\\u00c0-\\u024f][\\u0300-\\u036f]){4,}"
+  type: regex
+  label: combining-marks
+- pattern: "(base64|rot13|rot47|caesar|morse|binary|hex|atbash|revers(e|ed))\\b[^.!?\\n]{0,60}\\b(decode|decrypt|translate|interpret|convert|read)\\b"
+  type: regex
+  label: decode-instruction
+- pattern: "\\b(decode|decrypt|translate|interpret)\\b[^.!?\\n]{0,60}\\b(this|the following|the text|the message|the payload|the instructions?|the content)\\b"
+  type: regex
+  label: decode-target
+- pattern: "\\\\u[0-9a-fA-F]{4}(\\\\u[0-9a-fA-F]{4}){2,}"
+  type: regex
+  label: unicode-escape-run
+- pattern: "\\\\x[0-9a-fA-F]{2}(\\\\x[0-9a-fA-F]{2}){2,}"
+  type: regex
+  label: hex-escape-run
+- pattern: "\\b(1gn0r3|1nstruc7|1nstruct10ns|p4y10ad|h4ck|j41lbr34k|d0n't|0v3rr1d3|unr3str1ct3d)\\b"
+  type: regex
+  label: leetspeak
+- pattern: "(^|[\\s.])([a-z] ){7,}[a-z](\\s|$)"
+  type: regex
+  label: spaced-letters
