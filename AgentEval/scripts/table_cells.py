@@ -51,6 +51,7 @@ def main() -> None:
             "delivered": s["delivered"],
             "delivery_rate": round(s["delivery_rate"], 4),
             "raw_asr": round(s["raw_asr"], 4),
+            "raw_asr_delivered": round(s["raw_asr_delivered"], 4),
             "action_asr": round(s["action_asr"], 4),
             "action_asr_delivered": round(s["action_asr_delivered"], 4),
             "asr_excl_failed": round(s["asr_excl_failed"], 4),
@@ -67,7 +68,7 @@ def main() -> None:
 
     header = (
         "agent defense dataset attacks delivered raw_asr action_asr "
-        "asr_delivered fpr lat_p50 cost_p50 failed asr_excl_failed"
+        "raw_asr_delivered asr_delivered fpr lat_p50 cost_p50 failed asr_excl_failed"
     )
     print(header)
     for r in rows:
@@ -79,7 +80,8 @@ def main() -> None:
             f"{r['agent']:<8} {r['defense']:<16} {r['dataset']:<22} "
             f"{r['attacks']:4d} {r['delivered']:4d} "
             f"{r['raw_asr']:.1%} {r['action_asr']:.1%} "
-            f"{r['action_asr_delivered']:.1%} {fpr:>6} "
+            f"{r['raw_asr_delivered']:.1%} {r['action_asr_delivered']:.1%} "
+            f"{fpr:>6} "
             f"{r['latency_p50_s']:5.1f}s {cost:>9} "
             f"{r['failed']:3d} {r['asr_excl_failed']:.1%}"
         )
