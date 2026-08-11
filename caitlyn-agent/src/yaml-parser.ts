@@ -80,6 +80,10 @@ function tokenize(text: string): Token[] {
   let qQuote: "'" | '"' | null = null;
   let qBuf = "";
   let qLastWasBlank = false;
+  /** True when the previous line of a double-quoted scalar ended with a
+   * backslash, i.e. an escaped line break: no space is folded and the
+   * next line's leading "\ " escape supplies the separator. */
+  let qPrevEndsWithBackslash = false;
 
   for (const rawLine of rawLines) {
     const trimmedStart = rawLine.trimStart();
@@ -91,37 +95,54 @@ function tokenize(text: string): Token[] {
       if (trimmed === "") {
         qBuf += "\n";
         qLastWasBlank = true;
+        qPrevEndsWithBackslash = false;
         continue;
       }
       if (indent > qIndent) {
         // Continuation line; a trailing quote closes the scalar.
         if (qQuote !== null && trimmed.endsWith(qQuote) && trimmed.length > 1) {
-          const content = trimmed.slice(0, -1);
-          if (!qLastWasBlank && qBuf !== "") qBuf += " ";
+          let content = trimmed.slice(0, -1);
+          // Strip a leading "\ " escape (the space survives).
+          if (content.startsWith("\\")) content = content.slice(1);
+          if (!qLastWasBlank && qBuf !== "" && !qPrevEndsWithBackslash) qBuf += " ";
           qBuf += content;
           tokens.push({
             indent: qIndent,
             kind: "key-scalar",
             key: qKey,
-            value: qBuf,
+            value: qQuote === '"' ? coerceValue(`"${qBuf}"`) : qBuf,
           });
           qKey = null;
           qQuote = null;
           qBuf = "";
           qLastWasBlank = false;
+          qPrevEndsWithBackslash = false;
           continue;
         }
-        if (!qLastWasBlank && qBuf !== "") qBuf += " ";
-        qBuf += trimmed;
+        let content = trimmed;
+        // Strip a leading "\ " escape (the escaped space stays as " ").
+        if (content.startsWith("\\")) content = content.slice(1);
+        // A trailing backslash is an escaped line break: no fold space.
+        const endsWithContinuation = content.endsWith("\\");
+        if (endsWithContinuation) content = content.slice(0, -1);
+        if (!qLastWasBlank && qBuf !== "" && !qPrevEndsWithBackslash) qBuf += " ";
+        qBuf += content;
         qLastWasBlank = false;
+        qPrevEndsWithBackslash = endsWithContinuation;
         continue;
       }
       // Dedented non-blank line: scalar was unterminated — emit what we have.
-      tokens.push({ indent: qIndent, kind: "key-scalar", key: qKey, value: qBuf });
+      tokens.push({
+        indent: qIndent,
+        kind: "key-scalar",
+        key: qKey,
+        value: qQuote === '"' ? coerceValue(`"${qBuf}"`) : qBuf,
+      });
       qKey = null;
       qQuote = null;
       qBuf = "";
       qLastWasBlank = false;
+      qPrevEndsWithBackslash = false;
       // Fall through to process current line.
     }
 
@@ -212,6 +233,8 @@ function tokenize(text: string): Token[] {
           qQuote = quote;
           qBuf = rawValue.slice(1);
           qLastWasBlank = false;
+          qPrevEndsWithBackslash = qBuf.endsWith("\\");
+          if (qPrevEndsWithBackslash) qBuf = qBuf.slice(0, -1);
         } else {
           tokens.push({ indent, kind: "key-scalar", key, value: coerceValue(rawValue) });
         }
@@ -227,7 +250,12 @@ function tokenize(text: string): Token[] {
     tokens.push({ indent: mlIndent, kind: "key-scalar", key: mlKey, value: mlBuf });
   }
   if (qKey !== null) {
-    tokens.push({ indent: qIndent, kind: "key-scalar", key: qKey, value: qBuf });
+    tokens.push({
+      indent: qIndent,
+      kind: "key-scalar",
+      key: qKey,
+      value: qQuote === '"' ? coerceValue(`"${qBuf}"`) : qBuf,
+    });
   }
 
   return tokens;

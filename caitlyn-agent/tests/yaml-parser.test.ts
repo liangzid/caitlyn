@@ -145,6 +145,27 @@ describe("parseYaml", () => {
     expect(result.prompt).toBe("first second");
   });
 
+  it("unescapes \\n inside double-quoted multi-line scalars", () => {
+    const raw = [
+      'prompt: "line one\\nline two',
+      '  line three\\nline four"',
+    ].join("\n");
+    const result = parseYaml(raw);
+    expect(result.prompt).toBe("line one\nline two line three\nline four");
+  });
+
+  it("handles YAML backslash line continuations with \\ space escapes", () => {
+    // Exact style used by antibody config.yaml prompt fields:
+    // lines end with "\" (escaped line break, no fold space) and the next
+    // line starts with "\ " (escaped space).
+    const raw = [
+      'prompt: "line one\\nline two\\',
+      '  \\ line three\\nline four"',
+    ].join("\n");
+    const result = parseYaml(raw);
+    expect(result.prompt).toBe("line one\nline two line three\nline four");
+  });
+
   it("keeps multi-line quoted scalars out of sibling keys", () => {
     const raw = [
       "prompt: 'multi",
