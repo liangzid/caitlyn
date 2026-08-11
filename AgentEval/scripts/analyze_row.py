@@ -167,7 +167,7 @@ def main() -> None:
             f"action ASR(delivered)={s['action_asr_delivered']:.1%} "
             f"FPR={fpr_str} "
             f"lat p50={s['latency_p50_s']:.1f}s"
-            f" agent$ p50={s['agent_cost_p50_usd']}"
+            f" agent cost p50={s['agent_cost_p50_usd']}"
         )
         for k, v in s["per_subclass"].items():
             print(
