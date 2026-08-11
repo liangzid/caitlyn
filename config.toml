@@ -8,7 +8,7 @@ base_url = "https://openrouter.ai/api/v1"
 small_model = "deepseek/deepseek-v4-pro"
 
 [scanning]
-max_parallel_tier1 = 5
+max_parallel_tier1 = 10
 max_parallel_tier2 = 5
 # 单个 Tier 1 检测器 LLM 调用的超时（毫秒），超时按失败处理、不阻塞整轮
 # 全量 ensemble 有 17 个检测器，超时放宽到 120s；HTTP server 同步放宽

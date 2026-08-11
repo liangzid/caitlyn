@@ -575,7 +575,7 @@ def main() -> None:
             if detector_name == "pi_detector":
                 workers = 1
             elif detector_name == "caitlyn":
-                workers = 4
+                workers = 8
             else:
                 workers = args.workers
             with ThreadPoolExecutor(max_workers=workers) as executor:
