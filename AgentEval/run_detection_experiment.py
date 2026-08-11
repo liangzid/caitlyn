@@ -552,7 +552,7 @@ def main() -> None:
         "caitlyn_port": args.caitlyn_port,
         "caitlyn_mode": args.caitlyn_mode,
         "caitlyn_daemon_model": args.caitlyn_daemon_model,
-        "max_tokens": 256,
+        "max_tokens": 2048,
         "workers": args.workers,
         "agentdefense_size": args.agentdefense_size,
         "limit_attacks": args.limit_attacks,

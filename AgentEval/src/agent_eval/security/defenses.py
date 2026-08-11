@@ -211,15 +211,40 @@ def _parse_json_response(text: str) -> dict:
     """Parse JSON from LLM response, handling markdown code fences.
 
     Some models (DeepSeek) wrap JSON in ```json ... ``` blocks.
-    This strips those before parsing.
+    Reasoning models sometimes prefix or truncate the JSON, so we also
+    extract the first balanced {...} block and fall back to regex fields.
     """
     import re
-    text = text.strip()
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("empty LLM response")
     if text.startswith("```"):
         text = re.sub(r'^```(?:json)?\s*\n?', '', text)
         text = re.sub(r'\n?```\s*$', '', text)
         text = text.strip()
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end > start:
+            candidate = text[start : end + 1]
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass
+        verdict = re.search(r'"verdict"\s*:\s*"([^"]+)"', text)
+        confidence = re.search(r'"confidence"\s*:\s*([0-9.]+)', text)
+        reasoning = re.search(
+            r'"reasoning"\s*:\s*"((?:[^"\\]|\\.)*)"', text
+        )
+        if verdict:
+            return {
+                "verdict": verdict.group(1),
+                "confidence": float(confidence.group(1)) if confidence else 0.0,
+                "reasoning": reasoning.group(1) if reasoning else "",
+            }
+        raise
 
 class LLMJudgeDefense(Defense):
     """Single LLM call to classify tool output as safe or malicious.
@@ -294,7 +319,7 @@ class LLMJudgeDefense(Defense):
             "temperature": 0.0,
             # KEYPOINT-REVIEW: cap output so a reasoning model cannot emit
             # multi-thousand-token JSON and blow up cost/latency.
-            "max_tokens": 256,
+            "max_tokens": 2048,
         }).encode("utf-8")
 
         req = urllib.request.Request(
@@ -375,7 +400,7 @@ class LLMJudgeFewshotDefense(LLMJudgeDefense):
             ],
             "temperature": 0.0,
             # KEYPOINT-REVIEW: same output cap as the non-fewshot judge.
-            "max_tokens": 256,
+            "max_tokens": 2048,
         }).encode("utf-8")
 
         req = urllib.request.Request(

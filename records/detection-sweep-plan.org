@@ -96,3 +96,31 @@ uv run python run_detection_experiment.py \
     fewshot 71.6/2.0、pi 45.2/0、caitlyn 72.4/6.0
 - 图已生成：results/detection_formal/figures/
   （detection_<dataset>_roc_pr.pdf/png + detection_pareto.pdf/png）。
+
+* 新 daemon 重跑结果（2026-08-11）
+
+团长剧烈更新 daemon detection（Tier0 常驻 worker + 31 抗体 + Tier1
+超时/并发控制 + escalation policy），detection-only sweep 全量重跑。
+
+- 运行：results/detection_formal_20260811_v2/（5415 条记录，17 条
+  错误，其中 15 条 CAITLYN Tier1 超时按 fail-open 记 miss，4 条
+  LLM-Judge 空响应按 miss 记）
+- 模型：CAITLYN daemon = deepseek-v4-pro（DeepSeek API）；
+  LLM-Judge/Fewshot = deepseek/deepseek-v4-pro（OpenRouter）；
+  LLM-Judge max_tokens=2048 + 容错 JSON 解析
+- 耗时约 60 分钟；费用：llm_judge $0.57、fewshot $0.72、
+  caitlyn（按 token 估算）$0.32
+- 关键指标（TPR @ 默认阈值 / FPR on 共享 benign）：
+  - AgentDojo：regex 0/0、llm_judge 100/0、fewshot 99.6/0、
+    pi 96.0/0、caitlyn 54.8/1.6
+  - ASPI：regex 0/0、llm_judge 69.9/0、fewshot 65.6/0、
+    pi 29.0/0、caitlyn 53.8/1.6
+  - SafeClawBench：regex 0/0、llm_judge 38.3/0、fewshot 34.2/0、
+    pi 14.6/0、caitlyn 40.0/1.6
+  - AgentDefense-S250：regex 8.8/0、llm_judge 63.6/0、
+    fewshot 58.4/0、pi 45.2/0、caitlyn 50.8/1.6
+- AUROC/AUPRC（CAITLYN）：0.766/0.866、0.760/0.755、0.690/0.801、
+  0.744/0.841，四个数据集全部最高。
+- CAITLYN 默认阈值 TPR 明显低于 LLM-Judge，但 FPR 从 6% 降到 1.6%；
+  优势主要在 AUROC/AUPRC 排序质量，静态默认点 Pareto 不占优。
+- 论文 Table 5 与 Figure 4/5 已用新结果更新并编译。
