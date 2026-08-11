@@ -112,3 +112,13 @@ def test_attack_delivered_channel_aware() -> None:
     assert attack_delivered({
         "source_dataset": "safeclawbench", "mcp_tool_calls": [],
     }) is True
+    assert attack_delivered({
+        "source_dataset": "agentdojo",
+        "injection_delivered": False,
+        "mcp_tool_calls": [{"injection_served": True}],
+    }) is False
+    assert attack_delivered({
+        "source_dataset": "aspi",
+        "injection_delivered": True,
+        "mcp_tool_calls": [],
+    }) is True

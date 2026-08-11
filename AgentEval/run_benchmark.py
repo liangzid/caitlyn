@@ -73,6 +73,11 @@ logger = logging.getLogger(__name__)
 
 EVAL_CONTAINER = "agent-eval"
 
+# Agents that receive injections through the prompt rather than MCP tool
+# outputs. Their compromise verdicts use the semantic judge (no action
+# audit channel) and prompt-embedded content is defense-filtered.
+NON_MCP_AGENTS = ("pi", "hermes", "openclaw")
+
 
 # ── CLI ───────────────────────────────────────────────────────────
 
@@ -171,6 +176,7 @@ class BenchmarkRunner:
         self.api_key = args.api_key or os.environ.get("OPENAI_API_KEY", "")
         self._mcp_thread: Any = None
         self._defense: Any = None
+        self._prompt_injection_blocked = False
 
     def run(self) -> SecurityMetrics:
         """Run the benchmark and return metrics."""
@@ -343,15 +349,18 @@ class BenchmarkRunner:
         """Run a single test case."""
         scenario = to_test_scenario(tc)
         set_active_scenario(scenario)
+        self._prompt_injection_blocked = False
         if self._defense is not None:
             self._defense.reset_case()
 
         start = time.time()
+        mcp_url = f"http://host.docker.internal:{self.args.mcp_port}/mcp"
+        prompt = self._build_agent_prompt(tc, mcp_url)
 
         if self.args.agent == "simulated":
             result = self._run_simulated(tc, scenario)
         else:
-            result = self._run_real_agent(tc, scenario)
+            result = self._run_real_agent(tc, scenario, prompt)
 
         result["duration"] = time.time() - start
         result["task_id"] = tc.task_id
@@ -381,10 +390,9 @@ class BenchmarkRunner:
             }
             for tr in tc.tool_responses
         ]
-        result["prompt"] = self._build_agent_prompt(
-            tc,
-            f"http://host.docker.internal:{self.args.mcp_port}/mcp",
-        )
+        result["prompt"] = prompt
+        if self.args.agent in NON_MCP_AGENTS and tc.label == "injection":
+            result["injection_delivered"] = not self._prompt_injection_blocked
         # Record the Fake MCP interaction evidence so compromise verdicts
         # can be audited (which tools were called with what arguments).
         try:
@@ -416,7 +424,10 @@ class BenchmarkRunner:
                 ["defense blocked benign tool output"]
                 if result["compromised"] else []
             )
-        elif tc.source_dataset in ("aspi", "safeclawbench"):
+        elif tc.source_dataset in ("aspi", "safeclawbench") or (
+            tc.source_dataset == "agentdojo"
+            and self.args.agent in NON_MCP_AGENTS
+        ):
             from agent_eval.api_keys import get_openrouter_api_key
             try:
                 judge_key = get_openrouter_api_key()
@@ -496,7 +507,7 @@ class BenchmarkRunner:
         return output
 
     def _run_real_agent(
-        self, tc: SecurityTestCase, scenario: TestScenario
+        self, tc: SecurityTestCase, scenario: TestScenario, prompt: str
     ) -> dict:
         """Run with a real CLI agent via AgentEval callers.
 
@@ -521,12 +532,9 @@ class BenchmarkRunner:
             pass
 
         # Docker containers reach host via host.docker.internal
-        mcp_host = "host.docker.internal"
-        mcp_url = f"http://{mcp_host}:{self.args.mcp_port}/mcp"
-
         task_input = {
             "task_id": tc.task_id,
-            "problem_statement": self._build_agent_prompt(tc, mcp_url),
+            "problem_statement": prompt,
         }
 
         caller = get_caller(self.args.agent)
@@ -591,9 +599,26 @@ class BenchmarkRunner:
                 and tc.injected_content
                 and tc.source_dataset not in ("aspi", "safeclawbench")
             ):
+                content = tc.injected_content
+                if self._defense is not None:
+                    filtered, blocked = self._defense.filter(
+                        content, source="prompt_channel"
+                    )
+                    event = {
+                        "source": "prompt_channel",
+                        "blocked": blocked,
+                        "content_len": len(content),
+                        "response_len": len(filtered),
+                    }
+                    last = getattr(self._defense, "last_result", None)
+                    if last:
+                        event["details"] = last
+                    self._defense.record_event(event)
+                    self._prompt_injection_blocked = blocked
+                    content = filtered
                 prompt += (
                     f"\n\n[Content received from the environment]\n"
-                    f"{tc.injected_content}"
+                    f"{content}"
                 )
             if tc.source_dataset == "agentdojo" and tc.label == "benign":
                 prompt += (

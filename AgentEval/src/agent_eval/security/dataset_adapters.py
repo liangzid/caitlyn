@@ -74,6 +74,9 @@ def attack_delivered(result: dict) -> bool:
     (ASPI, SafeClawBench) carry the attack inside the prompt itself, so
     delivery is true by construction.
     """
+    explicit = result.get("injection_delivered")
+    if explicit is not None:
+        return bool(explicit)
     if result.get("source_dataset") in ("aspi", "safeclawbench"):
         return True
     return any(
