@@ -87,6 +87,12 @@ class OpenClawCaller(AgentCaller):
             "--model", f"openrouter/{model}",
             "--message", prompt,
         ]
+        # Parallel eval workers can run on isolated agents (independent
+        # workspace and session storage) to avoid cross-worker file writes.
+        agent_id = os.environ.get("OPENCLAW_EVAL_AGENT", "")
+        if agent_id:
+            cmd.insert(cmd.index("--local") + 1, "--agent")
+            cmd.insert(cmd.index("--local") + 2, agent_id)
         result = _run_command(cmd, task_input.get("task_id", ""), timeout)
         if result.success and result.output:
             try:
