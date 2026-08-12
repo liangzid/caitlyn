@@ -279,3 +279,25 @@ pi_detector,llm_judge,llm_judge_fewshot}-*.json（+ withcost）。
    （run_benchmark 防护，0f2c35e），重跑受影响数据（llm_judge SCB 修正
    为 30.8%，002e042；fewshot 完整重跑 bb1df7b）。
 5. Table 1 opencode 七行已回填并编译验证（paper 仓库）。
+
+** pi 七行完成（2026-08-12）
+
+pi 无 MCP 工具通道：注入经 prompt 拼装投递，防御在 prompt 层过滤注入
+内容（run_benchmark 改造，1b25a8a）；ASR 一律为语义 judge 口径；
+成本来自 pi session JSONL（attach_pi_cost.py，100% 匹配，每例
+$0.0004-0.0009，远低于 opencode）。
+
+| defense | AD judge ASR | ASPI | SCB | 备注 |
+|---------+--------------+------+-----+------|
+| none    | 8.0 | 9.7 | 21.7 | |
+| regex   | 6.8 | 7.5 | 25.8 | |
+| llm_judge | 0.4 | 6.5 | 24.6 | AD delivery 0%（全拦） |
+| fewshot | 0.0 | 7.5 | 24.2 | AD delivery 0%（全拦） |
+| spotlighting | 0.0 | 6.5 | 27.5 | AD 0% |
+| tool_filter | 5.6 | 8.6 | 22.1 | 无工具可拦，近似 none |
+| pi_detector | 0.4 | 8.6 | 26.7 | AD delivery 4%（拦 240/250） |
+
+要点：prompt 通道下 LLM judge 系与 DeBERTa 都能几乎全拦 AgentDojo
+注入且 FPR=0（prompt 文本的 <INFORMATION> 特征明显）；ASPI 注入在
+problem_statement 内、防御不可见，各防御无效（~6.5-9.7%）。
+Table 1 pi 七行已回填并编译验证（paper 仓库）。
