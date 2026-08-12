@@ -45,7 +45,10 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 # Order: Claude Code → Codex CLI → OpenCode → OpenClaw → Hermes → Pi
 
 RUN npm install -g @anthropic-ai/claude-code 2>&1 | tail -3
-RUN npm install -g @openai/codex 2>&1 | tail -3
+RUN npm install -g @openai/codex && \
+    npm install -g "@openai/codex-linux-x64@npm:@openai/codex@$(node -p "require('/usr/lib/node_modules/@openai/codex/package.json').version")-linux-x64" && \
+    rm -rf /usr/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-x64 && \
+    codex --version
 RUN npm install -g opencode-ai 2>&1 | tail -3
 RUN npm install -g openclaw@latest 2>&1 | tail -3
 RUN pip install --break-system-packages hermes-agent 2>&1 | tail -3

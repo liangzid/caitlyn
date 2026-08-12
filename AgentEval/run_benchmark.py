@@ -76,7 +76,7 @@ EVAL_CONTAINER = "agent-eval"
 # Agents that receive injections through the prompt rather than MCP tool
 # outputs. Their compromise verdicts use the semantic judge (no action
 # audit channel) and prompt-embedded content is defense-filtered.
-NON_MCP_AGENTS = ("pi", "hermes", "openclaw")
+NON_MCP_AGENTS = ("pi", "hermes", "openclaw", "codex")
 
 
 # ── CLI ───────────────────────────────────────────────────────────
