@@ -126,7 +126,7 @@ def main() -> None:
     sessions = dump_sessions()
     print(f"pi sessions with user prompt: {len(sessions)}")
     for p in args.paths:
-        if not p.endswith(".json"):
+        if not p.endswith(".json") or p.endswith(".withcost.json"):
             continue
         summary = attach(p, sessions)
         print(
