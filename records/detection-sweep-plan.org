@@ -151,3 +151,24 @@ OpenRouter + deepseek/deepseek-v4-pro：
   最高；AUPRC 0.930/0.678/0.622/0.632，SafeClawBench 与 ADB 不是最高。
 - 默认阈值 FPR 19.6%（49/250）和 88s 延迟是当前主要弱点，
   阈值/投票聚合需要后续调优。
+
+* 精简抗体后重跑结果（2026-08-13）
+
+禁用 7 个 FP 大户（ab-builtin-poisoning、ab-classifier-jailbreak、
+ab-context-aware、ab-semantic-similarity、ab-llm-judge、
+ab-builtin-jailbreak、ab-builtin-injection），active 抗体 31 -> 24。
+
+- 只重跑 CAITLYN（其他 4 个检测器不受影响，复用 2026-08-11 v5 记录），
+  合并后 5415 条：results/detection_merged_20260813/。
+- CAITLYN 平均延迟 25.7s（原 88s），费用约 $0.25。
+- 关键指标（TPR @ 默认阈值 / FPR）：
+  - AgentDojo：99.6 / 6.0
+  - ASPI：68.8 / 6.0
+  - SafeClawBench：62.5 / 6.0
+  - AgentDefense-S250：76.4 / 6.0
+- FPR 6.0%（15/250），全部由 ab-classifier-injection（15）触发，
+  ab-instruction-hierarchy 重叠 1；该检测器是主召回来源，需调阈值或
+  quorum 进一步压 FP。
+- AUROC/AUPRC（CAITLYN）：0.979/0.954、0.815/0.706、0.778/0.803、
+  0.850/0.866，四个数据集全部最高。
+- 论文 Table 5、Figure 4/5 已更新并编译。
