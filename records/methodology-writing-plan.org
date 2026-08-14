@@ -180,3 +180,33 @@ overfull; 风格自审通过 (无 em dash/分号/禁用词/缩写/所有格,
    FPR 6.0, 两处必须统一口径。
 3. remote paper_zeri 已迁至 paper_caitlyn, 未改 set-url, 待团长确认。
 4. 旧三文件仍留盘未删, 可回退。
+
+* 去强行数学化 (2026-08-14 第六轮, 团长意见)
+
+团长原则: 不强行数学化, 不是所有工作都适合数学语言。写公式时符号
+不用最基本单字, 所有 notation 必须有意义。延迟统一按 0.3ms 措辞。
+FPR 先搁置 (结果未齐)。远端地址不动, 直接 git push origin master。
+
+落实 (commit 2f1624e):
+- 3.1 去掉 C/V/c/δ/ε 记号, envelope 三条义务全部改成叙述。
+- 3.2 去掉 skill tuple 方程与 detect 合同方程, 字段改为 manifest 键名
+  (\texttt{id/category/tier/role/threshold/prompt/signatures/parent\_id/
+  generation}), 与 Figure 1 对齐。a ≺ s 改成 defeat record 叙述。
+- 3.3 去掉 esc() 方程与 cost(c)=κ0+q(c)κ1 方程, 成本关系改为叙述,
+  specialization thesis 保留论点。
+- 3.4 保留唯一一个公式: Pass(candidate, triggers, benign), 用有意义
+  符号, fire(x) 在文中定义, FP 界直接写 ≤1 (五个良性样本最多 1 个),
+  去掉 X+/X-/s'/ε。verifier/invariant 相应改写。
+- 3.4 score 公式去掉, 改为叙述 (recent hits + decay + FP penalty)。
+- Algorithm 1 的 θ_r 改为 r.threshold。
+- intro: microsecond → sub-millisecond, Tier 0 写明 median hot-path
+  latency 0.3 ms。全仓无 microsecond 残留。
+
+校验: latexmk 15 页, 0 error, 0 undefined ref, 无新增 overfull,
+风格自审通过。已推送 master。
+
+* 仍开放
+
+1. FPR 口径 (evaluation 0% vs sweep 6.0): 团长决定搁置, 等结果补齐。
+2. remote 地址: 团长决定不动, 沿用 paper_zeri 推送到 master。
+3. 框架图 TODO 仍在 methodology 顶部, 待团长手绘。
