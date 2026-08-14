@@ -1,0 +1,182 @@
+#+TITLE: Methodology 撰写计划与待对齐事项
+#+AUTHOR: Zi Liang (团长) + Agent
+#+DATE: 2026-08-14
+
+* 任务
+
+按 introduction 的新口径重写 ~/paper_caitlyn/sections/ 下的 methodology,
+四部分: (1) 攻击/防御 = 可执行 skill 的 spec, (2) CEGIS 启发的合成回路,
+(3) 三层分类, (4) 运行时/中间件工程细节。框架图由团长稍后手绘补充,
+本部分只留占位注释。
+
+* 当前状态核对 (基于文件与代码, 非猜测)
+
+- introduction 已是 System I/II + Tier 0/1/2 + CEGIS 生成-验证回路。
+- 旧 system-design/initial-library/evolution-tree 仍是两段扫描 + GA
+  (选择/交叉/变异/适应度/成本触发), 与 intro 冲突。
+- 仓库 caitlyn-agent 的进化实现已更新为
+  generate -> deterministic verify -> independent review -> lessons ->
+  shadow -> DAG 谱系/退役, 与 intro 的 CEGIS 叙事基本吻合。
+- 技能数三处不一致: intro 写 three foundational defense skills,
+  abstract 写 3 root defense entries, 仓库 24 个 active roots
+  (index.json) + 6 个 attack entries (antigens/)。
+- Tier 语义冲突: 仓库 config tier=0/1/2 是检测器成本档位,
+  intro 的 Tier 2 = System II synthesizer。
+- 实际工程设施: localhost HTTP daemon (scan/watch/status),
+  before/after agent hooks (adapter), FS watcher (quarantine),
+  verdict policy (allow/block/flag), escalation gate (none/fast/full),
+  Tier0 常驻 worker (热扫描 p50 0.3ms, p95 0.5ms),
+  Tier1 单检测器超时 15s + 并行上限 10,
+ 进化 token 预算 40k/run + cooldown 60min + daily limit 10,
+ 确定性验证器 (must-detect 全覆盖 + benign FP 上限 + ReDoS 拒收/超时),
+ 独立评审 (accept/revise/reject) + 一致性抽查,
+ 教训库 (schema/来源白名单, 无原始文本),
+ shadow 观察 (7 天或 50 次扫描, 零 FP + 至少一次确认命中才转 active),
+ DAG 退役 (activeCap 256, score = hits - 5*FP, 衰减/退役/归档)。
+
+* 工作假设 (未获反对前按此推进)
+
+1. 文件结构采用方案 A: 合并为 sections/methodology.tex,
+   main.tex 的三个 \input 换成一个。旧文件保留在 git 历史。
+2. 词汇统一为 skill / attack entry, 全篇弃用 antibody/antigen。
+3. Tier 0/1 构成 System I 在线扫描, Tier 2 承载 System II
+   (后台合成回路 + 行为监控类 non_detector 技能)。
+
+* 拟定的分节大纲
+
+** Methodology 引言段
+- 总起: skill 库 + System I/II + 三层映射。
+- 留框架图占位注释 (团长手绘)。
+
+** Defense and Attack Skill Specification (对应部分 1)
+- skill = 自包含文件夹: config.yaml + README + 可执行体。
+- defense skill 字段取自仓库: id/name/parent_id/category/tier/
+  threshold/description/prompt/role/signatures/stats/deps/generation,
+  可执行契约 = detect 导出 + 单行 JSON verdict。
+- attack entry 字段: id/name/category/injection_point/target_agent/
+  attack_template/escapes + payload.txt + README。
+- escapes = 反例对防御的硬链接, 驱动定向合成。
+- 为什么用文件夹而非数据库: 可人工审计/自包含/谱系。
+- 图: skill spec 的 LaTeX listing (defense 左 / attack 右)。
+
+** Three-Tier Runtime Architecture (对应部分 3, 含强耦合的工程点)
+- Tier 0 microsecond gatekeeper: 常驻 worker + 进程内签名引擎,
+  沙箱契约, 超时/崩溃 fail-open。
+- Tier 1 single-token evaluator: escalation gate (代码化, 非 LLM 调用),
+  fast/full 子集, 超时 + 并行上限, 单行 verdict。
+- Tier 2 System II synthesizer + behavioral monitor:
+  re-execution verifier / self-examination 等 post-hoc 检查,
+  宿主为后台合成回路 (交叉引用 CEGIS 小节)。
+- Algorithm 1: 带 escalation 的 System I 扫描管线。
+- 耦合处理说明: tier 定义为部署角色, 机制按 tier 就地展开,
+  跨 tier 的横切机制集中在工程小节。
+
+** Counterexample-Guided Skill Synthesis (对应部分 2, 严格跟 intro)
+- missed payload = counterexample = 正规范; 良性池 = 负约束。
+- Algorithm 2: generate -> verify -> review -> lessons 回路。
+- 生成器只读结构化画像/特征 + DAG 元数据, 原始触发文本不进入
+  生成器 prompt (L1 数据边界)。
+- 确定性验证器: must-detect 全部触发样本 + FP 不超过上限 +
+  ReDoS 静态拒收/子进程超时。
+- 独立评审 accept/revise/reject, revise 进入下一轮定向微调
+  (SHM fallback 作为多样性机制, 不再称 GA)。
+- 谱系: parentIds 构成的 DAG, generation/status 可追溯。
+- shadow 上线 + 退役经济性。
+- 图: 技能谱系 DAG (替代旧 evolution tree 图)。
+
+** Runtime Middleware and Cost Engineering (对应部分 4)
+- 部署面: localhost daemon, before/after hooks + adapter,
+  FS watcher + quarantine, verdict policy, fail-open。
+- 延迟/成本控制: worker pool 冷热启动, escalation, 超时/并行上限,
+  token 预算, cooldown/daily limit, 截断保前缀后缀。
+- 表: 工程机制 -> 目的 (替代旧 Tool Set 表)。
+
+* 待团长拍板的开放问题 (一次只问一个)
+
+1. 种子库口径: 24 (仓库实际) vs 3 (intro 现文) vs 三族 24 技能。
+   推荐: 全文统一为 24, 并把 intro/abstract 的 three 改为 24。
+2. 旧三文件的去留与 main.tex 是否随方案 A 一并改动 (已按 A 假设)。
+
+* 完成状态 (2026-08-14 第二/三轮)
+
+- 已新建 ~/paper_caitlyn/sections/methodology.tex (549 行内, 4 个
+  subsection 对应四部分), main.tex 三个 \input 合并为一个。
+- 口径落地: 3 个 foundational detectors 为根, 全库 24 active skills
+  + 6 attack entries, 与 intro 的 three foundational 兼容, 未改 intro。
+- 图/伪代码: Figure 1 skill spec 双栏 listing, Algorithm 1 System I
+  扫描+escalation, Algorithm 2 CEGIS 回路, Figure 2 谱系 DAG,
+  Table 1/2 种子库与攻击语料, Table 3 工程机制。框架图留 TODO 注释。
+- 实测数字仅用真实数据: Tier0 热路径 p50 0.3ms / p95 0.5ms
+  (318 良性池), 冷启动约 100ms。
+- 编译: latexmk 通过, 15 页, 正文至 Conclusion 约 8-9 页,
+  无新增 overfull, 无未定义引用。
+- 风格自审: 无 em dash / 分号 / 禁用词 / 缩写 / 所有格, 数学用
+  \begin{equation}, 未在 enumerate 首项加粗。
+- 已提交并推送 9ad3113 (master)。
+
+* 遗留给团长
+
+1. intro 的 Tier 0 标签是 microsecond gatekeeper, 实测 p50 0.3ms
+   属 sub-millisecond, methodology 现用 sub-millisecond 保真,
+   待团长决定是否回改 intro 或接受。
+2. abstract/conclusion/discussion/related-work/evaluation 仍是旧口径
+   (two-tier / GA crossover / antibody 词汇), 待统一。
+3. 旧三文件 (system-design/initial-library/evolution-tree) 已不在
+   编译路径, 留盘待删。
+4. paper_zeri 远端已迁移至 paper_caitlyn, 建议 git remote set-url。
+
+* 跨文件口径统一 (2026-08-14 第四轮)
+
+- abstract (main.tex), conclusion, related-work, discussion,
+  evaluation 已改为 skill library / System I-II / 三层 / CEGIS 口径。
+- 同步清理这些文件中违反写作规则的 em dash、分号、所有格与缩写。
+- 提交并推送 01c7348 (master)。
+- 剩余数据问题待团长: evaluation 声称 benign 任务 0% FPR, 而
+  table-main 检测 sweep 中 CAITLYN FPR 为 6.0, 两处数字需统一口径。
+- 旧三文件仍留盘 (system-design/initial-library/evolution-tree),
+  未删除以保持可回退。
+
+* Methodology 深度改写 (2026-08-14 第五轮, 团长 major revision)
+
+团长对上一版的评价: 引言散, 3.1--3.4 平铺直叙, 像低劣技术报告而非
+学术论文。要求参考其旧作风格做彻底 major revision:
+- VIA (arXiv:2509.23041), ArxivRoll (arXiv:2507.19219),
+  LoRD (arXiv:2409.02718)。
+
+已读三篇的方法章节并归纳其共同写法, 作为改写依据 (不全盘照抄):
+- 章节开头先立中心张力/问题, 再解释为什么旧方案不行。
+- 先给 formal setup (记号 + 目标/约束), 再由形式化推导出设计分解。
+- 用显式问题 (How does ...?) 组织每个设计决策。
+- 每个机制都绑定其 enforce 的性质, 用方程/不变量作锚点。
+
+新版 structure (全部替换 9ad3113 的 methodology.tex):
+- 开篇: representation 高于 detector tuning, 双系统一库 (System I
+  执行, System II 验证并扩展), 修掉 "passes System I" 歧义。
+- 3.1 Design Overview and Formal Setup: C/V/δ/ε/后代义务 envelope,
+  三条设计决策只起组织作用, 不再四件套罗列。
+- 3.2 Skills as the Unit of Defense Knowledge: skill tuple,
+  a ≺ s defeat relation + synthesis target 定义, three consumers
+  论据, Figure 1 + 两表 + walk-through。
+- 3.3 The Two-Speed Runtime: 两个驱动问题, Tier 0/1/2, esc()
+  确定性 gate, 新加 cost(c) = κ0 + q(c)·κ1 与 specialization thesis
+  (库推动 q 而非流量), Algorithm 1。
+- 3.4 Counterexample-Guided Skill Synthesis: Pass 谓词 (split 方程),
+  generator data boundary, deterministic verifier (ε 落到 5 良性样本
+  最多 1 FP), independent review, shadow, 新加 Invariant (library
+  admission), score 经济, Algorithm 2 + 谱系 DAG。
+- 3.5 Deployment Middleware and Cost Control: daemon/hooks/watcher +
+  机制-性质表。
+- 所有 label/图表编号保留, 跨文件引用不破。
+
+校验: latexmk 通过 (16 页), 0 error, 0 undefined ref, 无新增
+overfull; 风格自审通过 (无 em dash/分号/禁用词/缩写/所有格,
+数学用 equation/align)。待提交推送。
+
+* 仍开放 (未擅自改)
+
+1. intro 说 Tier 0 microsecond gatekeeper, 实测 p50 0.3ms =>
+   methodology 用 sub-millisecond, conclusion 已同口径。待团长定。
+2. evaluation 写 benign 0% FPR, 但 table-main 检测 sweep CAITLYN
+   FPR 6.0, 两处必须统一口径。
+3. remote paper_zeri 已迁至 paper_caitlyn, 未改 set-url, 待团长确认。
+4. 旧三文件仍留盘未删, 可回退。
