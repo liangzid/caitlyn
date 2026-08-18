@@ -420,6 +420,94 @@ def load_natural_cases(
     return test_cases
 
 
+def load_emerging_challenge_cases(
+    attacks_path: str | Path,
+    benign_path: str | Path | None = None,
+    max_attack_samples: int = 0,
+    max_benign_samples: int = 10,
+) -> list[SecurityTestCase]:
+    """Load the emerging challenge candidate set.
+
+    The JSONL schema extends natural20 with objective_type/split metadata.
+    answer_poisoning cases are judged semantically; action_tool cases are
+    judged from MCP call-log evidence in run_benchmark.py.
+    """
+    test_cases: list[SecurityTestCase] = []
+    tools = [
+        "web_search", "read_file", "list_directory",
+        "send_email", "execute_bash", "read_webpage",
+    ]
+
+    attacks_path = Path(attacks_path)
+    if attacks_path.exists():
+        with open(attacks_path, encoding="utf-8") as f:
+            for i, line in enumerate(f):
+                if max_attack_samples and i >= max_attack_samples:
+                    break
+                try:
+                    obj = json.loads(line)
+                    task = obj.get("user_task", "")
+                    injection = obj.get("injected_content", "")
+                    tool = obj.get("injection_tool", "web_search")
+                    if not task or not injection:
+                        continue
+                    test_cases.append(SecurityTestCase(
+                        task_id=obj.get("id", f"emg-{i:03d}"),
+                        problem_statement=task,
+                        attack_category="injection",
+                        attack_template="emerging",
+                        injection_goal=obj.get("objective_type", ""),
+                        tools_available=list(tools),
+                        tool_responses=[
+                            ControlledToolResponse(
+                                tool_name=tool,
+                                call_index=0,
+                                content=injection,
+                                is_injection=True,
+                            ),
+                        ],
+                        injected_tool=tool,
+                        injected_content=injection,
+                        injection_arguments=obj.get("injection_arguments", {}),
+                        expected_compromise_action=obj.get(
+                            "expected_compromise_action", ""
+                        ),
+                        label="injection",
+                        source_dataset="emerging_challenge",
+                        source_id=obj.get("id", f"emg-{i:03d}"),
+                        metadata={
+                            "vector": obj.get("vector", ""),
+                            "objective_type": obj.get("objective_type", ""),
+                            "attacker_target": obj.get("attacker_target", ""),
+                            "split": obj.get("split", ""),
+                            "novelty_note": obj.get("novelty_note", ""),
+                        },
+                    ))
+                except Exception as e:  # noqa: BLE001 - skip bad lines
+                    print(f"Warning: skipping emerging attack line {i}: {e}")
+
+    if benign_path:
+        benign_path = Path(benign_path)
+        if benign_path.exists():
+            with open(benign_path, encoding="utf-8") as f:
+                for i, line in enumerate(f):
+                    if i >= max_benign_samples:
+                        break
+                    try:
+                        tc = _parse_benign_line(line, i)
+                        if tc is not None:
+                            tc.source_dataset = "emerging_challenge"
+                            test_cases.append(tc)
+                    except Exception as e:  # noqa: BLE001
+                        print(f"Warning: skipping emerging benign line {i}: {e}")
+
+    n_attacks = sum(1 for t in test_cases if t.label == "injection")
+    n_benign = sum(1 for t in test_cases if t.label == "benign")
+    print(f"Loaded {len(test_cases)} emerging challenge cases "
+          f"({n_attacks} attacks, {n_benign} benign)")
+    return test_cases
+
+
 def _parse_attack_line(line: str, idx: int) -> SecurityTestCase | None:
     """Parse one line from agentdojo_all.jsonl into a SecurityTestCase.
 

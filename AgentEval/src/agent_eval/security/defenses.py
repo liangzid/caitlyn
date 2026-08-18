@@ -31,11 +31,14 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import re as _re
 import time
 import urllib.request
 import urllib.error
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -448,7 +451,6 @@ INJECTION_PATTERNS = [
     r"(?i)from\s+now\s+on\s+(you\s+(must|should|will))",
 ]
 
-import re as _re
 _COMPILED_PATTERNS = [_re.compile(p) for p in INJECTION_PATTERNS]
 
 
@@ -645,6 +647,156 @@ class TransformersPIDefense(Defense):
         return self._stats
 
 
+# ── CAITLYN + Evolution DAG Signatures ────────────────────────────
+
+class CaitlynEvolvedDefense(Defense):
+    """CAITLYN daemon plus active System II DAG signatures.
+
+    The product scanner currently loads the filesystem antibody library,
+    while System II persists accepted antibodies in the evolution DAG. This
+    experimental wrapper bridges that gap for before/after evaluation:
+    first run CAITLYN-static through the daemon, then apply active DAG
+    signatures from ~/.caitlyn/evolution/nodes.json.
+    """
+
+    def __init__(self, caitlyn_port: int = 9070):
+        super().__init__()
+        from agent_eval.security.caitlyn_client import CaitlynDefense
+
+        self.base = CaitlynDefense(caitlyn_port=caitlyn_port, enabled=True)
+        self._stats = DefenseStats()
+        self._case_events: list[dict] = []
+
+    def filter(self, content: str, source: str = "web_search") -> tuple[str, bool]:
+        """Filter content using CAITLYN-static, then active DAG signatures."""
+        filtered, blocked = self.base.filter(content, source=source)
+        if blocked:
+            self._stats.blocked += 1
+            self.last_result = {
+                "detector": "caitlyn_evolved",
+                "blocked": True,
+                "stage": "caitlyn_static",
+            }
+            return filtered, True
+
+        start = time.time()
+        match = self._match_active_dag_signature(content)
+        latency_ms = (time.time() - start) * 1000.0
+        self.add_cost(latency_ms, 0)
+        if match is not None:
+            self._stats.blocked += 1
+            self.last_result = {
+                "detector": "caitlyn_evolved",
+                "blocked": True,
+                "stage": "evolution_dag",
+                "node_id": match["node_id"],
+                "label": match["label"],
+                "signature_type": match["type"],
+                "latency_ms": latency_ms,
+                "tokens": 0,
+            }
+            warning = (
+                "[SECURITY BLOCKED by CAITLYN evolution]\n"
+                f"Matched evolved antibody: {match['node_id']} "
+                f"({match['label']})\n\n"
+                "The original content was suppressed."
+            )
+            return warning, True
+
+        self._stats.passed += 1
+        self.last_result = {
+            "detector": "caitlyn_evolved",
+            "blocked": False,
+            "stage": "pass",
+            "latency_ms": latency_ms,
+            "tokens": 0,
+        }
+        return filtered, False
+
+    @property
+    def stats(self) -> DefenseStats:
+        return self._stats
+
+    def reset_case(self) -> None:
+        """Reset both wrapper and CAITLYN-static per-case counters."""
+        super().reset_case()
+        self._case_events = []
+        reset = getattr(self.base, "reset_case", None)
+        if reset is not None:
+            reset()
+
+    def record_event(self, event: dict) -> None:
+        self._case_events.append(event)
+
+    def case_cost(self) -> dict:
+        """Combine CAITLYN-static cost with local DAG signature cost."""
+        base_cost = self.base.case_cost()
+        own_cost = super().case_cost()
+        return {
+            "latency_ms": round(
+                float(base_cost.get("latency_ms", 0.0))
+                + float(own_cost.get("latency_ms", 0.0)),
+                1,
+            ),
+            "tokens": int(base_cost.get("tokens", 0)) + int(own_cost.get("tokens", 0)),
+            "calls": int(base_cost.get("calls", 0)) + int(own_cost.get("calls", 0)),
+            "blocked": own_cost.get("blocked", 0),
+            "flagged": own_cost.get("flagged", 0),
+            "passed": own_cost.get("passed", 0),
+            "events": self._case_events,
+            "base": base_cost,
+            "evolution": own_cost,
+        }
+
+    def _match_active_dag_signature(self, content: str) -> dict | None:
+        """Return the first active DAG signature that matches content."""
+        for node in self._load_active_dag_nodes():
+            for sig in node.get("signatures", []):
+                pattern = str(sig.get("pattern", ""))
+                sig_type = str(sig.get("type", ""))
+                label = str(sig.get("label", pattern))
+                if not pattern:
+                    continue
+                if sig_type == "regex":
+                    try:
+                        if _re.search(pattern, content, _re.IGNORECASE):
+                            return {
+                                "node_id": node.get("id", ""),
+                                "label": label,
+                                "type": sig_type,
+                            }
+                    except _re.error:
+                        continue
+                elif pattern in content:
+                    return {
+                        "node_id": node.get("id", ""),
+                        "label": label,
+                        "type": sig_type or "exact",
+                    }
+        return None
+
+    def _load_active_dag_nodes(self) -> list[dict]:
+        """Load active nodes from the System II evolution DAG file."""
+        evo_dir = Path(
+            os.environ.get(
+                "CAITLYN_EVOLUTION_DIR",
+                str(Path.home() / ".caitlyn" / "evolution"),
+            )
+        ).expanduser()
+        nodes_path = evo_dir / "nodes.json"
+        try:
+            data = json.loads(nodes_path.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+        nodes = data.get("nodes", [])
+        if not isinstance(nodes, list):
+            return []
+        return [
+            n for n in nodes
+            if isinstance(n, dict) and n.get("status") == "active"
+        ]
+
+
 # ── Defense Factory ───────────────────────────────────────────────
 
 # Re-export CaitlynDefense from caitlyn_client for the factory
@@ -680,6 +832,9 @@ def create_defense(
         from agent_eval.security.caitlyn_client import CaitlynDefense
         return CaitlynDefense(caitlyn_port=caitlyn_port, enabled=True)
 
+    elif defense_type == "caitlyn_evolved":
+        return CaitlynEvolvedDefense(caitlyn_port=caitlyn_port)
+
     elif defense_type == "llm_judge":
         if not api_key:
             raise ValueError("LLM-Judge requires --api-key")
@@ -710,7 +865,8 @@ def create_defense(
         raise ValueError(
             f"Unknown defense type: {defense_type}. "
             f"Valid options: none, caitlyn, llm_judge, llm_judge_fewshot, "
-            f"regex_guard, spotlighting, tool_filter, pi_detector"
+            f"regex_guard, spotlighting, tool_filter, pi_detector, "
+            f"caitlyn_evolved"
         )
 
 

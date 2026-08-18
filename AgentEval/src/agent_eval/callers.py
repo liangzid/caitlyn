@@ -118,12 +118,51 @@ class OpenCodeCaller(AgentCaller):
     def call(self, task_input, timeout=300, model=DEFAULT_MODEL):
         prompt = task_input.get("problem_statement", task_input.get("task_id", ""))
         api_key = get_openrouter_api_key()
+        self._write_mcp_config(task_input.get("mcp_url", ""))
         cmd = [
-            "docker", "exec", "-e", f"OPENROUTER_API_KEY={api_key}",
+            "docker", "exec",
+            "-e", f"OPENROUTER_API_KEY={api_key}",
+            "-e", "OPENCODE_CONFIG=/root/.config/opencode/opencode.json",
             CONTAINER,
-            "opencode", "run", "-m", f"openrouter/{model}", prompt,
+            "opencode", "run", "--auto", "-m", f"openrouter/{model}", prompt,
         ]
         return _run_command(cmd, task_input.get("task_id", ""), timeout)
+
+    def _write_mcp_config(self, mcp_url: str) -> None:
+        """Write OpenCode project config so the Fake MCP tools are available."""
+        if not mcp_url:
+            return
+        config = {
+            "$schema": "https://opencode.ai/config.json",
+            "permission": "allow",
+            "mcp": {
+                "servers": {
+                    "fake": {
+                        "type": "remote",
+                        "url": mcp_url,
+                        "oauth": False,
+                        "codemode": False,
+                    }
+                }
+            },
+        }
+        subprocess.run(
+            [
+                "docker", "exec", CONTAINER, "python3", "-c",
+                (
+                    "import pathlib, sys; "
+                    "data=sys.argv[1]; "
+                    "paths=[pathlib.Path('/workspace/opencode.json'), "
+                    "pathlib.Path('/root/.config/opencode/opencode.json')]; "
+                    "[p.parent.mkdir(parents=True, exist_ok=True) for p in paths]; "
+                    "[p.write_text(data) for p in paths]"
+                ),
+                json.dumps(config),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
 
 
 class HermesCaller(AgentCaller):
@@ -171,7 +210,7 @@ class CodexCaller(AgentCaller):
             "docker", "exec", "-e", f"OPENROUTER_API_KEY={api_key}",
             CONTAINER,
             "codex", "exec",
-            "--full-auto", "--skip-git-repo-check",
+            "--skip-git-repo-check",
             "-c", f"model={model}",
             prompt,
         ]

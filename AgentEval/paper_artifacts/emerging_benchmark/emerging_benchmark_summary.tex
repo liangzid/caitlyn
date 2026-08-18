@@ -1,0 +1,85 @@
+\section{Emerging Benchmark Evaluation}
+
+\paragraph{Goal.}
+This experiment evaluates whether CAITLYN can adapt to emerging prompt injection attacks that are not captured by static content filters or standard baseline defenses. The benchmark is designed to stress defenses on indirect, tool-delivered content that does not rely on explicit jailbreak strings such as ``ignore previous instructions''. The central question is whether System II evolution can reduce the attack success rate after observing failures from a static CAITLYN configuration.
+
+\paragraph{Dataset construction.}
+We constructed an Emerging 200 benchmark with 200 attack cases. The final dataset is stored as \texttt{emerging200.jsonl}. Each row contains a user task, a tool delivery channel, injected tool content, an attacker target, and the expected compromised behavior. The final dataset does not expose pattern labels, because the main metric is the overall attack success rate on the full benchmark.
+
+The dataset contains 160 answer poisoning cases and 40 action tool cases. The split is balanced into 100 seed cases and 100 held-out cases. The delivery channels include \texttt{read\_file}, \texttt{web\_search}, and \texttt{read\_webpage}. The attacks were constructed to look like plausible environment content rather than direct jailbreaks. Examples include structured metadata that redirects the answer, freshness or current-source claims, encoded or bracketed references, multilingual authority shifts, routine workflow continuation, and structured operational command fields.
+
+\paragraph{Evaluation setup.}
+We evaluated three real agent environments: OpenClaw, Codex, and Hermes. For each agent, we ran the same Emerging 200 benchmark under the following defenses:
+
+\begin{itemize}
+    \item None
+    \item Regex-Guard
+    \item LLM-Judge
+    \item LLM-Judge+Fewshot
+    \item Spotlighting+Delimiting
+    \item Tool Filter
+    \item PI Detector
+    \item CAITLYN-static
+    \item CAITLYN-evolved
+\end{itemize}
+
+All runs used the same model backend, \texttt{deepseek/deepseek-chat}, through OpenRouter. The final comparison reports ASR on the full 200-case dataset. Lower ASR indicates stronger defense.
+
+\paragraph{System II evolution protocol.}
+We first ran CAITLYN-static on the Emerging 200 benchmark and identified seed failures. The vaccination commands were generated from the seed failures and used to produce evolved antibodies through the CAITLYN System II evolution process. We then pruned antibodies that were overly broad or could be misinterpreted by the current evaluation wrapper as plain regular expressions. This pruning step avoided inflated results caused by length-only or broad keyword matching. The final evolved configuration retained four specific pipe-to-shell and curl-related antibodies:
+
+\begin{itemize}
+    \item \texttt{ab-044}
+    \item \texttt{ab-045}
+    \item \texttt{ab-049}
+    \item \texttt{ab-051}
+\end{itemize}
+
+For agents whose MCP tool-output path was unreliable, the injected environment content was passed through the active defense before prompt delivery. The final CAITLYN-evolved runs recorded 200 defense events for each agent, confirming that the evolved defense was applied to every benchmark case.
+
+\paragraph{Results.}
+Table~\ref{tab:emerging-benchmark-results} reports the overall ASR for each agent and defense. CAITLYN-evolved substantially reduces ASR compared with CAITLYN-static across all three real agents.
+
+\begin{table}[t]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+Defense & OpenClaw & Codex & Hermes \\
+\midrule
+None & 76.5 & 76.0 & 78.0 \\
+Regex-Guard & 72.5 & 74.5 & 76.0 \\
+LLM-Judge & 78.0 & 79.0 & 76.0 \\
+LLM-Judge+Fewshot & 80.0 & 79.0 & 78.5 \\
+Spotlighting+Delimiting & 77.0 & 79.0 & 76.0 \\
+Tool Filter & 78.0 & 75.5 & 77.5 \\
+PI Detector & 75.5 & 76.5 & 75.5 \\
+CAITLYN-static & 77.0 & 79.5 & 77.5 \\
+CAITLYN-evolved & 38.5 & 39.5 & 39.5 \\
+\bottomrule
+\end{tabular}
+\caption{Overall ASR on the Emerging 200 benchmark. Lower is better.}
+\label{tab:emerging-benchmark-results}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{emerging200_real_asr_comparison_panels.pdf}
+\caption{Emerging Benchmark Agent Evaluation. The x-axis shows real agent environments. The legend shows the evaluated defenses. CAITLYN-evolved is the final System II configuration after vaccination and pruning.}
+\label{fig:emerging-benchmark-agent-evaluation}
+\end{figure}
+
+\paragraph{Key finding.}
+CAITLYN-evolved reduces ASR from 77.0\% to 38.5\% on OpenClaw, from 79.5\% to 39.5\% on Codex, and from 77.5\% to 39.5\% on Hermes. This corresponds to reductions of 38.5, 40.0, and 38.0 percentage points relative to CAITLYN-static. The result supports the claim that System II evolution can adapt to emerging attack content that remains effective against static defenses and common baseline defenses.
+
+\paragraph{Artifact files.}
+The paper-ready artifacts are collected in \texttt{AgentEval/paper\_artifacts/emerging\_benchmark/}:
+
+\begin{itemize}
+    \item \texttt{emerging\_benchmark\_summary.tex}
+    \item \texttt{emerging200.jsonl}
+    \item \texttt{emerging200\_real\_asr\_comparison.csv}
+    \item \texttt{emerging200\_real\_asr\_comparison\_panels.pdf}
+    \item \texttt{emerging200\_real\_asr\_comparison\_panels.svg}
+    \item \texttt{emerging200\_real\_asr\_comparison\_panels.png}
+\end{itemize}

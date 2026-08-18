@@ -162,6 +162,7 @@ class LLMClient:
         body = {
             "model": self.model,
             "messages": messages,
+            "temperature": 0.0,
         }
         if tools:
             body["tools"] = tools
