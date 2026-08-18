@@ -156,10 +156,10 @@
       "id": "ab-jailbreak-general",
       "children": [],
       "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
+        "total_scans": 41,
+        "true_positives": 41,
         "false_positives": 0,
-        "avg_latency_us": 0
+        "avg_latency_us": 161341.46341463414
       }
     },
     "ab-llm-judge": {
@@ -196,10 +196,10 @@
       "id": "ab-poisoning-general",
       "children": [],
       "stats_aggregated": {
-        "total_scans": 0,
-        "true_positives": 0,
+        "total_scans": 23,
+        "true_positives": 23,
         "false_positives": 0,
-        "avg_latency_us": 0
+        "avg_latency_us": 176956.52173913043
       }
     },
     "ab-self-examination": {

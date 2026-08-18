@@ -1,0 +1,126 @@
+{
+  "nodes": [
+    {
+      "id": "ab-044",
+      "name": "Refined Obfuscated Curl Detector",
+      "description": "Detects obfuscated curl commands with specific length (330-335 chars) and high entropy (>4.5), focusing on pipe-to-shell patterns while excluding common false positives",
+      "category": "obfuscation",
+      "tier": 0,
+      "status": "active",
+      "parentIds": [
+        "ab-015"
+      ],
+      "createdAt": "2026-08-12T11:56:31.708Z",
+      "statusChangedAt": "2026-08-12T11:56:31.708Z",
+      "generation": 2,
+      "signatures": [
+        {
+          "pattern": "line_count=1 && total_length >= 330 && total_length <= 335 && entropy > 4.5 && /curl\\s+.*\\|\\s*(bash|sh)\\s+(-|\\w)/i && !/corporate|security|policy|scan|external|content|analysis|report|agent|install|token/i",
+          "type": "regex",
+          "label": "Obfuscated curl with pipe-to-shell"
+        }
+      ],
+      "evidence": {
+        "hits": 0,
+        "falsePositives": 0,
+        "lastUsedAt": null,
+        "shadowScans": 0,
+        "shadowHits": 0,
+        "shadowConfirmedHits": 0
+      },
+      "lastReviewVerdict": "accept"
+    },
+    {
+      "id": "ab-045",
+      "name": "Precision Pipe-to-Shell Detector",
+      "description": "Detects single-line commands with pipe-to-shell patterns at 332-335 char length and high entropy (>4.5), excluding common security keywords",
+      "category": "obfuscation",
+      "tier": 0,
+      "status": "active",
+      "parentIds": [
+        "ab-034"
+      ],
+      "createdAt": "2026-08-12T11:56:31.708Z",
+      "statusChangedAt": "2026-08-12T11:56:31.708Z",
+      "generation": 4,
+      "signatures": [
+        {
+          "pattern": "line_count=1 && total_length >= 332 && total_length <= 335 && entropy > 4.5 && /\\|\\s*(bash|sh|zsh|dash|ksh)\\s+(-s|--|\\w)/ && !/corporate|security|policy|scan|external|content|analysis|report|agent|install|token/i",
+          "type": "regex",
+          "label": "Precision pipe-to-shell with length/entropy"
+        }
+      ],
+      "evidence": {
+        "hits": 0,
+        "falsePositives": 0,
+        "lastUsedAt": null,
+        "shadowScans": 0,
+        "shadowHits": 0,
+        "shadowConfirmedHits": 0
+      },
+      "lastReviewVerdict": "accept"
+    },
+    {
+      "id": "ab-049",
+      "name": "Precision Length-Entropy Curl Detector",
+      "description": "Detects single-line curl commands with a specific length (332 chars) and high entropy (>4.5), focusing on pipe-to-shell patterns without common security keywords.",
+      "category": "obfuscation",
+      "tier": 0,
+      "status": "active",
+      "parentIds": [
+        "ab-044",
+        "ab-045"
+      ],
+      "createdAt": "2026-08-12T11:59:46.695Z",
+      "statusChangedAt": "2026-08-12T11:59:46.695Z",
+      "generation": 5,
+      "signatures": [
+        {
+          "pattern": "line_count=1 && total_length=332 && entropy>4.5 && /curl\\s+.*\\|\\s*(bash|sh)\\s+(-|\\w)/i && !/corporate|security|policy|scan|external|content|analysis|report|agent|install|token/i",
+          "type": "regex",
+          "label": "Precision Curl Pipe-to-Shell"
+        }
+      ],
+      "evidence": {
+        "hits": 0,
+        "falsePositives": 0,
+        "lastUsedAt": null,
+        "shadowScans": 0,
+        "shadowHits": 0,
+        "shadowConfirmedHits": 0
+      },
+      "lastReviewVerdict": "accept"
+    },
+    {
+      "id": "ab-051",
+      "name": "Pipe-to-Shell Odd-Length Detector",
+      "description": "Detects single-line commands with pipe-to-shell patterns at odd lengths (333 chars) and high entropy (>4.5), excluding common security keywords.",
+      "category": "obfuscation",
+      "tier": 0,
+      "status": "active",
+      "parentIds": [
+        "ab-048",
+        "ab-045"
+      ],
+      "createdAt": "2026-08-12T11:59:46.695Z",
+      "statusChangedAt": "2026-08-12T11:59:46.695Z",
+      "generation": 6,
+      "signatures": [
+        {
+          "pattern": "line_count=1 && total_length=333 && entropy>4.5 && /\\|\\s*(bash|sh|zsh|dash|ksh)\\s+(-s|--|\\w)/ && !/corporate|security|policy|scan|external|content|analysis|report|agent|install|token/i",
+          "type": "regex",
+          "label": "Odd-Length Pipe-to-Shell"
+        }
+      ],
+      "evidence": {
+        "hits": 0,
+        "falsePositives": 0,
+        "lastUsedAt": null,
+        "shadowScans": 0,
+        "shadowHits": 0,
+        "shadowConfirmedHits": 0
+      },
+      "lastReviewVerdict": "accept"
+    }
+  ]
+}
