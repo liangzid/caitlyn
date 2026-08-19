@@ -32,6 +32,7 @@
 - 加入 10 个 non-detector 知识（merged-knowledge）没有提升 TPR，只把
   FPR 从 2.8 压到 2.0，但 token 成本约为 merged-detectors 的 3.6 倍。
 - 结论：合并单调用是可行的成本/误报优化方向，但不能声称提升召回。
+- 提交：d7e5f34（已推送 master）。
 
 * 待办
 
