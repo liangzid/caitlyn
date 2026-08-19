@@ -47,6 +47,18 @@
 默认判定靠 verdict 标签仍可工作（低 FPR），但论文现有 ROC/PR 曲线依赖
 confidence 排序；若最终采用 merged，需要额外做置信度校准或换评分机制。
 
+* 为什么 skill 数相同但差距大（voting vs single judge）
+
+ensemble 中两个 detector 是独立投票：
+- ab-classifier-injection 单独命中 470 个 attack；
+- ab-instruction-hierarchy 单独命中 5 个；
+- 两者同时命中 79 个；Tier-1 union = 554。
+- merged-detectors 单次调用只命中 513 个，无法复现 union。
+
+所以差距不是"skill 数量"造成的，而是"两个独立专家投票 + 任一命中即
+拦截"变成了"一个模型读完两份笔记后给一个总判定"。后者更保守
+（benign fired 17 -> 7），但召回和置信度排序都变差。
+
 * 待办
 
 - 汇总 TPR/FPR/latency/tokens 对比表。
