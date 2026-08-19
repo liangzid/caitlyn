@@ -101,7 +101,11 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--base-url", default="https://openrouter.ai/api/v1")
     p.add_argument("--caitlyn-port", type=int, default=9070)
-    p.add_argument("--caitlyn-mode", choices=["fast", "full"], default="full")
+    p.add_argument(
+        "--caitlyn-mode",
+        choices=["fast", "full", "merged", "merged-detectors"],
+        default="full",
+    )
     p.add_argument("--caitlyn-daemon-model", default="deepseek/deepseek-chat")
     p.add_argument("--agentdefense-size", type=int, default=250)
     p.add_argument("--workers", type=int, default=8)

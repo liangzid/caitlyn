@@ -36,7 +36,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--benign", required=True, help="Benign subset JSONL")
     p.add_argument("--limit-attacks", type=int, default=0, help="0 = all")
     p.add_argument("--limit-benign", type=int, default=0, help="0 = all")
-    p.add_argument("--mode", choices=["fast", "full"], default="full")
+    p.add_argument(
+        "--mode",
+        choices=["fast", "full", "merged", "merged-detectors"],
+        default="full",
+    )
     p.add_argument("--port", type=int, default=9070)
     p.add_argument("--output", default="", help="Output JSON path")
     return p.parse_args()

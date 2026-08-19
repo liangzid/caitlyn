@@ -1,0 +1,39 @@
+#+TITLE: Merged Tier-1 Detection Rerun
+#+DATE: 2026-08-19
+
+* 结论记录（团长 + Agent）
+
+- 现状：Tier 1 detector 只有 2 个（ab-classifier-injection,
+  ab-instruction-hierarchy）；8 个 tier>0 non-detector 目前不参与运行时。
+- 决策：实现 merged 单调用 Tier 1（META system prompt + skill 知识块 +
+  待检内容），默认把 10 个 tier>0 skill 全部作为参考知识；detectors 模式
+  只含 2 个 detector。merged 模式绕过 escalation gate。
+- 基线 tag：paper-detection-baseline-2026-08-19（caitlyn）与
+  paper-draft-baseline-2026-08-19（paper_caitlyn）已创建并推送。
+- 实现：scanner.ts 新增 selectMergedSkills / buildMergedTier1Prompt /
+  runMergedTier1；hybrid-scanner 与 daemon /v1/scan 支持 mode=merged、
+  merged-detectors；AgentEval 两个脚本的 --caitlyn-mode 同步扩展。
+- 验证：410 tests pass；daemon 冒烟一次调用 10 skills ≈ 4k tokens。
+- 实验：detection-only 全量（1083 样本）先跑 merged-detectors，再跑
+  merged；与基线 detection_caitlyn_20260813 对比。
+
+* Detection-only 结果（TPR / FPR / avg latency ms / avg tokens）
+
+| 数据集 | ensemble 基线 | merged-detectors | merged-knowledge |
+|--------+---------------+------------------+------------------|
+| AgentDojo | 99.6 / 6.0 / 24865 / 552 | 98.0 / 2.8 / 30104 / 1121 | 98.0 / 2.0 / 21445 / 4080 |
+| ASPI | 68.8 / 6.0 / 22889 / 476 | 63.4 / 2.8 / 26416 / 1050 | 64.5 / 2.0 / 19917 / 4013 |
+| SafeClawBench | 62.5 / 6.0 / 25478 / 484 | 54.1 / 2.8 / 22395 / 1010 | 52.9 / 2.0 / 20305 / 3832 |
+| AgentDefense | 76.4 / 6.0 / 20663 / 498 | 73.2 / 2.8 / 22096 / 936 | 70.8 / 2.0 / 21230 / 3576 |
+
+观察：
+- merged 两个变体 TPR 均低于 ensemble 基线，SafeClawBench 降幅最大。
+- FPR 明显下降（6.0 -> 2.8 -> 2.0），即误报减少约一半以上。
+- 加入 10 个 non-detector 知识（merged-knowledge）没有提升 TPR，只把
+  FPR 从 2.8 压到 2.0，但 token 成本约为 merged-detectors 的 3.6 倍。
+- 结论：合并单调用是可行的成本/误报优化方向，但不能声称提升召回。
+
+* 待办
+
+- 汇总 TPR/FPR/latency/tokens 对比表。
+- 与团长确认 merged 是否作为最终 Tier 1 schema，或保留 ensemble 作为对照。

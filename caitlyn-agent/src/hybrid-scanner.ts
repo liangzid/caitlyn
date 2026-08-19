@@ -9,12 +9,15 @@ import { loadAntibodies, loadAntigens } from "./library.js";
 import type { ScanResult } from "./schema.js";
 import { loadScanningConfig } from "./config.js";
 import type { EscalationPolicy, SourceTrust } from "./escalation.js";
+import type { MergedScope, Tier1Mode } from "./scanner.js";
 
 // ── Types ─────────────────────────────────────────────────────────
 
 export interface HybridScanOptions {
   content: string;
   llmCall: LlmCallFn;
+  tier1Mode?: Tier1Mode;
+  mergedScope?: MergedScope;
   sourceTrust?: SourceTrust;
   highRisk?: boolean;
   escalationPolicy?: EscalationPolicy;
@@ -39,6 +42,8 @@ export async function hybridScan(options: HybridScanOptions): Promise<HybridScan
     llmCall: options.llmCall,
     antibodies: loadAntibodies(),
     antigens: loadAntigens(),
+    tier1Mode: options.tier1Mode,
+    mergedScope: options.mergedScope,
     sourceTrust: options.sourceTrust ?? scanning.sourceTrust,
     highRisk: options.highRisk ?? scanning.highRisk,
     escalationPolicy: options.escalationPolicy ?? scanning.policy,

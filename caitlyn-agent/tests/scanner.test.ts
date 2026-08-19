@@ -26,14 +26,17 @@ vi.mock("../src/library.js", async (importOriginal) => {
 import {
   aggregateTier1,
   buildAntibodyPrompt,
+  buildMergedTier1Prompt,
   estimateScanTokens,
   estimateTokens,
   matchSignatures,
   parseTier1Response,
   runTier0,
   runTier1Ensemble,
+  runMergedTier1,
   scan,
   selectTier1Detectors,
+  selectMergedSkills,
 } from "../src/scanner.js";
 import type { AntibodyEntry, AntigenEntry } from "../src/schema.js";
 
@@ -109,6 +112,84 @@ describe("buildAntibodyPrompt", () => {
     expect(userPrompt).toContain("<content>");
     expect(userPrompt).toContain("</content>");
     expect(userPrompt).toContain("hello world");
+  });
+});
+
+// ── Merged Tier 1 Prompt Tests ─────────────────────────────────────
+
+describe("selectMergedSkills", () => {
+  it("includes non-detector knowledge only in knowledge scope", () => {
+    const detector = makeAntibody("ab-det", "Det", "readme", "Detect.", 1);
+    const nonDetector = makeAntibody("ab-hard", "Hard", "readme", "Harden.", 1);
+    nonDetector.config.role = "non_detector";
+
+    expect(selectMergedSkills([detector, nonDetector], "detectors").map((a) => a.config.id))
+      .toEqual(["ab-det"]);
+    expect(selectMergedSkills([detector, nonDetector], "knowledge").map((a) => a.config.id).sort())
+      .toEqual(["ab-det", "ab-hard"]);
+  });
+});
+
+describe("buildMergedTier1Prompt", () => {
+  it("embeds every tier>0 skill as knowledge in the META system prompt", () => {
+    const detector = makeAntibody("ab-det", "Detector", "readme", "Detect X.", 1);
+    const nonDetector = makeAntibody("ab-hard", "Hardener", "readme", "Harden Y.", 2);
+    nonDetector.config.role = "non_detector";
+
+    const { systemPrompt, userPrompt, skillIds } = buildMergedTier1Prompt(
+      [detector, nonDetector],
+      "hello world",
+    );
+
+    expect(skillIds).toEqual(["ab-det", "ab-hard"]);
+    expect(systemPrompt).toContain("security filter for LLM agents");
+    expect(systemPrompt).toContain("reference knowledge");
+    expect(systemPrompt).toContain("[ab-det] Detector");
+    expect(systemPrompt).toContain("Detect X.");
+    expect(systemPrompt).toContain("[ab-hard] Hardener");
+    expect(systemPrompt).toContain('"malicious <number>"');
+    expect(userPrompt).toContain("<content>");
+    expect(userPrompt).toContain("hello world");
+  });
+
+  it("restricts to detector skills in detector scope", () => {
+    const detector = makeAntibody("ab-det", "Detector", "readme", "Detect X.", 1);
+    const nonDetector = makeAntibody("ab-hard", "Hardener", "readme", "Harden Y.", 2);
+    nonDetector.config.role = "non_detector";
+
+    const { systemPrompt, skillIds } = buildMergedTier1Prompt(
+      [detector, nonDetector],
+      "x",
+      "detectors",
+    );
+    expect(skillIds).toEqual(["ab-det"]);
+    expect(systemPrompt).not.toContain("ab-hard");
+  });
+});
+
+describe("runMergedTier1", () => {
+  it("makes exactly one LLM call and returns a single verdict", async () => {
+    const skills = [
+      makeAntibody("ab-a", "A", "readme", "Detect A.", 1),
+      makeAntibody("ab-b", "B", "readme", "Detect B.", 1),
+    ];
+    let calls = 0;
+    let sawPrompt = "";
+    const result = await runMergedTier1(skills, "content", async (system, user) => {
+      calls += 1;
+      sawPrompt = system;
+      expect(user).toContain("<content>");
+      return "malicious 0.91";
+    });
+
+    expect(calls).toBe(1);
+    expect(result.antibody_id).toBe("merged-tier1");
+    expect(result.verdict).toBe("malicious");
+    expect(result.confidence).toBe(0.91);
+    expect(result.reason).toContain("2 skills");
+    expect(result.tokens).toBeGreaterThan(0);
+    expect(sawPrompt).toContain("[ab-a] A");
+    expect(sawPrompt).toContain("[ab-b] B");
   });
 });
 
@@ -462,6 +543,29 @@ describe("scan() cost accounting", () => {
     });
     expect(result.tier).toBe(1);
     expect(result.total_tokens).toBe(0);
+  });
+
+  it("merged mode makes one LLM call and bypasses the escalation gate", async () => {
+    const ab = makeAntibody("ab-a", "A", "readme", "You are a detector.", 1);
+    let calls = 0;
+    const result = await scan({
+      antibodies: [ab],
+      antigens: [],
+      content: "hello",
+      tier1Mode: "merged",
+      escalationPolicy: "aggressive",
+      sourceTrust: "high",
+      llmCall: async () => {
+        calls += 1;
+        return "malicious 0.8";
+      },
+    });
+    expect(calls).toBe(1);
+    expect(result.tier).toBe(1);
+    expect(result.verdict).toBe("malicious");
+    expect(
+      result.script_results.some((r) => r.antibody_id === "merged-tier1"),
+    ).toBe(true);
   });
 });
 
