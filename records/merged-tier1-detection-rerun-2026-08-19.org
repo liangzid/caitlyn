@@ -34,6 +34,19 @@
 - 结论：合并单调用是可行的成本/误报优化方向，但不能声称提升召回。
 - 提交：d7e5f34（已推送 master）。
 
+* 置信度校准（AUROC，用同一 shared benign 池）
+
+| 数据集 | ensemble | merged-detectors | merged-knowledge |
+|--------+----------+------------------+------------------|
+| AgentDojo | 0.9796 | 0.4796 | 0.3487 |
+| ASPI | 0.8152 | 0.4447 | 0.2964 |
+| SafeClawBench | 0.7779 | 0.4129 | 0.2546 |
+| AgentDefense | 0.8503 | 0.4425 | 0.3139 |
+
+观察：merged 的 confidence 与 ensemble 不同，无法作为排序分数使用。
+默认判定靠 verdict 标签仍可工作（低 FPR），但论文现有 ROC/PR 曲线依赖
+confidence 排序；若最终采用 merged，需要额外做置信度校准或换评分机制。
+
 * 待办
 
 - 汇总 TPR/FPR/latency/tokens 对比表。
