@@ -38,7 +38,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--limit-benign", type=int, default=0, help="0 = all")
     p.add_argument(
         "--mode",
-        choices=["fast", "full", "merged", "merged-detectors"],
+        choices=["fast", "full", "merged", "merged-detectors", "merged-pair"],
         default="full",
     )
     p.add_argument("--port", type=int, default=9070)

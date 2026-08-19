@@ -300,9 +300,11 @@ export class DaemonServer {
       content,
       llmCall: this.llmCall ?? createUnavailableLlmCall("LLM not configured on daemon"),
       tier1Mode:
-        parsed.mode === "merged" || parsed.mode === "merged-detectors"
-          ? "merged"
-          : undefined,
+        parsed.mode === "merged-pair"
+          ? "merged-pair"
+          : parsed.mode === "merged" || parsed.mode === "merged-detectors"
+            ? "merged"
+            : undefined,
       mergedScope: parsed.mode === "merged-detectors" ? "detectors" : undefined,
       sourceTrust:
         parsed.source === "high" || parsed.source === "low"

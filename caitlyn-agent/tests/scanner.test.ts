@@ -34,6 +34,7 @@ import {
   runTier0,
   runTier1Ensemble,
   runMergedTier1,
+  runMergedPairTier1,
   scan,
   selectTier1Detectors,
   selectMergedSkills,
@@ -190,6 +191,35 @@ describe("runMergedTier1", () => {
     expect(result.tokens).toBeGreaterThan(0);
     expect(sawPrompt).toContain("[ab-a] A");
     expect(sawPrompt).toContain("[ab-b] B");
+  });
+});
+
+describe("runMergedPairTier1", () => {
+  it("runs both merged scopes and OR-aggregates malicious votes", async () => {
+    const skills = [
+      makeAntibody("ab-a", "A", "readme", "Detect A.", 1),
+      makeAntibody("ab-hard", "Hard", "readme", "Harden.", 1),
+    ];
+    skills[1].config.role = "non_detector";
+    let calls = 0;
+    const pair = await runMergedPairTier1(skills, "content", async (system) => {
+      calls += 1;
+      return system.includes("[ab-a] A") && !system.includes("[ab-hard] Hard")
+        ? "malicious 0.91"
+        : "benign 0.05";
+    });
+
+    expect(calls).toBe(2);
+    expect(pair.results).toHaveLength(2);
+    expect(pair.aggregated.verdict).toBe("malicious");
+    expect(pair.aggregated.confidence).toBe(0.91);
+    expect(pair.results[0]!.tokens + pair.results[1]!.tokens).toBeGreaterThan(0);
+  });
+
+  it("returns benign only when both merged calls are benign", async () => {
+    const skills = [makeAntibody("ab-a", "A", "readme", "Detect A.", 1)];
+    const pair = await runMergedPairTier1(skills, "content", async () => "benign 0.1");
+    expect(pair.aggregated.verdict).toBe("benign");
   });
 });
 
@@ -566,6 +596,31 @@ describe("scan() cost accounting", () => {
     expect(
       result.script_results.some((r) => r.antibody_id === "merged-tier1"),
     ).toBe(true);
+  });
+
+  it("merged-pair mode makes two calls and OR-aggregates the verdicts", async () => {
+    const ab = makeAntibody("ab-a", "A", "readme", "You are a detector.", 1);
+    const hard = makeAntibody("ab-hard", "Hard", "readme", "Harden.", 1);
+    hard.config.role = "non_detector";
+    let calls = 0;
+    const result = await scan({
+      antibodies: [ab, hard],
+      antigens: [],
+      content: "hello",
+      tier1Mode: "merged-pair",
+      escalationPolicy: "aggressive",
+      sourceTrust: "high",
+      llmCall: async (system) => {
+        calls += 1;
+        return system.includes("ab-hard") ? "benign 0.1" : "malicious 0.8";
+      },
+    });
+    expect(calls).toBe(2);
+    expect(result.tier).toBe(1);
+    expect(result.verdict).toBe("malicious");
+    expect(
+      result.script_results.filter((r) => r.antibody_id === "merged-tier1"),
+    ).toHaveLength(2);
   });
 });
 

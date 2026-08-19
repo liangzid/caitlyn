@@ -103,7 +103,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--caitlyn-port", type=int, default=9070)
     p.add_argument(
         "--caitlyn-mode",
-        choices=["fast", "full", "merged", "merged-detectors"],
+        choices=["fast", "full", "merged", "merged-detectors", "merged-pair"],
         default="full",
     )
     p.add_argument("--caitlyn-daemon-model", default="deepseek/deepseek-chat")

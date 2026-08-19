@@ -59,6 +59,26 @@ ensemble 中两个 detector 是独立投票：
 拦截"变成了"一个模型读完两份笔记后给一个总判定"。后者更保守
 （benign fired 17 -> 7），但召回和置信度排序都变差。
 
+* merged-pair（两个 merge 做 OR 集成，全量实测 2026-08-19）
+
+实现：detectors merge 与 knowledge merge 并行调用，任一 malicious/
+suspicious 即拦截。结果（TPR / FPR / avg latency ms / avg tokens）：
+
+| 数据集 | ensemble 基线 | merged-pair 实测 |
+|--------+---------------+------------------|
+| AgentDojo | 99.6 / 6.0 / 24865 / 552 | 99.6 / 3.6 / 48393 / 5201 |
+| ASPI | 68.8 / 6.0 / 22889 / 476 | 66.7 / 3.6 / 52294 / 5019 |
+| SafeClawBench | 62.5 / 6.0 / 25478 / 484 | 62.1 / 3.6 / 42783 / 4843 |
+| AgentDefense | 76.4 / 6.0 / 20663 / 498 | 77.6 / 3.6 / 40270 / 4512 |
+
+观察：
+- 召回基本持平（AgentDefense +1.2pp，ASPI -2.1pp，SafeClaw -0.4pp，
+  AgentDojo 持平），FPR 从 6.0% 降到 3.6%。
+- 代价：token 约 9-10 倍，latency 约 2 倍（40-52s）。
+- 离线 OR 模拟（用前两次单独运行的记录）曾给出 100.0/74.2/66.2/77.6，
+  实测更低，说明小数据集上 run-to-run 方差约 5-8pp，不能只看离线模拟。
+- merged-pair 的 AUROC 仍差（0.13-0.24），confidence 排序问题没有解决。
+
 * 待办
 
 - 汇总 TPR/FPR/latency/tokens 对比表。

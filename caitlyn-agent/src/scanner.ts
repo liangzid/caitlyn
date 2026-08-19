@@ -645,8 +645,13 @@ export interface Tier1Result extends ScriptResult {
   tokens: number;
 }
 
-/** Tier 1 execution schema: per-antibody ensemble or one merged call. */
-export type Tier1Mode = "ensemble" | "merged";
+/**
+ * Tier 1 execution schema:
+ * ensemble = per-antibody independent calls;
+ * merged = one call over all selected skill knowledge;
+ * merged-pair = two merged calls (detectors + knowledge) with OR voting.
+ */
+export type Tier1Mode = "ensemble" | "merged" | "merged-pair";
 
 /**
  * What the merged call embeds as reference knowledge:
@@ -837,6 +842,60 @@ export async function runMergedTier1(
     error: null,
     tokens: estimateScanTokens(systemPrompt, userPrompt, raw),
   } satisfies Tier1Result;
+}
+
+export interface MergedPairTier1Result {
+  results: Tier1Result[];
+  aggregated: { verdict: Verdict; confidence: number };
+}
+
+/**
+ * Run two merged calls in parallel and combine them with OR voting.
+ *
+ * The detector-scope call and the knowledge-scope call are two different
+ * single-judge perspectives over the same content. Any malicious verdict
+ * wins, otherwise any suspicious verdict wins, otherwise benign. This
+ * restores part of the union effect of the original per-skill ensemble
+ * while keeping the number of LLM calls small (two instead of N).
+ */
+export async function runMergedPairTier1(
+  antibodies: AntibodyEntry[],
+  content: string,
+  llmCall: LlmCallFn,
+  options: { timeoutMs?: number } = {},
+): Promise<MergedPairTier1Result> {
+  const [detectors, knowledge] = await Promise.all([
+    runMergedTier1(antibodies, content, llmCall, options, "detectors"),
+    runMergedTier1(antibodies, content, llmCall, options, "knowledge"),
+  ]);
+  const results = [detectors, knowledge];
+  const malicious = results.filter((r) => r.verdict === "malicious");
+  if (malicious.length > 0) {
+    return {
+      results,
+      aggregated: {
+        verdict: "malicious",
+        confidence: Math.max(...malicious.map((r) => r.confidence)),
+      },
+    };
+  }
+  const suspicious = results.filter((r) => r.verdict === "suspicious");
+  if (suspicious.length > 0) {
+    return {
+      results,
+      aggregated: {
+        verdict: "suspicious",
+        confidence: Math.max(...suspicious.map((r) => r.confidence)),
+      },
+    };
+  }
+  return {
+    results,
+    aggregated: {
+      verdict: "benign",
+      confidence: Math.max(...results.map((r) => r.confidence)),
+    },
+  };
 }
 
 /**
@@ -1060,24 +1119,45 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     return result;
   }
 
-  // Merged schema: one LLM call over all selected skill knowledge, with no
-  // escalation gate (no fast/full subsetting, no trusted-clean skip).
-  if (options.tier1Mode === "merged") {
+  // Merged schemas: one or two LLM calls over selected skill knowledge,
+  // with no escalation gate (no fast/full subsetting, no trusted-clean skip).
+  if (options.tier1Mode === "merged" || options.tier1Mode === "merged-pair") {
     try {
-      const merged = await runMergedTier1(
-        options.antibodies,
-        options.content,
-        options.llmCall,
-        { timeoutMs: options.tier1TimeoutMs },
-        options.mergedScope,
-      );
-      totalTokens = merged.tokens;
+      let tier1Results: Tier1Result[];
+      let aggregated: { verdict: Verdict; confidence: number };
+      let stage: string;
+      let stageReason: string;
+      if (options.tier1Mode === "merged-pair") {
+        const pair = await runMergedPairTier1(
+          options.antibodies,
+          options.content,
+          options.llmCall,
+          { timeoutMs: options.tier1TimeoutMs },
+        );
+        tier1Results = pair.results;
+        aggregated = pair.aggregated;
+        stage = "merged-pair";
+        stageReason = "two merged calls OR ensemble";
+      } else {
+        const merged = await runMergedTier1(
+          options.antibodies,
+          options.content,
+          options.llmCall,
+          { timeoutMs: options.tier1TimeoutMs },
+          options.mergedScope,
+        );
+        tier1Results = [merged];
+        aggregated = { verdict: merged.verdict, confidence: merged.confidence };
+        stage = "merged";
+        stageReason = "merged single call";
+      }
+      totalTokens = tier1Results.reduce((acc, r) => acc + r.tokens, 0);
       const result = makeTier1ScanResult({
         t0Results: t0.results,
-        tier1Results: [merged],
-        aggregated: { verdict: merged.verdict, confidence: merged.confidence },
-        stage: "merged",
-        stageReason: "merged single call",
+        tier1Results,
+        aggregated,
+        stage,
+        stageReason,
         scanStart,
         totalTokens,
       });
