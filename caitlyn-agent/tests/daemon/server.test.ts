@@ -110,6 +110,24 @@ describe("POST /v1/scan", () => {
     server.setLlmCall(mockBenign);
   });
 
+  it("t0-only mode does not call the LLM", async () => {
+    let calls = 0;
+    server.setLlmCall(async () => {
+      calls += 1;
+      return "malicious 0.95";
+    });
+    const res = await fetch(`${BASE}/v1/scan`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: "hello world", mode: "t0-only" }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(calls).toBe(0);
+    expect(body.tier).toBe(0);
+    server.setLlmCall(mockBenign);
+  });
+
   it("truncates content to 64KB", async () => {
     const bigContent = "x".repeat(100_000);
     const res = await fetch(`${BASE}/v1/scan`, {

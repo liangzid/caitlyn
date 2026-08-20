@@ -18,6 +18,8 @@ export interface HybridScanOptions {
   llmCall: LlmCallFn;
   tier1Mode?: Tier1Mode;
   mergedScope?: MergedScope;
+  skipTier0?: boolean;
+  skipTier1?: boolean;
   sourceTrust?: SourceTrust;
   highRisk?: boolean;
   escalationPolicy?: EscalationPolicy;
@@ -44,6 +46,8 @@ export async function hybridScan(options: HybridScanOptions): Promise<HybridScan
     antigens: loadAntigens(),
     tier1Mode: options.tier1Mode,
     mergedScope: options.mergedScope,
+    skipTier0: options.skipTier0,
+    skipTier1: options.skipTier1,
     sourceTrust: options.sourceTrust ?? scanning.sourceTrust,
     highRisk: options.highRisk ?? scanning.highRisk,
     escalationPolicy: options.escalationPolicy ?? scanning.policy,

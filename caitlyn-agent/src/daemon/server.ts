@@ -19,7 +19,7 @@ import * as path from "node:path";
 import { hybridScan } from "../hybrid-scanner.js";
 import { loadAntibodies, loadAntigens } from "../library.js";
 import { FSWatcher } from "../guard/fs-watcher.js";
-import { createUnavailableLlmCall, type LlmCallFn } from "../scanner.js";
+import { createUnavailableLlmCall, parseScanMode, type LlmCallFn } from "../scanner.js";
 import type { ScanResult } from "../schema.js";
 import { loadEvolutionConfig, type EvolutionConfig } from "../config.js";
 import { EvolutionEngine } from "../evolution/engine.js";
@@ -302,6 +302,7 @@ export class DaemonServer {
     }
 
     const content = parsed.content.slice(0, 65536); // 64KB max
+    const modeOpts = parseScanMode(parsed.mode);
 
     let result: ScanResult;
     // Without an LLM, run Tier 0 scripts only (they never need the LLM) and
@@ -309,13 +310,10 @@ export class DaemonServer {
     result = await hybridScan({
       content,
       llmCall: this.llmCall ?? createUnavailableLlmCall("LLM not configured on daemon"),
-      tier1Mode:
-        parsed.mode === "merged-pair"
-          ? "merged-pair"
-          : parsed.mode === "merged" || parsed.mode === "merged-detectors"
-            ? "merged"
-            : undefined,
-      mergedScope: parsed.mode === "merged-detectors" ? "detectors" : undefined,
+      tier1Mode: modeOpts.tier1Mode,
+      mergedScope: modeOpts.mergedScope,
+      skipTier0: modeOpts.skipTier0,
+      skipTier1: modeOpts.skipTier1,
       sourceTrust:
         parsed.source === "high" || parsed.source === "low"
           ? parsed.source

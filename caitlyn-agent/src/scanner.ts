@@ -3,9 +3,13 @@
  *
  * Staged scanning:
  *   Tier 0: scripts + in-process signature engine (fast, no LLM)
- *   Tier 1: per-antibody LLM ensemble, gated by escalation policy
- *     (safe: fast subset on clean, full on weak signals;
- *      aggressive: skip LLM on trusted clean, fast on untrusted/risky)
+ *   Tier 1: merged / merged-pair (paper default) or per-antibody ensemble
+ *
+ * HTTP ablation modes (parseScanMode):
+ *   t0-only — skip Tier 1
+ *   none — skip Tier 0, then merged-pair
+ *   ensemble — all Tier 1 detectors, no escalation gate
+ *   merged / merged-detectors / merged-pair — paper Tier 1 schemas
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
@@ -668,6 +672,39 @@ export type Tier1Mode = "ensemble" | "merged" | "merged-pair";
  */
 export type MergedScope = "detectors" | "knowledge";
 
+/** Options derived from the daemon HTTP `mode` field. */
+export interface ScanModeOptions {
+  tier1Mode?: Tier1Mode;
+  mergedScope?: MergedScope;
+  skipTier0?: boolean;
+  skipTier1?: boolean;
+}
+
+/**
+ * Map the HTTP scan mode string onto scanner options.
+ *
+ * REVIEW(团长): `none` is skip-Tier-0, not "no defense". `full` is left
+ * unmapped so the old ensemble+gate path stays reachable.
+ */
+export function parseScanMode(mode?: string): ScanModeOptions {
+  switch (mode) {
+    case "t0-only":
+      return { skipTier1: true };
+    case "none":
+      return { skipTier0: true, tier1Mode: "merged-pair" };
+    case "ensemble":
+      return { tier1Mode: "ensemble" };
+    case "merged":
+      return { tier1Mode: "merged" };
+    case "merged-detectors":
+      return { tier1Mode: "merged", mergedScope: "detectors" };
+    case "merged-pair":
+      return { tier1Mode: "merged-pair" };
+    default:
+      return {};
+  }
+}
+
 /** Run an async mapper over items with at most `limit` concurrent calls. */
 async function mapLimit<T, R>(
   items: T[],
@@ -1053,6 +1090,10 @@ export interface ScanOptions {
   llmCall: LlmCallFn;
   tier1Mode?: Tier1Mode;
   mergedScope?: MergedScope;
+  /** Skip the Tier 0 stage entirely, including the malicious short-circuit. */
+  skipTier0?: boolean;
+  /** Return after Tier 0 and never call the LLM. */
+  skipTier1?: boolean;
   tier0TimeoutMs?: number;
   escalationPolicy?: EscalationPolicy;
   fastDetectorIds?: string[];
@@ -1081,8 +1122,10 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
   const scanStart = performance.now();
   let totalTokens = 0;
 
-  // Tier 0: fast scripts + signature engine
-  const t0 = await runTier0(options.antibodies, options.content, options.tier0TimeoutMs);
+  // Tier 0: fast scripts + signature engine (skipped for the none ablation)
+  const t0 = options.skipTier0
+    ? { results: [] as ScriptResult[], malicious: false }
+    : await runTier0(options.antibodies, options.content, options.tier0TimeoutMs);
   recordShadowScans(options.content);
 
   const t0Feedback = (finalVerdict: Verdict) =>
@@ -1105,6 +1148,33 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       confidence: Math.max(...t0.results.map((r) => r.confidence)),
       tier: 0,
       script_results: t0.results,
+      total_latency_us: latency,
+      total_tokens: 0,
+    };
+    await logScan(result, options.content);
+    t0Feedback(result.verdict);
+    return result;
+  }
+
+  if (options.skipTier1) {
+    const latency = Math.round(performance.now() - scanStart) * 1000;
+    appendStatsEvent("evolution_self", "scan_latency_us", latency);
+    const derived = deriveTier0Verdict(t0.results);
+    const result: ScanResult = {
+      verdict: derived.verdict,
+      confidence: derived.confidence,
+      tier: 0,
+      script_results: [
+        ...t0.results,
+        {
+          antibody_id: "t0-only",
+          verdict: "benign" as const,
+          confidence: 0,
+          reason: "Tier 1 skipped by t0-only scan mode",
+          latency_us: 0,
+          error: null,
+        },
+      ],
       total_latency_us: latency,
       total_tokens: 0,
     };
@@ -1185,6 +1255,54 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
         aggregated,
         stage,
         stageReason,
+        scanStart,
+        totalTokens,
+        totalCostUsd,
+      });
+      appendStatsEvent("evolution_self", "scan_latency_us", result.total_latency_us);
+      appendStatsEvent("evolution_self", "scan_tokens", totalTokens);
+      await logScan(result, options.content);
+      t0Feedback(result.verdict);
+      return result;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      const { result, fallback } = makeFallbackScanResult(
+        t0.results,
+        scanStart,
+        errorMsg,
+        totalTokens,
+      );
+      appendStatsEvent("evolution_self", "scan_latency_us", result.total_latency_us);
+      await logScan(result, options.content);
+      t0Feedback(fallback.verdict);
+      return result;
+    }
+  }
+
+  // Explicit ensemble: every Tier 1 detector, no escalation gate.
+  if (options.tier1Mode === "ensemble") {
+    try {
+      const ensembleResults = await runTier1Ensemble(
+        detectors,
+        options.content,
+        options.llmCall,
+        undefined,
+        {
+          timeoutMs: options.tier1TimeoutMs,
+          maxParallel: options.maxParallelTier1,
+        },
+      );
+      totalTokens = ensembleResults.reduce((acc, r) => acc + r.tokens, 0);
+      const totalCostUsd = ensembleResults.reduce(
+        (acc, r) => acc + (r.cost_usd ?? 0),
+        0,
+      );
+      const result = makeTier1ScanResult({
+        t0Results: t0.results,
+        tier1Results: ensembleResults,
+        aggregated: aggregateTier1(ensembleResults, thresholds),
+        stage: "ensemble",
+        stageReason: "all detectors, no escalation gate",
         scanStart,
         totalTokens,
         totalCostUsd,

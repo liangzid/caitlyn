@@ -35,6 +35,7 @@ import {
   runTier1Ensemble,
   runMergedTier1,
   runMergedPairTier1,
+  parseScanMode,
   scan,
   selectTier1Detectors,
   selectMergedSkills,
@@ -780,5 +781,92 @@ describe("scan() Tier 1 escalation", () => {
     });
     expect(called.sort()).toEqual([...FULL_IDS].sort());
     expect(result.verdict).toBe("suspicious");
+  });
+
+  it("ensemble mode runs every detector and bypasses the escalation gate", async () => {
+    const called: string[] = [];
+    const result = await scan({
+      antibodies: makeEnsemble(),
+      antigens: [],
+      content: "hello",
+      tier1Mode: "ensemble",
+      escalationPolicy: "aggressive",
+      sourceTrust: "high",
+      fastDetectorIds: FAST_IDS,
+      llmCall: async (system) => {
+        const id = system.match(/\(([^)]+)\)/)![1];
+        called.push(id);
+        return "benign 0.1";
+      },
+    });
+    expect(called.sort()).toEqual([...FULL_IDS].sort());
+    expect(result.verdict).toBe("benign");
+    expect(
+      result.script_results.some((r) => r.reason?.includes("no escalation gate")),
+    ).toBe(true);
+  });
+});
+
+describe("parseScanMode", () => {
+  it("maps ablation HTTP modes onto scanner flags", () => {
+    expect(parseScanMode("t0-only")).toEqual({ skipTier1: true });
+    expect(parseScanMode("none")).toEqual({
+      skipTier0: true,
+      tier1Mode: "merged-pair",
+    });
+    expect(parseScanMode("ensemble")).toEqual({ tier1Mode: "ensemble" });
+    expect(parseScanMode("merged")).toEqual({ tier1Mode: "merged" });
+    expect(parseScanMode("merged-detectors")).toEqual({
+      tier1Mode: "merged",
+      mergedScope: "detectors",
+    });
+    expect(parseScanMode("merged-pair")).toEqual({ tier1Mode: "merged-pair" });
+    expect(parseScanMode("full")).toEqual({});
+  });
+});
+
+describe("scan() System I ablation modes", () => {
+  function makeTier0Hit(): AntibodyEntry {
+    const ab = makeAntibody("ab-t0", "T0", "readme", "", 0);
+    ab.config.signatures = [
+      { pattern: "evil-payload", type: "exact", label: "hit" },
+    ];
+    return ab;
+  }
+
+  it("t0-only returns the Tier 0 verdict without calling the LLM", async () => {
+    let calls = 0;
+    const result = await scan({
+      antibodies: [makeTier0Hit()],
+      antigens: [],
+      content: "evil-payload in a file",
+      skipTier1: true,
+      llmCall: async () => {
+        calls += 1;
+        return "benign 0.1";
+      },
+    });
+    expect(calls).toBe(0);
+    expect(result.tier).toBe(0);
+    expect(result.verdict).toBe("malicious");
+  });
+
+  it("none (skip Tier 0) still runs Tier 1 on a payload Tier 0 would block", async () => {
+    let calls = 0;
+    const t1 = makeAntibody("ab-t1", "T1", "readme", "You are a detector.", 1);
+    const result = await scan({
+      antibodies: [makeTier0Hit(), t1],
+      antigens: [],
+      content: "evil-payload in a file",
+      skipTier0: true,
+      tier1Mode: "merged-pair",
+      llmCall: async () => {
+        calls += 1;
+        return "benign 0.1";
+      },
+    });
+    expect(calls).toBe(2);
+    expect(result.tier).toBe(1);
+    expect(result.verdict).toBe("benign");
   });
 });
