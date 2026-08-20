@@ -574,12 +574,11 @@ def main() -> None:
     with records_path.open("w", encoding="utf-8") as fh:
         for detector_name in args.detectors:
             # PI Detector shares a class-level HF pipeline; keep it sequential.
-            # CAITLYN's full Tier-1 ensemble is 17 LLM calls per scan, so cap
-            # client concurrency to avoid API throttling and timeouts.
+            # Other detectors honor --workers. Do not pin CAITLYN to 8: merged-pair
+            # is two LLM calls per scan, and 8 workers become 16 in-flight OpenRouter
+            # requests that queue to 20-40s.
             if detector_name == "pi_detector":
                 workers = 1
-            elif detector_name == "caitlyn":
-                workers = 8
             else:
                 workers = args.workers
             with ThreadPoolExecutor(max_workers=workers) as executor:
