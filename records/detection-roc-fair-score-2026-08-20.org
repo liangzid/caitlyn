@@ -103,3 +103,12 @@ LLM judges. Regex-Guard and PI Detector stay from the clean
 fail-opens count as misses. Run-to-run TPR differs slightly from
 the high-concurrency clean run. Do not mix those two CAITLYN
 columns.
+
+* Figure 4 restyle (2026-08-20)
+
+Floating fig.text Latency/Cost did not track the rows after
+bbox_inches=tight, and CAITLYN used a larger marker (s=95 vs 58).
+
+Now: nested GridSpec, Latency/Cost as a centered header band above
+each row of four panels, shared marker area s=88, top/right spines
+off, dpi=300. Serif kept to match Figure 3. No jitter.
