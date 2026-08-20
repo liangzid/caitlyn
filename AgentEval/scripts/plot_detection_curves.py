@@ -35,8 +35,9 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.gridspec import GridSpec  # noqa: E402
 from matplotlib.lines import Line2D  # noqa: E402
-from matplotlib.ticker import LogLocator, NullLocator  # noqa: E402
+from matplotlib.ticker import LogLocator, MaxNLocator, NullLocator  # noqa: E402
 
 DATASETS = ["agentdojo", "aspi", "safeclawbench", "agentdefense"]
 DETECTORS = [
@@ -784,130 +785,251 @@ def plot_roc_pr_grid(
     plt.close(fig)
 
 
+# Scatter area in pt^2. Matplotlib `s` is area, so one value keeps every
+# marker visually comparable across shapes.
+PARETO_MARKER_SIZE = 88
+PARETO_MARKER_EDGE = 0.9
+PARETO_DATASET_TITLES = {
+    "agentdojo": "AgentDojo",
+    "aspi": "ASPI-S",
+    "safeclawbench": "SafeClawBench",
+    "agentdefense": "AgentDefense",
+}
+
+
 def scatter_operating_point(ax: Any, x: float, y: float, detector: str) -> None:
-    """Draw one default-threshold point, with a halo for CAITLYN."""
-    color = DETECTOR_COLORS[detector]
-    marker = OP_MARKERS[detector]
-    if detector == "caitlyn":
-        ax.scatter(
-            [x], [y], s=170, marker=marker, facecolors="white",
-            edgecolors="white", linewidths=0, zorder=5.5,
-        )
-        ax.scatter(
-            [x], [y], s=95, marker=marker, facecolors=color,
-            edgecolors="white", linewidths=0.9, zorder=6,
-        )
-        return
+    """Draw one default-threshold point. Every detector uses the same size."""
     ax.scatter(
-        [x], [y], s=58, marker=marker, facecolors=color,
-        edgecolors="white", linewidths=0.7, zorder=4, alpha=0.9,
+        [x],
+        [y],
+        s=PARETO_MARKER_SIZE,
+        marker=OP_MARKERS[detector],
+        facecolors=DETECTOR_COLORS[detector],
+        edgecolors="white",
+        linewidths=PARETO_MARKER_EDGE,
+        zorder=6 if detector == "caitlyn" else 4,
+        clip_on=False,
     )
+
+
+def _pareto_detector_order(data: dict[str, dict[str, Any]]) -> list[str]:
+    """Draw baselines first so CAITLYN sits on top when points overlap."""
+    order = [det for det in DETECTORS if det in data and det != "caitlyn"]
+    if "caitlyn" in data:
+        order.append("caitlyn")
+    return order
+
+
+def _pareto_metric_row(
+    fig: Any,
+    spec: Any,
+    *,
+    metric_name: str,
+    all_data: dict[str, dict[str, dict[str, Any]]],
+    datasets: list[str],
+    letters: str,
+    xlabel: str,
+    xlim: tuple[float, float],
+    logx: bool,
+    x_of,
+    sharey: Any,
+) -> Any:
+    """Build one metric row: a centered row name, dataset titles, then panels.
+
+    KEYPOINT (review): metric_name is a GridSpec band above the four
+    panels, so it stays locked to that row.
+    """
+    gs = spec.subgridspec(
+        3,
+        4,
+        height_ratios=[0.11, 0.14, 1.0],
+        hspace=0.02,
+        wspace=0.16,
+    )
+    ax_metric = fig.add_subplot(gs[0, :])
+    ax_metric.set_axis_off()
+    ax_metric.text(
+        0.5,
+        0.0,
+        metric_name,
+        ha="center",
+        va="bottom",
+        fontsize=13.5,
+        fontweight="bold",
+        transform=ax_metric.transAxes,
+    )
+    first_ax = None
+    for i, dataset in enumerate(datasets):
+        ax_title = fig.add_subplot(gs[1, i])
+        ax_title.set_axis_off()
+        ax_title.text(
+            0.5,
+            0.0,
+            f"({letters[i]}) {PARETO_DATASET_TITLES[dataset]}",
+            ha="center",
+            va="bottom",
+            fontsize=12,
+            fontweight="bold",
+            transform=ax_title.transAxes,
+        )
+        ax = fig.add_subplot(gs[2, i], sharey=sharey)
+        if first_ax is None:
+            first_ax = ax
+            sharey = ax
+        data = all_data[dataset]
+        for detector in _pareto_detector_order(data):
+            d = data[detector]
+            x = x_of(d)
+            if x is None:
+                continue
+            scatter_operating_point(ax, x, d["op_tpr"], detector)
+        _style_pareto_panel(
+            ax,
+            xlabel,
+            xlim,
+            logx=logx,
+            show_ylabel=(i == 0),
+        )
+    return sharey
 
 
 def plot_pareto_grid(
     all_data: dict[str, dict[str, dict[str, Any]]],
     out_path: Path,
 ) -> None:
-    """Save a 2x4 overall TPR vs latency/cost figure, one column per dataset.
+    """Save a 2x4 TPR vs latency/cost figure, one column per dataset.
 
-    Each point is the mean over all samples of that detector, including
-    CAITLYN Tier 0 short-circuits and Tier 1 calls. No axis jitter.
+    Each point is the mean over attack samples at the default threshold.
+    Marker size is shared across detectors.
     """
     plt.rcParams.update({
         "font.family": "serif",
         "font.serif": ["Liberation Serif", "DejaVu Serif", "Times New Roman"],
-        "font.size": 12.5,
-        "axes.titlesize": 12.5,
-        "axes.labelsize": 12.5,
-        "legend.fontsize": 11.5,
-        "xtick.labelsize": 12,
-        "ytick.labelsize": 12,
+        "font.size": 12,
+        "axes.titlesize": 12,
+        "axes.labelsize": 12,
+        "legend.fontsize": 12,
+        "xtick.labelsize": 11,
+        "ytick.labelsize": 11,
+        "axes.linewidth": 1.4,
+        "legend.frameon": False,
     })
     datasets = [ds for ds in DATASETS if ds in all_data]
-    titles = {
-        "agentdojo": "AgentDojo",
-        "aspi": "ASPI-S",
-        "safeclawbench": "SafeClawBench",
-        "agentdefense": "AgentDefense",
-    }
-    letters = "abcdefgh"
-    fig, axes = plt.subplots(2, 4, figsize=(10.0, 4.8), dpi=200)
     max_cost = 0.0
     for data in all_data.values():
         for d in data.values():
             if d["avg_cost_usd"] is not None:
                 max_cost = max(max_cost, d["avg_cost_usd"])
-    cost_xmax = max(max_cost * 1000.0 * 1.15, 0.2)
-    for i, dataset in enumerate(datasets):
-        data = all_data[dataset]
-        ax_lat = axes[0, i]
-        ax_cost = axes[1, i]
-        order = [det for det in DETECTORS if det in data and det != "caitlyn"]
-        if "caitlyn" in data:
-            order.append("caitlyn")
-        for detector in order:
-            d = data[detector]
-            lat = d["avg_latency_ms"]
-            cost = d["avg_cost_usd"]
-            if lat is None or cost is None:
-                continue
-            scatter_operating_point(
-                ax_lat, max(lat, 0.2), d["op_tpr"], detector
-            )
-            scatter_operating_point(
-                ax_cost, cost * 1000.0, d["op_tpr"], detector
-            )
-        ax_lat.set_title(
-            f"({letters[i]}) {titles[dataset]}",
-            fontsize=12.5, fontweight="bold", pad=6,
-        )
-        ax_cost.set_title(
-            f"({letters[4 + i]}) {titles[dataset]}",
-            fontsize=12.5, fontweight="bold", pad=6,
-        )
-        _style_axes(
-            ax_lat, "Avg Latency (ms)", "TPR",
-            (0.2, 8.0e4), (-0.06, 1.10), logx=True, grid_alpha=0.22,
-        )
-        ax_lat.xaxis.set_major_locator(LogLocator(base=10, numticks=5))
-        ax_lat.xaxis.set_minor_locator(NullLocator())
-        _style_axes(
-            ax_cost, "Avg Cost ($\\times 10^{-3}$ USD)", "TPR",
-            (-0.03, cost_xmax), (-0.06, 1.10), grid_alpha=0.22,
-        )
-        ax_lat.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
-        ax_cost.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
+    cost_xmax = max(max_cost * 1000.0 * 1.12, 0.2)
+
+    fig = plt.figure(figsize=(11.0, 5.55), dpi=300)
+    outer = GridSpec(
+        2,
+        1,
+        figure=fig,
+        hspace=0.26,
+        left=0.06,
+        right=0.995,
+        top=0.97,
+        bottom=0.14,
+    )
+
+    def lat_x(d: dict[str, Any]) -> float | None:
+        lat = d["avg_latency_ms"]
+        return None if lat is None else max(float(lat), 0.2)
+
+    def cost_x(d: dict[str, Any]) -> float | None:
+        cost = d["avg_cost_usd"]
+        return None if cost is None else float(cost) * 1000.0
+
+    sharey = _pareto_metric_row(
+        fig,
+        outer[0],
+        metric_name="Latency",
+        all_data=all_data,
+        datasets=datasets,
+        letters="abcd",
+        xlabel="Latency (ms)",
+        xlim=(0.2, 2.0e4),
+        logx=True,
+        x_of=lat_x,
+        sharey=None,
+    )
+    _pareto_metric_row(
+        fig,
+        outer[1],
+        metric_name="Cost",
+        all_data=all_data,
+        datasets=datasets,
+        letters="efgh",
+        xlabel=r"Cost ($\times 10^{-3}$ USD)",
+        xlim=(-0.12, cost_xmax),
+        logx=False,
+        x_of=cost_x,
+        sharey=sharey,
+    )
+
     handles = [
         Line2D(
-            [0], [0], marker=OP_MARKERS[d], color="none",
+            [0],
+            [0],
+            marker=OP_MARKERS[d],
+            color="none",
             markerfacecolor=DETECTOR_COLORS[d],
-            markeredgecolor="white", markeredgewidth=0.6,
-            markersize=11 if d == "caitlyn" else 8,
-            linestyle="None", label=DETECTOR_LABELS[d],
+            markeredgecolor="white",
+            markeredgewidth=0.7,
+            markersize=8.5,
+            linestyle="None",
+            label=DETECTOR_LABELS[d],
         )
         for d in DETECTORS
     ]
     fig.legend(
         handles=handles,
-        loc="lower center", ncol=5, frameon=False,
-        fontsize=14.5, bbox_to_anchor=(0.5, -0.07),
-        columnspacing=2.0, handlelength=1.6, handletextpad=0.5,
-        borderaxespad=0.2,
+        loc="lower center",
+        ncol=5,
+        frameon=False,
+        fontsize=12,
+        bbox_to_anchor=(0.54, -0.01),
+        columnspacing=1.6,
+        handlelength=1.4,
+        handletextpad=0.4,
+        borderaxespad=0.0,
     )
-    fig.text(
-        0.012, 0.66, "Latency", rotation=90, va="center", ha="center",
-        fontsize=12.5, fontweight="bold",
-    )
-    fig.text(
-        0.012, 0.29, "Cost", rotation=90, va="center", ha="center",
-        fontsize=12.5, fontweight="bold",
-    )
-    fig.subplots_adjust(
-        wspace=0.60, hspace=0.60, left=0.13,
-        right=0.985, top=0.94, bottom=0.19,
-    )
-    fig.savefig(out_path, bbox_inches="tight", pad_inches=0.02)
+    fig.savefig(out_path, dpi=300, bbox_inches="tight", pad_inches=0.04)
     plt.close(fig)
+
+
+def _style_pareto_panel(
+    ax: Any,
+    xlabel: str,
+    xlim: tuple[float, float],
+    *,
+    logx: bool,
+    show_ylabel: bool,
+) -> None:
+    """Apply compact publication spines, ticks, and a shared TPR scale."""
+    _style_axes(
+        ax,
+        xlabel,
+        "TPR" if show_ylabel else "",
+        xlim,
+        (-0.05, 1.12),
+        logx=logx,
+        grid_alpha=0.22,
+        ylabel_pad=4.0,
+    )
+    ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
+    if not show_ylabel:
+        ax.tick_params(labelleft=False)
+    ax.spines["left"].set_linewidth(1.4)
+    ax.spines["bottom"].set_linewidth(1.4)
+    ax.tick_params(length=3.5, width=1.0, labelsize=11)
+    if logx:
+        ax.xaxis.set_major_locator(LogLocator(base=10, numticks=4))
+        ax.xaxis.set_minor_locator(NullLocator())
+    else:
+        ax.xaxis.set_major_locator(MaxNLocator(nbins=4, prune=None))
 
 
 def main() -> None:
