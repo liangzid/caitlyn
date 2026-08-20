@@ -106,10 +106,38 @@ def load_records(path: str | Path) -> list[dict]:
     return rows
 
 
+ATTACK_VERDICTS = {"malicious", "suspicious"}
+
+
+def detector_fired_as_attack(record: dict) -> bool:
+    """Return True when the detector treated the sample as attack-like."""
+    result = record.get("result") or {}
+    if result.get("blocked"):
+        return True
+    verdict = str(result.get("verdict") or "").lower()
+    return verdict in ATTACK_VERDICTS
+
+
 def score_of(record: dict) -> float:
-    """Extract the continuous score used for threshold curves."""
-    score = (record.get("result") or {}).get("score")
-    return float(score) if score is not None else 0.0
+    """Return a ranking score that is comparable across detectors.
+
+    LLM judges, PI Detector, and merged-pair CAITLYN store the
+    confidence of the predicted class, not P(attack). Sweeping the raw
+    value inverts the ROC because benign predictions also have high
+    confidence. A firing detection keeps its confidence, and a
+    non-firing detection is mapped to 0. This matches the ensemble
+    CAITLYN records, where benign verdicts were stored as score 0.
+
+    KEYPOINT (review): this mapping is the only score used for ROC/PR.
+    """
+    result = record.get("result") or {}
+    raw = result.get("score")
+    if raw is None:
+        raw = result.get("confidence")
+    confidence = float(raw) if raw is not None else 0.0
+    if detector_fired_as_attack(record):
+        return confidence
+    return 0.0
 
 
 def blocked_of(record: dict) -> bool:
@@ -123,7 +151,7 @@ def roc_points(
     """Return FPR/TPR points and AUROC by sweeping all score thresholds."""
     total_p = sum(labels)
     total_n = len(labels) - total_p
-    thresholds = sorted(set(scores), reverse=True) + [float("-inf")]
+    thresholds = [float("inf")] + sorted(set(scores), reverse=True) + [float("-inf")]
     fprs: list[float] = []
     tprs: list[float] = []
     for t in thresholds:
@@ -142,7 +170,7 @@ def pr_points(
     total_p = sum(labels)
     total_n = len(labels) - total_p
     base_rate = total_p / (total_p + total_n) if (total_p + total_n) else 0.0
-    thresholds = sorted(set(scores), reverse=True) + [float("-inf")]
+    thresholds = [float("inf")] + sorted(set(scores), reverse=True) + [float("-inf")]
     recalls: list[float] = [0.0]
     precisions: list[float] = [1.0]
     for t in thresholds:
@@ -216,6 +244,20 @@ def estimate_caitlyn_cost(record: dict) -> float:
     return prompt * DS_CHAT_PROMPT + 1.0 * DS_CHAT_COMPLETION
 
 
+def usd_cost_of(record: dict, detector: str) -> float:
+    """Return the recorded USD cost, or a detector-appropriate fallback.
+
+    Regex-Guard and PI Detector have no LLM usage, so a missing cost is
+    zero rather than a DeepSeek token estimate.
+    """
+    raw = (record.get("cost") or {}).get("cost_usd")
+    if raw is not None:
+        return float(raw)
+    if detector in ("regex_guard", "pi_detector"):
+        return 0.0
+    return estimate_caitlyn_cost(record)
+
+
 def per_detector_arrays(
     records: list[dict], dataset: str
 ) -> dict[str, dict[str, Any]]:
@@ -246,12 +288,7 @@ def per_detector_arrays(
             for r in attacks
             if (r.get("cost") or {}).get("latency_ms") is not None
         ]
-        costs = [
-            (r.get("cost") or {}).get("cost_usd")
-            if (r.get("cost") or {}).get("cost_usd") is not None
-            else estimate_caitlyn_cost(r)
-            for r in attacks
-        ]
+        costs = [usd_cost_of(r, detector) for r in attacks]
         out[detector] = {
             "scores": scores,
             "labels": labels,
@@ -277,6 +314,28 @@ def per_detector_arrays(
     return out
 
 
+def plot_threshold_curve(
+    ax: Any, xs: list[float], ys: list[float], detector: str
+) -> None:
+    """Draw one ROC or PR curve, with a white halo for CAITLYN."""
+    color = DETECTOR_COLORS[detector]
+    linestyle = DETECTOR_LINESTYLES[detector]
+    if detector == "caitlyn":
+        ax.plot(
+            xs, ys, color="white", linewidth=5.0, linestyle="-",
+            solid_capstyle="round", zorder=4.5,
+        )
+        ax.plot(
+            xs, ys, color=color, linewidth=2.6, linestyle=linestyle,
+            solid_capstyle="round", zorder=5,
+        )
+        return
+    ax.plot(
+        xs, ys, color=color, linewidth=1.2, linestyle=linestyle,
+        solid_capstyle="round", zorder=3, alpha=0.85,
+    )
+
+
 def plot_dataset_figure(
     data: dict[str, dict[str, Any]],
     dataset: str,
@@ -286,40 +345,32 @@ def plot_dataset_figure(
     fig, (ax_roc, ax_pr) = plt.subplots(
         1, 2, figsize=(10.5, 4.2), dpi=200
     )
-    for detector, d in data.items():
-        if detector == "caitlyn":
-            # CAITLYN returns a verdict label rather than a calibrated
-            # score, so only its default operating point is plotted.
-            ax_roc.plot(
-                d["op_fpr"], d["op_tpr"], marker="s", markersize=5,
-                color=DETECTOR_COLORS["caitlyn"], linestyle="None",
-            )
-            ax_pr.plot(
-                d["op_recall"], d["op_precision"], marker="s", markersize=5,
-                color=DETECTOR_COLORS["caitlyn"], linestyle="None",
-            )
-            continue
+    curve_order = [det for det in DETECTORS if det in data and det != "caitlyn"]
+    if "caitlyn" in data:
+        curve_order.append("caitlyn")
+    for detector in curve_order:
+        d = data[detector]
         fprs, tprs, auroc = roc_points(d["scores"], d["labels"])
         recalls, precisions, auprc = pr_points(d["scores"], d["labels"])
         label = (
             f"{DETECTOR_LABELS[detector]} "
             f"(AUROC {auroc:.3f} / AUPRC {auprc:.3f})"
         )
+        plot_threshold_curve(ax_roc, fprs, tprs, detector)
         ax_roc.plot(
-            fprs, tprs, linewidth=1.6, label=label,
-            marker="", linestyle="-",
+            [], [], color=DETECTOR_COLORS[detector],
+            linestyle=DETECTOR_LINESTYLES[detector],
+            linewidth=2.6 if detector == "caitlyn" else 1.2,
+            label=label,
         )
         ax_roc.plot(
             d["op_fpr"], d["op_tpr"], marker="s", markersize=5,
-            linestyle="None",
+            color=DETECTOR_COLORS[detector], linestyle="None",
         )
-        ax_pr.plot(
-            recalls, precisions, linewidth=1.6,
-            marker="", linestyle="-",
-        )
+        plot_threshold_curve(ax_pr, recalls, precisions, detector)
         ax_pr.plot(
             d["op_recall"], d["op_precision"], marker="s", markersize=5,
-            linestyle="None",
+            color=DETECTOR_COLORS[detector], linestyle="None",
         )
 
     ax_roc.plot([0, 1], [0, 1], color="gray", linewidth=0.8, linestyle="--")
@@ -333,7 +384,9 @@ def plot_dataset_figure(
     ax_pr.set_xlabel("Recall")
     ax_pr.set_ylabel("Precision")
     ax_pr.set_title(f"{dataset}: PR")
-    ax_pr.set_xlim(0.0, 1.02)
+    # Low-recall precision is 1.0 for any FPR=0 detector and is not
+    # informative. The paper PR panels start at recall 0.5.
+    ax_pr.set_xlim(0.48, 1.02)
     ax_pr.set_ylim(0.0, 1.02)
     ax_pr.grid(alpha=0.3)
 
@@ -623,23 +676,17 @@ def plot_roc_pr_grid(
         data = all_data[dataset]
         ax_roc = axes[0, i]
         ax_pr = axes[1, i]
-        for detector, d in data.items():
-            if detector == "caitlyn":
-                # Verdict-based operating point only; no threshold curve.
-                continue
+        curve_order = [
+            det for det in DETECTORS if det in data and det != "caitlyn"
+        ]
+        if "caitlyn" in data:
+            curve_order.append("caitlyn")
+        for detector in curve_order:
+            d = data[detector]
             fprs, tprs, _ = roc_points(d["scores"], d["labels"])
             recalls, precisions, _ = pr_points(d["scores"], d["labels"])
-            color = DETECTOR_COLORS[detector]
-            linestyle = DETECTOR_LINESTYLES[detector]
-            linewidth = 1.7 if detector == "caitlyn" else 1.2
-            ax_roc.plot(
-                fprs, tprs, color=color, linewidth=linewidth,
-                linestyle=linestyle, solid_capstyle="round", zorder=3,
-            )
-            ax_pr.plot(
-                recalls, precisions, color=color, linewidth=linewidth,
-                linestyle=linestyle, solid_capstyle="round", zorder=3,
-            )
+            plot_threshold_curve(ax_roc, fprs, tprs, detector)
+            plot_threshold_curve(ax_pr, recalls, precisions, detector)
         detector_order = [det for det in DETECTORS if det in data]
         roc_ops = spread_points(
             [(data[det]["op_fpr"], data[det]["op_tpr"])
@@ -655,14 +702,32 @@ def plot_roc_pr_grid(
                 linestyle="None", zorder=4,
             )
         if "caitlyn" in data:
+            cait_idx = detector_order.index("caitlyn")
+            cx, cy = roc_ops[cait_idx]
+            ax_roc.plot(
+                cx, cy, marker="D", markersize=10.0, color="white",
+                linestyle="None", zorder=5.5,
+            )
+            ax_roc.plot(
+                cx, cy, marker="D", markersize=6.0,
+                color=DETECTOR_COLORS["caitlyn"],
+                markerfacecolor=DETECTOR_COLORS["caitlyn"],
+                markeredgecolor="white", markeredgewidth=0.8,
+                linestyle="None", zorder=6,
+            )
             cait = data["caitlyn"]
+            ax_pr.plot(
+                cait["op_recall"], cait["op_precision"],
+                marker="D", markersize=10.0, color="white",
+                linestyle="None", zorder=5.5,
+            )
             ax_pr.plot(
                 cait["op_recall"], cait["op_precision"],
                 marker="D", markersize=6.0,
                 color=DETECTOR_COLORS["caitlyn"],
                 markerfacecolor=DETECTOR_COLORS["caitlyn"],
                 markeredgecolor="white", markeredgewidth=0.8,
-                linestyle="None", zorder=4,
+                linestyle="None", zorder=6,
             )
         ax_roc.plot(
             [0, 1], [0, 1], color="#bbbbbb", linewidth=1.0,
@@ -677,10 +742,15 @@ def plot_roc_pr_grid(
             fontsize=12.5, fontweight="bold", pad=6,
         )
         _style_axes(ax_roc, "FPR", "TPR", (-0.02, 1.02), (-0.02, 1.06))
-        _style_axes(ax_pr, "Recall", "Precision", (-0.02, 1.02), (-0.02, 1.06))
-        for ax in (ax_roc, ax_pr):
-            ax.set_xticks([0.0, 0.25, 0.5, 0.75, 1.0])
-            ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
+        # KEYPOINT (review): PR x-axis starts at 0.5. The 0-0.5 band is a
+        # precision=1.0 plateau whenever FPR is 0, so it does not separate
+        # detectors. Operating points with recall below 0.5 fall off this
+        # panel (PI Detector on three datasets, LLM-Judge on SafeClawBench).
+        _style_axes(ax_pr, "Recall", "Precision", (0.48, 1.02), (-0.02, 1.06))
+        ax_roc.set_xticks([0.0, 0.25, 0.5, 0.75, 1.0])
+        ax_roc.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
+        ax_pr.set_xticks([0.5, 0.75, 1.0])
+        ax_pr.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
 
     handles_methods = [
         Line2D(
@@ -714,11 +784,35 @@ def plot_roc_pr_grid(
     plt.close(fig)
 
 
+def scatter_operating_point(ax: Any, x: float, y: float, detector: str) -> None:
+    """Draw one default-threshold point, with a halo for CAITLYN."""
+    color = DETECTOR_COLORS[detector]
+    marker = OP_MARKERS[detector]
+    if detector == "caitlyn":
+        ax.scatter(
+            [x], [y], s=170, marker=marker, facecolors="white",
+            edgecolors="white", linewidths=0, zorder=5.5,
+        )
+        ax.scatter(
+            [x], [y], s=95, marker=marker, facecolors=color,
+            edgecolors="white", linewidths=0.9, zorder=6,
+        )
+        return
+    ax.scatter(
+        [x], [y], s=58, marker=marker, facecolors=color,
+        edgecolors="white", linewidths=0.7, zorder=4, alpha=0.9,
+    )
+
+
 def plot_pareto_grid(
     all_data: dict[str, dict[str, dict[str, Any]]],
     out_path: Path,
 ) -> None:
-    """Save the 1x2 latency/cost Pareto figure with large fonts."""
+    """Save a 2x4 overall TPR vs latency/cost figure, one column per dataset.
+
+    Each point is the mean over all samples of that detector, including
+    CAITLYN Tier 0 short-circuits and Tier 1 calls. No axis jitter.
+    """
     plt.rcParams.update({
         "font.family": "serif",
         "font.serif": ["Liberation Serif", "DejaVu Serif", "Times New Roman"],
@@ -729,133 +823,88 @@ def plot_pareto_grid(
         "xtick.labelsize": 12,
         "ytick.labelsize": 12,
     })
-    fig, (ax_lat, ax_cost) = plt.subplots(
-        1, 2, figsize=(10.0, 3.5), dpi=200
-    )
+    datasets = [ds for ds in DATASETS if ds in all_data]
+    titles = {
+        "agentdojo": "AgentDojo",
+        "aspi": "ASPI-S",
+        "safeclawbench": "SafeClawBench",
+        "agentdefense": "AgentDefense",
+    }
+    letters = "abcdefgh"
+    fig, axes = plt.subplots(2, 4, figsize=(10.0, 4.8), dpi=200)
     max_cost = 0.0
-    dataset_jitter = {
-        "agentdojo": 0.35,
-        "aspi": 0.65,
-        "safeclawbench": 1.1,
-        "agentdefense": 1.7,
-    }
-    dataset_cost_jitter = {
-        "agentdojo": 0.03,
-        "aspi": 0.11,
-        "safeclawbench": 0.22,
-        "agentdefense": 0.36,
-    }
-    dataset_y_jitter = {
-        "agentdojo": -0.09,
-        "aspi": -0.03,
-        "safeclawbench": 0.03,
-        "agentdefense": 0.09,
-    }
-    lat_items: list[tuple[float, float, str, str]] = []
-    cost_items: list[tuple[float, float, str, str]] = []
-    for dataset, data in all_data.items():
-        lat_jitter = dataset_jitter[dataset]
-        cost_jitter = dataset_cost_jitter[dataset]
-        y_jitter = dataset_y_jitter[dataset]
-        for detector, d in data.items():
+    for data in all_data.values():
+        for d in data.values():
+            if d["avg_cost_usd"] is not None:
+                max_cost = max(max_cost, d["avg_cost_usd"])
+    cost_xmax = max(max_cost * 1000.0 * 1.15, 0.2)
+    for i, dataset in enumerate(datasets):
+        data = all_data[dataset]
+        ax_lat = axes[0, i]
+        ax_cost = axes[1, i]
+        order = [det for det in DETECTORS if det in data and det != "caitlyn"]
+        if "caitlyn" in data:
+            order.append("caitlyn")
+        for detector in order:
+            d = data[detector]
             lat = d["avg_latency_ms"]
             cost = d["avg_cost_usd"]
             if lat is None or cost is None:
                 continue
-            max_cost = max(max_cost, cost)
-            lat_x = max(lat * lat_jitter, 0.01)
-            cost_x = cost * 1000.0 + cost_jitter
-            cluster = lat < 2.0 or cost * 1000.0 < 0.1
-            y = d["op_tpr"] + (y_jitter if cluster else 0.0)
-            lat_items.append((math.log10(lat_x), y, detector, dataset))
-            cost_items.append((cost_x, y, detector, dataset))
-    spread_lat = spread_points(
-        [(x, y) for x, y, _, _ in lat_items],
-        min_dx=0.12, min_dy=0.05, max_r=0.60,
-    )
-    spread_cost = spread_points(
-        [(x, y) for x, y, _, _ in cost_items],
-        min_dx=0.10, min_dy=0.05, max_r=0.60,
-    )
-    for (_, _, detector, dataset), (sx, sy) in zip(lat_items, spread_lat):
-        if detector in ("regex_guard", "llm_judge"):
-            face, edge, lw = "white", DETECTOR_COLORS[detector], 1.4
-        else:
-            face, edge, lw = DETECTOR_COLORS[detector], "white", 0.7
-        ax_lat.scatter(
-            10.0 ** sx, sy, s=65,
-            facecolors=face, edgecolors=edge, linewidths=lw,
-            marker=DATASET_MARKERS[dataset],
-            zorder=3,
+            scatter_operating_point(
+                ax_lat, max(lat, 0.2), d["op_tpr"], detector
+            )
+            scatter_operating_point(
+                ax_cost, cost * 1000.0, d["op_tpr"], detector
+            )
+        ax_lat.set_title(
+            f"({letters[i]}) {titles[dataset]}",
+            fontsize=12.5, fontweight="bold", pad=6,
         )
-    for (_, _, detector, dataset), (sx, sy) in zip(cost_items, spread_cost):
-        if detector in ("regex_guard", "llm_judge"):
-            face, edge, lw = "white", DETECTOR_COLORS[detector], 1.4
-        else:
-            face, edge, lw = DETECTOR_COLORS[detector], "white", 0.7
-        ax_cost.scatter(
-            sx, sy, s=65,
-            facecolors=face, edgecolors=edge, linewidths=lw,
-            marker=DATASET_MARKERS[dataset],
-            zorder=3,
+        ax_cost.set_title(
+            f"({letters[4 + i]}) {titles[dataset]}",
+            fontsize=12.5, fontweight="bold", pad=6,
         )
-    ax_lat.set_title(
-        "(a) Latency Pareto", fontsize=12.5, fontweight="bold", pad=6
-    )
-    ax_cost.set_title(
-        "(b) Cost Pareto", fontsize=12.5, fontweight="bold", pad=6
-    )
-    _style_axes(
-        ax_lat, "Avg Latency (ms)", "TPR at default",
-        (0.1, 3.0e4), (-0.06, 1.10), logx=True, grid_alpha=0.15,
-        ylabel_pad=18,
-    )
-    ax_lat.xaxis.set_major_locator(LogLocator(base=10, numticks=6))
-    ax_lat.xaxis.set_minor_locator(NullLocator())
-    _style_axes(
-        ax_cost, "Avg Cost ($\\times 10^{-3}$ USD)", "TPR at default",
-        (0.0, max_cost * 1000.0 * 1.1), (-0.06, 1.10), grid_alpha=0.15,
-        ylabel_pad=18,
-    )
-    handles_methods = [
+        _style_axes(
+            ax_lat, "Avg Latency (ms)", "TPR",
+            (0.2, 8.0e4), (-0.06, 1.10), logx=True, grid_alpha=0.22,
+        )
+        ax_lat.xaxis.set_major_locator(LogLocator(base=10, numticks=5))
+        ax_lat.xaxis.set_minor_locator(NullLocator())
+        _style_axes(
+            ax_cost, "Avg Cost ($\\times 10^{-3}$ USD)", "TPR",
+            (-0.03, cost_xmax), (-0.06, 1.10), grid_alpha=0.22,
+        )
+        ax_lat.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
+        ax_cost.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
+    handles = [
         Line2D(
-            [0], [0], color=DETECTOR_COLORS[d],
-            linewidth=2.2 if d == "caitlyn" else 1.5,
-            linestyle=DETECTOR_LINESTYLES[d],
-            label=DETECTOR_LABELS[d],
+            [0], [0], marker=OP_MARKERS[d], color="none",
+            markerfacecolor=DETECTOR_COLORS[d],
+            markeredgecolor="white", markeredgewidth=0.6,
+            markersize=11 if d == "caitlyn" else 8,
+            linestyle="None", label=DETECTOR_LABELS[d],
         )
         for d in DETECTORS
     ]
-    dataset_labels = {
-        "agentdojo": "AgentDojo-S250",
-        "aspi": "ASPI-S",
-        "safeclawbench": "SafeClawBench-S240",
-        "agentdefense": "AgentDefense-S250",
-    }
-    handles_datasets = [
-        Line2D(
-            [0], [0], marker=DATASET_MARKERS[ds], color="none",
-            markerfacecolor="#333333", markeredgecolor="#333333",
-            markersize=10, linestyle="None", label=dataset_labels[ds],
-        )
-        for ds in all_data
-    ]
     fig.legend(
-        handles=handles_methods,
-        loc="lower center", ncol=1, frameon=False,
-        fontsize=11.5, bbox_to_anchor=(0.40, -0.28),
-        handlelength=2.6, handletextpad=0.7,
-        borderaxespad=0.2, labelspacing=0.4,
+        handles=handles,
+        loc="lower center", ncol=5, frameon=False,
+        fontsize=14.5, bbox_to_anchor=(0.5, -0.07),
+        columnspacing=2.0, handlelength=1.6, handletextpad=0.5,
+        borderaxespad=0.2,
     )
-    fig.legend(
-        handles=handles_datasets,
-        loc="lower center", ncol=1, frameon=False,
-        fontsize=11.5, bbox_to_anchor=(0.65, -0.28),
-        handlelength=2.2, handletextpad=0.7,
-        borderaxespad=0.2, labelspacing=0.4,
+    fig.text(
+        0.012, 0.66, "Latency", rotation=90, va="center", ha="center",
+        fontsize=12.5, fontweight="bold",
+    )
+    fig.text(
+        0.012, 0.29, "Cost", rotation=90, va="center", ha="center",
+        fontsize=12.5, fontweight="bold",
     )
     fig.subplots_adjust(
-        wspace=0.50, left=0.13, right=0.985, top=0.90, bottom=0.44,
+        wspace=0.60, hspace=0.60, left=0.13,
+        right=0.985, top=0.94, bottom=0.19,
     )
     fig.savefig(out_path, bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
@@ -872,11 +921,13 @@ def main() -> None:
     for dataset in args.datasets:
         data = per_detector_arrays(records, dataset)
         all_data[dataset] = data
-        if "caitlyn" in data:
+        for detector, d in data.items():
+            _, _, auroc = roc_points(d["scores"], d["labels"])
+            _, _, auprc = pr_points(d["scores"], d["labels"])
             print(
-                f"CAITLYN {dataset}: verdict-based operating point "
-                f"(TPR={data['caitlyn']['op_tpr']:.3f}, "
-                f"FPR={data['caitlyn']['op_fpr']:.3f})"
+                f"{DETECTOR_LABELS[detector]:16s} {dataset:14s} "
+                f"AUROC={auroc:.3f} AUPRC={auprc:.3f} "
+                f"TPR={d['op_tpr']:.3f} FPR={d['op_fpr']:.3f}"
             )
         pdf = outdir / f"detection_{dataset}_roc_pr.pdf"
         png = outdir / f"detection_{dataset}_roc_pr.png"
