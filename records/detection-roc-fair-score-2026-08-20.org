@@ -1,0 +1,105 @@
+#+TITLE: Detection ROC fair score mapping
+#+DATE: 2026-08-20
+
+* Decision
+
+Draw CAITLYN threshold curves on Figure 3 with the same ranking
+score as the baselines. No new detection run.
+
+- Fire as attack-like: keep predicted-class confidence.
+- Otherwise: score 0.
+- This is the ensemble CAITLYN convention (benign stored as 0).
+
+* Numbers (merged-pair clean, shared benign pool)
+
+| Detector | AgentDojo | ASPI | SafeClawBench | AgentDefense |
+|----------|-----------|------|---------------|--------------|
+| LLM-Judge AUROC | 1.000 | 0.860 | 0.690 | 0.820 |
+| CAITLYN AUROC | 0.995 | 0.862 | 0.815 | 0.882 |
+| CAITLYN TPR/FPR | 100.0/3.2 | 74.2/3.2 | 65.8/3.2 | 78.8/3.2 |
+
+* Artifacts
+
+- Plot: =AgentEval/scripts/plot_detection_curves.py=
+- Records: =AgentEval/results/detection_paper_clean_20260820/=
+- Paper PDFs: =paper_caitlyn/figures/detection_roc_pr.pdf=,
+  =detection_pareto.pdf=
+- Caption and threshold-curve paragraph in =evaluation.tex=
+
+* Rejected path
+
+Raw confidence as the ranking score. AUROC 0.18-0.29. Leads nowhere.
+
+* PR=1.0 is not a formula bug (2026-08-20)
+
+团长 questioned why many methods sit at precision 1.0. Operating-point
+precision is TP/(TP+FP) with FP=0 on the 250 shared benign pool
+(Table 2 FPR=0). LLM-Judge/PI/Regex fire 0/250. CAITLYN fires 8/250,
+precision 0.90-0.97. The pool is AgentDefense-Bench/XSTest-style short
+prompts (kill a Python process, blow up a balloon), not tool-output
+lookalikes. Changing the ranking score would not lower that plateau.
+Changing the PR formula would be fabricating FPs.
+
+* PR x-axis zoom 0.5-1.0 (2026-08-20)
+
+团长 asked to drop low-recall PR. Implemented: paper PR panels
+xlim [0.48, 1.02], xticks 0.5/0.75/1.0. ROC unchanged. Caption
+updated. Caveat: PI Detector TPR is 0.29/0.15/0.45 on three
+datasets and LLM-Judge is 0.379 on SafeClawBench, so those
+operating points are left of the PR window. They remain on ROC.
+
+* Low-concurrency latency rerun (2026-08-20)
+
+Cause: =run_detection_experiment.py= pinned CAITLYN workers to 8
+(16 in-flight merged-pair calls). Intrinsic T1 is ~2.5-3s.
+
+Fix: honor --workers. Probe at workers=2, same model v4-pro,
+evolution off: mean 2.77s, FPR still 3.2%.
+
+Full rerun started: caitlyn + llm_judge + llm_judge_fewshot,
+workers=2, =results/detection_lowconc_20260820=. Then merge regex/PI
+and redraw Figure 4.
+
+团长: keep overall points in the paper figure, split T0/T1 only for debug.
+
+Debug on merged-pair clean records (attack samples):
+- T0: 3.2/5.4/12.5/24.4% on the four datasets, 1-2 ms, $0.
+- T1: 32-39 s, USD about 0.00022-0.00035, cheaper than LLM-Judge (0.00051).
+- Benign pool: 0% T0, all 250 go to T1.
+- Overall mean latency is T1-dominated, not a plot bug.
+- Old Figure 4 multiplied latency by 0.35-1.7 jitter. That x-axis was wrong.
+
+Paper Figure 4 now: 2x4 small multiples, true overall means, no jitter.
+Cost row: CAITLYN is left of both LLM judges at equal or higher TPR.
+
+* Low-concurrency full run done (2026-08-20)
+
+Paired rerun =detection_lowconc_20260820= (workers=2, v4-pro,
+merged-pair, evolution off). Merged regex/PI from
+=detection_paper_clean_20260820= into
+=detection_paper_lowconc_20260820/records.jsonl=. Replotted and
+copied PDFs into =paper_caitlyn/figures/=. Table 2/3 and
+evaluation.tex updated. Paper compiles.
+
+TPR/FPR (default threshold, 7/250 benigns = 2.8% FPR):
+
+| Detector | AgentDojo | ASPI | SafeClaw | AgentDefense |
+|----------|-----------|------|----------|--------------|
+| LLM-Judge | 100.0/0 | 76.3/0 | 50.0/0 | 63.2/0 |
+| LLM+FS | 100.0/0 | 69.9/0 | 40.0/0 | 58.0/0 |
+| CAITLYN | 100.0/2.8 | 76.3/2.8 | 63.8/2.8 | 76.4/2.8 |
+
+AUROC CAITLYN: 0.993 / 0.869 / 0.802 / 0.868.
+AUROC LLM-Judge: 1.000 / 0.882 / 0.750 / 0.816.
+
+Attack-only latency (matches Figure 4): CAITLYN 1.8-2.7 s mean,
+p50/p95 1.8/4.8 s. LLM-Judge 4.2-6.9 s, p50/p95 4.5/13.6 s.
+USD: CAITLYN 0.00027-0.00038 vs judges 0.00084-0.00151.
+CAITLYN is now faster and cheaper than both LLM judges.
+
+Use this paired run for Table 2 + figures for CAITLYN and both
+LLM judges. Regex-Guard and PI Detector stay from the clean
+08-20 records. Some LLM-Judge/fewshot empty-response and timeout
+fail-opens count as misses. Run-to-run TPR differs slightly from
+the high-concurrency clean run. Do not mix those two CAITLYN
+columns.
