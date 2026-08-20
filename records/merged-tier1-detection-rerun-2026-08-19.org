@@ -79,6 +79,19 @@ suspicious 即拦截。结果（TPR / FPR / avg latency ms / avg tokens）：
   实测更低，说明小数据集上 run-to-run 方差约 5-8pp，不能只看离线模拟。
 - merged-pair 的 AUROC 仍差（0.13-0.24），confidence 排序问题没有解决。
 
+* Latency 诊断（为什么实验中 40-50s，但直接测只有 1.5-3s）
+
+- 单次 merged knowledge 调用（3.4k prompt tokens）直接测：2.7s，其中
+  completion 60 tokens（含 52 个 reasoning tokens），可见输出不是瓶颈。
+- 8 路并发同一调用直接测：avg 3.4s（max 4.2s），并发排队也不是主因。
+- daemon 8 路并发 merged-pair 直接测：avg 2.5s，daemon 本身不慢。
+- 全量实验期间同批短内容（avg 332 chars）却测到 baseline 20-25s、
+  merged-pair 40-50s，说明当时 OpenRouter/provider 负载高，且 daemon
+  stats 进化每 60s 触发额外 LLM 调用（ab-014/ab-015/...）加剧排队。
+- 结论：latency 高是外部 provider 时段性延迟 + 实验期间 daemon 进化
+  干扰，不是"只生成状态码"设计的问题。复测应在关闭 stats evolution
+  的干净 daemon 下进行。
+
 * 待办
 
 - 汇总 TPR/FPR/latency/tokens 对比表。
