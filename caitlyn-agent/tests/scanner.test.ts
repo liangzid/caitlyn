@@ -192,6 +192,15 @@ describe("runMergedTier1", () => {
     expect(sawPrompt).toContain("[ab-a] A");
     expect(sawPrompt).toContain("[ab-b] B");
   });
+
+  it("captures USD cost reported by the LLM call", async () => {
+    const skills = [makeAntibody("ab-a", "A", "readme", "Detect A.", 1)];
+    const result = await runMergedTier1(skills, "content", async (_system, _user, onCost) => {
+      onCost?.(0.00123);
+      return "benign 0.1";
+    });
+    expect(result.cost_usd).toBeCloseTo(0.00123, 5);
+  });
 });
 
 describe("runMergedPairTier1", () => {
@@ -585,14 +594,16 @@ describe("scan() cost accounting", () => {
       tier1Mode: "merged",
       escalationPolicy: "aggressive",
       sourceTrust: "high",
-      llmCall: async () => {
+      llmCall: async (_system, _user, onCost) => {
         calls += 1;
+        onCost?.(0.0005);
         return "malicious 0.8";
       },
     });
     expect(calls).toBe(1);
     expect(result.tier).toBe(1);
     expect(result.verdict).toBe("malicious");
+    expect(result.total_cost_usd).toBeCloseTo(0.0005, 6);
     expect(
       result.script_results.some((r) => r.antibody_id === "merged-tier1"),
     ).toBe(true);

@@ -463,7 +463,11 @@ export function matchSignatures(
 // ── Tier 1: LLM Single-Token Classifier ───────────────────────────
 
 export interface LlmCallFn {
-  (systemPrompt: string, userPrompt: string): Promise<string>;
+  (
+    systemPrompt: string,
+    userPrompt: string,
+    onCost?: (usd: number) => void,
+  ): Promise<string>;
 }
 
 /**
@@ -545,6 +549,7 @@ function makeTier1ScanResult(params: {
   stageReason: string;
   scanStart: number;
   totalTokens: number;
+  totalCostUsd: number;
 }): ScanResult {
   const latency = Math.round(performance.now() - params.scanStart) * 1000;
   const t1ScriptResults: ScriptResult[] = params.tier1Results.map(
@@ -568,6 +573,7 @@ function makeTier1ScanResult(params: {
     ],
     total_latency_us: latency,
     total_tokens: params.totalTokens,
+    total_cost_usd: params.totalCostUsd,
   };
 }
 
@@ -599,6 +605,7 @@ function makeFallbackScanResult(
       ],
       total_latency_us: latency,
       total_tokens: totalTokens,
+      total_cost_usd: 0,
     },
   };
 }
@@ -643,6 +650,8 @@ export function selectTier1Detectors(
 
 export interface Tier1Result extends ScriptResult {
   tokens: number;
+  /** Actual USD cost billed for this Tier 1 LLM call (0 when unknown). */
+  cost_usd?: number;
 }
 
 /**
@@ -718,8 +727,16 @@ export async function runTier1Ensemble(
   const jobs = (ab: AntibodyEntry): Promise<Tier1Result> => {
     const start = performance.now();
     const { systemPrompt, userPrompt } = buildAntibodyPrompt(ab, content);
+    let costUsd = 0;
     return Promise.resolve()
-      .then(() => withTimeout(llmCall(systemPrompt, userPrompt), timeoutMs))
+      .then(() =>
+        withTimeout(
+          llmCall(systemPrompt, userPrompt, (usd) => {
+            costUsd = usd;
+          }),
+          timeoutMs,
+        ),
+      )
       .then((raw) => {
         const parsed = parseTier1Response(raw.trim());
         return {
@@ -730,6 +747,7 @@ export async function runTier1Ensemble(
           latency_us: Math.round(performance.now() - start) * 1000,
           error: null,
           tokens: estimateScanTokens(systemPrompt, userPrompt, raw),
+          cost_usd: costUsd,
         } satisfies Tier1Result;
       })
       .catch((err) => ({
@@ -740,6 +758,7 @@ export async function runTier1Ensemble(
         latency_us: Math.round(performance.now() - start) * 1000,
         error: err instanceof Error ? err.message : String(err),
         tokens: estimateTokens(systemPrompt) + estimateTokens(userPrompt),
+        cost_usd: 0,
       }));
   };
 
@@ -831,7 +850,13 @@ export async function runMergedTier1(
   );
   const timeoutMs = options.timeoutMs ?? 15_000;
   const start = performance.now();
-  const raw = await withTimeout(llmCall(systemPrompt, userPrompt), timeoutMs);
+  let costUsd = 0;
+  const raw = await withTimeout(
+    llmCall(systemPrompt, userPrompt, (usd) => {
+      costUsd = usd;
+    }),
+    timeoutMs,
+  );
   const parsed = parseTier1Response(raw.trim());
   return {
     antibody_id: "merged-tier1",
@@ -841,6 +866,7 @@ export async function runMergedTier1(
     latency_us: Math.round(performance.now() - start) * 1000,
     error: null,
     tokens: estimateScanTokens(systemPrompt, userPrompt, raw),
+    cost_usd: costUsd,
   } satisfies Tier1Result;
 }
 
@@ -1152,6 +1178,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
         stageReason = "merged single call";
       }
       totalTokens = tier1Results.reduce((acc, r) => acc + r.tokens, 0);
+      const totalCostUsd = tier1Results.reduce((acc, r) => acc + (r.cost_usd ?? 0), 0);
       const result = makeTier1ScanResult({
         t0Results: t0.results,
         tier1Results,
@@ -1160,6 +1187,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
         stageReason,
         scanStart,
         totalTokens,
+        totalCostUsd,
       });
       appendStatsEvent("evolution_self", "scan_latency_us", result.total_latency_us);
       appendStatsEvent("evolution_self", "scan_tokens", totalTokens);
@@ -1232,6 +1260,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       },
     });
     totalTokens = staged.results.reduce((acc, r) => acc + r.tokens, 0);
+    const totalCostUsd = staged.results.reduce((acc, r) => acc + (r.cost_usd ?? 0), 0);
     const result = makeTier1ScanResult({
       t0Results: t0.results,
       tier1Results: staged.results,
@@ -1240,6 +1269,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       stageReason: staged.reason,
       scanStart,
       totalTokens,
+      totalCostUsd,
     });
     appendStatsEvent("evolution_self", "scan_latency_us", result.total_latency_us);
     appendStatsEvent("evolution_self", "scan_tokens", totalTokens);

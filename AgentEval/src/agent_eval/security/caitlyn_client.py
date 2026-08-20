@@ -43,6 +43,7 @@ class ScanVerdict:
     matched_memory: list[str]
     latency_ms: float
     tokens: int = 0
+    cost_usd: float = 0.0
 
     @property
     def is_malicious(self) -> bool:
@@ -166,6 +167,7 @@ class CaitlynClient:
             matched_memory=[],  # memory bank is not part of the TS daemon response
             latency_ms=latency_us / 1000.0,
             tokens=tokens,
+            cost_usd=data.get("total_cost_usd", 0.0),
         )
 
     def status(self) -> CaitlynStatus:

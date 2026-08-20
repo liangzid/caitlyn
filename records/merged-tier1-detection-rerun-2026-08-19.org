@@ -92,6 +92,25 @@ suspicious 即拦截。结果（TPR / FPR / avg latency ms / avg tokens）：
   干扰，不是"只生成状态码"设计的问题。复测应在关闭 stats evolution
   的干净 daemon 下进行。
 
+* 干净重测（evolution 关闭，2026-08-20，merged-pair 全量）
+
+实现：CAITLYN_DISABLE_EVOLUTION=1 关闭 daemon stats 进化；daemon 回传
+OpenRouter 实际 USD cost（response.usage.cost.total），token 不再作为
+论文统计指标。
+
+结果（攻击样本，TPR / FPR / avg latency / avg USD cost）：
+
+| 数据集 | TPR | FPR | avg latency ms | avg cost USD |
+|--------+-----+-----+----------------+--------------|
+| AgentDojo | 100.0% | 3.2% | 37824 | 0.000340 |
+| ASPI | 74.2% | 3.2% | 35787 | 0.000292 |
+| SafeClawBench | 65.8% | 3.2% | 28768 | 0.000303 |
+| AgentDefense | 78.8% | 3.2% | 24515 | 0.000222 |
+
+攻击样本聚合：latency p50 33.3s / p95 49.2s，avg cost $0.000289/case。
+论文 Table 2/3、evaluation 正文、ROC/PR 与 Pareto 图已更新；CAITLYN
+为 verdict-based，ROC/PR 只标操作点不画阈值曲线。
+
 * 待办
 
 - 汇总 TPR/FPR/latency/tokens 对比表。

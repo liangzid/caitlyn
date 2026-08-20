@@ -42,7 +42,11 @@ function makeDaemonLlmCall(modelId?: string): LlmCallFn | null {
       smallModel: config.smallModel,
     });
     console.error(`[daemon] LLM provider: ${config.provider} / ${model.id}`);
-    return async (systemPrompt: string, userPrompt: string) => {
+    return async (
+      systemPrompt: string,
+      userPrompt: string,
+      onCost?: (usd: number) => void,
+    ) => {
       const ctx = {
         systemPrompt,
         messages: [
@@ -54,6 +58,7 @@ function makeDaemonLlmCall(modelId?: string): LlmCallFn | null {
         ],
       };
       const response = await complete(model, ctx, credentialEnv ? { env: credentialEnv } : undefined);
+      onCost?.(response.usage?.cost?.total ?? 0);
       const textBlocks = response.content.filter(
         (c): c is { type: "text"; text: string } => c.type === "text",
       );

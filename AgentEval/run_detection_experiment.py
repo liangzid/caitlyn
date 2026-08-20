@@ -390,7 +390,7 @@ def scan_one(
                 "prompt_tokens": None,
                 "completion_tokens": None,
                 "cached_tokens": None,
-                "cost_usd": None,
+                "cost_usd": verdict.cost_usd,
             }
         else:
             start = time.time()
@@ -521,10 +521,10 @@ def print_summary(summary: dict[str, Any]) -> None:
             tpr = f"{m['tpr']:.1%}" if m["tpr"] is not None else "n/a"
             fpr = f"{m['fpr']:.1%}" if m["fpr"] is not None else "n/a"
             lat = f"{m['avg_latency_ms']:.1f}" if m["avg_latency_ms"] is not None else "n/a"
-            tok = f"{m['avg_tokens']:.0f}" if m["avg_tokens"] is not None else "n/a"
+            usd = f"${m['avg_cost_usd']:.6f}" if m["avg_cost_usd"] is not None else "n/a"
             print(
                 f"  {detector:18s} TPR={tpr} FPR={fpr} "
-                f"latency={lat}ms tokens={tok}"
+                f"latency={lat}ms cost={usd}"
             )
 
 

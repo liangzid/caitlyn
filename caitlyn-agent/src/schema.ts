@@ -95,4 +95,6 @@ export interface ScanResult {
   script_results: ScriptResult[];
   total_latency_us: number;
   total_tokens: number;
+  /** Actual USD cost billed by the LLM provider for this scan (Tier 1). */
+  total_cost_usd?: number;
 }

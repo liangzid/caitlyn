@@ -83,6 +83,7 @@ export class DaemonServer {
   private statsCollector: StatsCollector;
   private evolutionConfig: EvolutionConfig;
   private statsTimer: NodeJS.Timeout | null = null;
+  private evolutionDisabled: boolean;
 
   // Stats
   private scansTotal = 0;
@@ -104,6 +105,9 @@ export class DaemonServer {
     this.evolutionConfig = config.evolutionConfig ?? loadEvolutionConfig();
     this.statsCollector = new StatsCollector(this.config.statsDir!);
     this.statsCollector.load();
+    this.evolutionDisabled =
+      process.env.CAITLYN_DISABLE_EVOLUTION === "1" ||
+      process.env.CAITLYN_DISABLE_EVOLUTION === "true";
   }
 
   setLlmCall(fn: LlmCallFn): void {
@@ -165,6 +169,12 @@ export class DaemonServer {
       this.statsCollector.appendEvent(event);
     }
     const triggers = this.statsCollector.collect();
+    if (this.evolutionDisabled) {
+      console.error(
+        "[daemon] stats evolution disabled (CAITLYN_DISABLE_EVOLUTION) — no immune response",
+      );
+      return triggers;
+    }
     for (const trigger of triggers) {
       appendTriggerRecord(trigger, this.config.statsDir!);
       console.error(

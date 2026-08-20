@@ -287,6 +287,18 @@ def plot_dataset_figure(
         1, 2, figsize=(10.5, 4.2), dpi=200
     )
     for detector, d in data.items():
+        if detector == "caitlyn":
+            # CAITLYN returns a verdict label rather than a calibrated
+            # score, so only its default operating point is plotted.
+            ax_roc.plot(
+                d["op_fpr"], d["op_tpr"], marker="s", markersize=5,
+                color=DETECTOR_COLORS["caitlyn"], linestyle="None",
+            )
+            ax_pr.plot(
+                d["op_recall"], d["op_precision"], marker="s", markersize=5,
+                color=DETECTOR_COLORS["caitlyn"], linestyle="None",
+            )
+            continue
         fprs, tprs, auroc = roc_points(d["scores"], d["labels"])
         recalls, precisions, auprc = pr_points(d["scores"], d["labels"])
         label = (
@@ -429,6 +441,22 @@ def plot_combined_figure(
         ax_roc = axes[0, i]
         ax_pr = axes[1, i]
         for detector, d in data.items():
+            if detector == "caitlyn":
+                ax_roc.plot(
+                    d["op_fpr"], d["op_tpr"], marker="D", markersize=4.2,
+                    color=DETECTOR_COLORS["caitlyn"],
+                    markerfacecolor=DETECTOR_COLORS["caitlyn"],
+                    markeredgecolor="white", markeredgewidth=0.5,
+                    linestyle="None", zorder=4,
+                )
+                ax_pr.plot(
+                    d["op_recall"], d["op_precision"], marker="D",
+                    markersize=4.2, color=DETECTOR_COLORS["caitlyn"],
+                    markerfacecolor=DETECTOR_COLORS["caitlyn"],
+                    markeredgecolor="white", markeredgewidth=0.5,
+                    linestyle="None", zorder=4,
+                )
+                continue
             fprs, tprs, auroc = roc_points(d["scores"], d["labels"])
             recalls, precisions, auprc = pr_points(d["scores"], d["labels"])
             color = DETECTOR_COLORS[detector]
@@ -596,6 +624,9 @@ def plot_roc_pr_grid(
         ax_roc = axes[0, i]
         ax_pr = axes[1, i]
         for detector, d in data.items():
+            if detector == "caitlyn":
+                # Verdict-based operating point only; no threshold curve.
+                continue
             fprs, tprs, _ = roc_points(d["scores"], d["labels"])
             recalls, precisions, _ = pr_points(d["scores"], d["labels"])
             color = DETECTOR_COLORS[detector]
@@ -842,13 +873,11 @@ def main() -> None:
         data = per_detector_arrays(records, dataset)
         all_data[dataset] = data
         if "caitlyn" in data:
-            fprs, tprs, auroc = roc_points(
-                data["caitlyn"]["scores"], data["caitlyn"]["labels"]
+            print(
+                f"CAITLYN {dataset}: verdict-based operating point "
+                f"(TPR={data['caitlyn']['op_tpr']:.3f}, "
+                f"FPR={data['caitlyn']['op_fpr']:.3f})"
             )
-            recalls, precisions, auprc = pr_points(
-                data["caitlyn"]["scores"], data["caitlyn"]["labels"]
-            )
-            print(f"CAITLYN {dataset}: AUROC={auroc:.3f} AUPRC={auprc:.3f}")
         pdf = outdir / f"detection_{dataset}_roc_pr.pdf"
         png = outdir / f"detection_{dataset}_roc_pr.png"
         plot_dataset_figure(data, dataset, pdf)
