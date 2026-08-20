@@ -1,0 +1,60 @@
+#+TITLE: System I ablation for paper 4.4
+#+DATE: 2026-08-20
+
+* Decision
+
+4.4 is System I only. Gate is dead on the paper path (merged-pair).
+Ablation variants:
+
+| label | HTTP mode | meaning |
+|-------+-----------+---------|
+| t0-only | t0-only | Tier 0, no LLM |
+| none | none | skip Tier 0, then merged-pair |
+| ensemble | ensemble | T0 + all T1 detectors, no gate |
+| merged | merged | T0 + one knowledge merge |
+| merged-detectors | merged-detectors | T0 + one detector merge |
+| full | merged-pair | T0 + merged-pair (paper System I) |
+
+Detection-only, same four datasets and shared benign pool as 4.2.
+Model: deepseek/deepseek-v4-pro. Workers 2 for T1, 8 for t0-only.
+Daemon: port 9071, evolution off, separate PID file. 9070 left for Table 1.
+
+* Code
+
+- =caitlyn-agent/src/scanner.ts=: skipTier0 / skipTier1 / ensemble, parseScanMode
+- daemon HTTP uses parseScanMode
+- runner: =AgentEval/scripts/run_system_i_ablation.sh=
+- output: =AgentEval/results/ablation_system_i_20260820/=
+
+* Status
+
+Done. SYSTEM_I_ABLATION_DONE in run.log. Six summaries under
+=AgentEval/results/ablation_system_i_20260820/=.
+
+* Final TPR / FPR / mean ms / USD (shared benign FPR)
+
+| variant | AgentDojo | ASPI | SafeClaw | AgentDefense |
+|---------+-----------+------+----------+--------------|
+| t0-only | 3.2/0.0 / 11 / 0 | 5.4/0.0 / 8 / 0 | 17.5/0.0 / 9 / 0 | 48.4/0.0 / 9 / 0 |
+| none (no T0) | 100.0/5.2 / 3034 / 0.00038 | 77.4/5.2 / 3246 / 0.00032 | 57.1/5.2 / 3339 / 0.00032 | 74.8/5.2 / 3446 / 0.00032 |
+| ensemble | 100.0/8.4 / 3187 / 0.00025 | 81.7/8.4 / 3210 / 0.00022 | 72.5/8.4 / 3191 / 0.00021 | 80.0/8.4 / 2969 / 0.00019 |
+| merged | 98.4/1.2 / 2990 / 0.00022 | 66.7/1.2 / 2697 / 0.00019 | 55.4/1.2 / 2953 / 0.00018 | 70.0/1.2 / 2325 / 0.00016 |
+| merged-detectors | 98.0/3.2 / 2319 / 0.00015 | 60.2/3.2 / 2178 / 0.00013 | 50.4/3.2 / 2068 / 0.00012 | 69.2/3.2 / 2006 / 0.00012 |
+| full (merged-pair) | 100.0/3.6 / 3219 / 0.00041 | 77.4/3.6 / 2928 / 0.00033 | 65.0/3.6 / 2822 / 0.00031 | 76.0/3.6 / 2818 / 0.00031 |
+
+* Read for 4.4
+
+- T0 alone is free and has 0 FPR, but recall collapses except AgentDefense.
+- Skipping T0 keeps AgentDojo/ASPI recall of Full and loses 7.9pp on
+  SafeClaw. Do not attribute the 5.2 vs 3.6 FPR gap to T0: t0-only FPR
+  is 0, so every benign string still reaches merged-pair.
+- Ensemble is the recall ceiling (esp. SafeClaw 72.5) at 8.4% FPR.
+- Single merge is cheaper/cleaner (FPR 1.2) but drops SafeClaw to 55.4.
+- Full (merged-pair) sits between ensemble and single merge: recall near
+  ensemble on AgentDojo, FPR 3.6 vs ensemble 8.4.
+
+* Paper 4.4
+
+Filled =sections/evaluation.tex= Ablation Study +
+=sections/tables/table-ablation.tex=. Compiles. Do not claim T0 lowers FPR:
+t0-only FPR is 0, so Full vs Tier-1 only FPR is merged-pair variance.
