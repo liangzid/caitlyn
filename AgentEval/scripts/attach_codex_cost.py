@@ -28,7 +28,7 @@ import json
 import subprocess
 from pathlib import Path
 
-CONTAINER = "agent-eval"
+CONTAINER = os.environ.get("AGENT_EVAL_CONTAINER", "agent-eval")
 SESSIONS_ROOT = "/root/.codex/sessions"
 
 # OpenRouter deepseek/deepseek-chat prices (USD per token), verified from
@@ -42,8 +42,7 @@ def dump_sessions() -> list[dict]:
     script = f"""
 import json, glob
 out = []
-for p in glob.glob('{SESSIONS_ROOT}/2026/08/12/*.jsonl') + \\
-        glob.glob('{SESSIONS_ROOT}/2026/08/13/*.jsonl'):
+for p in sorted(glob.glob('{SESSIONS_ROOT}/2026/*/*/*.jsonl')):
     prompt = None
     usage = None
     for line in open(p, encoding='utf-8'):
@@ -110,8 +109,10 @@ def to_cost(usage: dict) -> dict:
 def attach(path: str, sessions: list[dict]) -> dict:
     """Join sessions to results by exact prompt text and enrich them."""
     by_prompt: dict[str, dict] = {}
+    # KEYPOINT: last session wins so a later CAITLYN rerun is not
+    # joined to an older baseline session with the same prompt.
     for s in sessions:
-        by_prompt.setdefault(s["prompt"], s)
+        by_prompt[s["prompt"]] = s
 
     data = json.load(open(path, encoding="utf-8"))
     matched = unmatched = 0

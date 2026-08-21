@@ -24,7 +24,7 @@ from typing import Any
 from agent_eval.api_keys import get_openrouter_api_key
 
 DEFAULT_MODEL = "openrouter/free"
-CONTAINER = "agent-eval"
+CONTAINER = os.environ.get("AGENT_EVAL_CONTAINER", "agent-eval")
 
 
 @dataclass

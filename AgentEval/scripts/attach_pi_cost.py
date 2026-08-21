@@ -27,7 +27,7 @@ import json
 import subprocess
 from pathlib import Path
 
-CONTAINER = "agent-eval"
+CONTAINER = os.environ.get("AGENT_EVAL_CONTAINER", "agent-eval")
 SESSIONS_DIR = "/root/.pi/agent/sessions/--workspace--"
 
 
@@ -36,7 +36,7 @@ def dump_sessions() -> list[dict]:
     script = f"""
 import json, glob, os
 out = []
-for path in glob.glob('{SESSIONS_DIR}/*.jsonl'):
+for path in sorted(glob.glob('{SESSIONS_DIR}/*.jsonl'), key=os.path.getmtime):
     prompt = None
     usage = {{'input': 0, 'output': 0, 'cacheRead': 0, 'cacheWrite': 0,
               'reasoning': 0, 'totalTokens': 0,
@@ -87,8 +87,10 @@ print(json.dumps(out, ensure_ascii=False))
 def attach(path: str, sessions: list[dict]) -> dict:
     """Join sessions to results by exact prompt text and enrich them."""
     by_prompt: dict[str, dict] = {}
+    # KEYPOINT: last session wins so a later CAITLYN rerun is not
+    # joined to an older baseline session with the same prompt.
     for s in sessions:
-        by_prompt.setdefault(s["prompt"], s)
+        by_prompt[s["prompt"]] = s
 
     data = json.load(open(path, encoding="utf-8"))
     matched = unmatched = 0

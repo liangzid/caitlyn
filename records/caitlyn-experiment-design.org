@@ -301,3 +301,97 @@ $0.0004-0.0009，远低于 opencode）。
 注入且 FPR=0（prompt 文本的 <INFORMATION> 特征明显）；ASPI 注入在
 problem_statement 内、防御不可见，各防御无效（~6.5-9.7%）。
 Table 1 pi 七行已回填并编译验证（paper 仓库）。
+
+* CAITLYN 主表 e2e（2026-08-20 启动）
+
+协议对齐已填 baseline 行：deepseek/deepseek-chat，AgentDojo 250+97，
+ASPI 31 源行（93 攻击 + 31 benign），SafeClawBench 240。
+CAITLYN：merged-pair，evolution off，malicious+suspicious 均拦截
+（与 detection 操作点一致）。冒烟 opencode 1 例：blocked=True，ASR 0。
+
+全矩阵后台跑：5 agents x 711 例，日志
+=AgentEval/results/eval/caitlyn_e2e_matrix.log=。完成后才填 Table 1
+CAITLYN 行，再按每个 agent 块的每列加粗最优、下划线次优。
+
+2026-08-20 16:25 进度：opencode AgentDojo 52/347，注入拦截 41/50。
+未开第二份矩阵。回填脚本 =scripts/fill_caitlyn_table1.py=，
+watch =scripts/watch_caitlyn_table1.py=。ASR 口径对齐已填 baseline
+（opencode AD/ASPI 用 action_asr，其余 raw_asr）。codex 成本 glob
+改为 2026/*/*，join 改为 last-session-wins。
+
+2026-08-20 19:59 主机故障后恢复。矩阵进程还在，但 daemon PID/9070
+已死。opencode AgentDojo（347，18:00）与 ASPI（124，18:36）在 daemon
+存活期内跑完，保留。SafeClawBench 从约 [129/240]（19:18）起
+tool-call 无 scan（末尾 74 条），属无防护污染。已 SIGINT 停跑，
+partial 隔离为
+=opencode-caitlyn-safeclawbench_subset.json.partial.contaminated-20260820-daemon-dead=。
+run_benchmark 加每例 health check，scan 失败改为 fail-closed。
+resume 脚本重跑 opencode SCB，再跑 pi/hermes/openclaw/codex。
+
+2026-08-21 13:53 矩阵结束，15 个 JSON 例数齐全。Table 1 回填：
+opencode/pi/hermes/openclaw 已写入并按列加粗/下划线。
+opencode Cost 为 --：容器 opencode.db 在 08-21 被截成 4KiB，无法 attach。
+codex 全失败（缺 @openai/codex-linux-x64），行保持 --，未写入 0% ASR。
+openclaw 成本需扫 .jsonl.deleted（会话在后续 dataset 被轮转），
+--since-epoch 后 711/711 匹配。
+
+* Table 1 审计与修复（2026-08-21 晚，团长反馈）
+
+团长指出 main table 问题：CAITLYN 多指标不优、多处结果缺失。审计发现：
+
+1. codex CAITLYN 行全量假失败：容器内
+   @openai/codex-linux-x64/vendor/.../bin/codex 主二进制丢失（Aug 20
+   18:35 被删），347/124/240 全部 success=False。已从官方
+   0.144.4-linux-x64 tarball 恢复二进制，codex-cli 0.144.4 验证可用。
+2. opencode.db 被截断为 4KiB（disk I/O error），opencode CAITLYN
+   Cost 无法回填；Table 4 Kimi-K3 行 203/240 失败也是同一原因。
+   已备份损坏 db 并删除，opencode 下次运行重建。
+3. 根本 bug（影响整两列）：_build_agent_prompt 对 ASPI/SafeClawBench
+   （prompt 通道）从不调用 defense.filter。因此 Table 1 的 ASPI 与
+   SCB 两列、所有防御行（含 CAITLYN）实际上都是 no-defense 裸跑；
+   Table 4（SCB）同样无效。已修复：ASPI 扫澄清回复段、SCB 扫整段
+   prompt，所有防御统一走 prompt_channel 过滤；benign prompt 段被拦
+   计入 FPR；injection_delivered 反映拦截。
+4. 威胁模型矛盾待团长拍板：论文 background 称 user prompt trusted、
+   攻击只走 untrusted observation channel，但 eval 又纳入 ASPI/SCB
+   （prompt 通道）。若保持威胁模型，这两列应移出/标注 defense-absent；
+   若扩展防御到 prompt 环境内容，则需全列重跑（8 defenses x 5 agents
+   x ASPI/SCB，串行约 60h，5 容器并行约 15-20h）。
+5. 检测调优（merged-pair system prompt 增加 Detection guidance）：
+   - v1（激进）：ASPI TPR 86.0%、SCB 82.5%、共享 benign FPR 4.8%
+   - v2（加"提问不算攻击"）：ASPI 82.8%、SCB 69.6%、FPR 3.2%
+   - v3（窄豁免，仅泛泛话题不算攻击）：FPR 4.0%，TPR 探测中
+   - 原版：ASPI 76.3%、SCB 65.0%、FPR ~2.8-3.2%
+6. 并行容器就绪：agent-eval-2/3/4 由同一镜像创建，五个 agent 均
+   可用；callers/attach_* 已支持 AGENT_EVAL_CONTAINER 环境变量。
+
+* 2026-08-21 23:15 矩阵启动（方案 A，等待团长确认中已按推荐执行）
+
+- 调优定稿 v3 merged-pair guidance：ASPI TPR 83.9%（原 76.3），
+  SCB TPR 82.5%（原 65.0），共享 benign FPR 4.0-4.8%（原 2.8-3.2），
+  单次抽样波动大；阈值 0.8 可压 FPR 到 2.0% 但 TPR 掉到 73.9%，
+  不采纳。
+- 试点 opencode x llm_judge x ASPI（修复后）：raw ASR 3.2%、
+  action ASR 0.0%、FPR 3.2%（旧表 20.4% 为 no-op 假值）。
+- 启动 run_table1_prompt_channel_matrix.sh：5 容器并行
+  （opencode=agent-eval/9877、pi=agent-eval-2/9878、
+  hermes=agent-eval-3/9880、openclaw=agent-eval-4/9881、
+  codex=agent-eval-5/9882），每个 agent 顺序跑 8 defenses x
+  ASPI/SCB + pi/hermes/openclaw 的 AD caitlyn v3 重跑。
+- opencode/codex AD caitlyn 重跑先行（opencode 用于补成本，
+  codex 用于修假失败），完成后需手动 attach 成本
+  （attach_agent_cost / attach_codex_cost）。
+- Table 2：kimi 无效行（203/240 失败）已移入
+  results/eval/table4/backup_invalid_kimi_20260821，矩阵后按修复
+  协议补跑 kimi + minimax。
+- 已知风险：FPR 从 2.8 升到 4.8 会弱化 Section 4.2 叙述，需在正文
+  如实更新；ASPI/SCB 威胁模型口径随方案 A 同步小改。
+
+* 2026-08-21 23:20 补充
+- Table 2 一致性：旧协议（无 prompt 过滤）的 DeepSeek/Qwen/GLM 三行
+  已移入 table4/backup_old_protocol_20260821，修复协议下 5 个模型全部
+  重跑；run_table4_llm_backbone.sh 已排队（等主矩阵释放容器）。
+- build_table1.py 已写完并验证 latexmk 通过；行标签修复
+  (\($^{*}$\) -> \(^{*}\))。
+- run_v3_detection_pipeline.sh 备好：v3 检测扫描(4 数据集) + merge
+  基线 + 出图 + System I ablation，主矩阵后执行。

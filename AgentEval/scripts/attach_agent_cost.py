@@ -30,7 +30,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-CONTAINER = "agent-eval"
+CONTAINER = os.environ.get("AGENT_EVAL_CONTAINER", "agent-eval")
 DB = "/root/.local/share/opencode/opencode.db"
 
 
@@ -95,8 +95,10 @@ print(json.dumps(list(out.values()), ensure_ascii=False))
 def attach(path: str, sessions: list[dict]) -> dict:
     """Join sessions to results by exact prompt text and enrich them."""
     by_prompt: dict[str, dict] = {}
+    # KEYPOINT: last session wins so a later CAITLYN rerun is not
+    # joined to an older baseline session with the same prompt.
     for s in sessions:
-        by_prompt.setdefault(s["prompt"], s)
+        by_prompt[s["prompt"]] = s
 
     data = json.load(open(path, encoding="utf-8"))
     matched = unmatched = 0

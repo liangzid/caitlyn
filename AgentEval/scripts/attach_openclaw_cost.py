@@ -29,11 +29,13 @@ import json
 import subprocess
 from pathlib import Path
 
-CONTAINER = "agent-eval"
+CONTAINER = os.environ.get("AGENT_EVAL_CONTAINER", "agent-eval")
 
 
 _DUMP_SCRIPT = r"""
 import glob, json, os
+
+SINCE = float(os.environ.get("OPENCLAW_COST_SINCE_EPOCH", "0") or 0)
 
 def user_text(content):
     if isinstance(content, str):
@@ -44,12 +46,15 @@ def user_text(content):
             parts.append(block.get("text", ""))
     return "\n".join(parts)
 
+paths = glob.glob("/root/.openclaw/agents/*/sessions/*.jsonl")
+if SINCE:
+    paths += glob.glob("/root/.openclaw/agents/*/sessions/*.jsonl.deleted.*")
+paths = [p for p in paths if ".trajectory.jsonl" not in os.path.basename(p)]
+if SINCE:
+    paths = [p for p in paths if os.path.getmtime(p) >= SINCE]
+
 sessions = {}
-for path in sorted(glob.glob("/root/.openclaw/agents/*/sessions/*.jsonl")):
-    if path.endswith(".trajectory.jsonl"):
-        plain = path[:-len(".trajectory.jsonl")] + ".jsonl"
-        if os.path.exists(plain):
-            continue
+for path in sorted(paths, key=os.path.getmtime):
     current = None
     for line in open(path, encoding="utf-8", errors="replace"):
         line = line.strip()
@@ -98,10 +103,14 @@ print(json.dumps(out, ensure_ascii=False))
 """
 
 
-def dump_sessions() -> list[dict]:
+def dump_sessions(since_epoch: float = 0.0) -> list[dict]:
     """Dump (session_id, prompt, usage totals) from the container."""
     result = subprocess.run(
-        ["docker", "exec", CONTAINER, "python3", "-c", _DUMP_SCRIPT],
+        [
+            "docker", "exec",
+            "-e", f"OPENCLAW_COST_SINCE_EPOCH={since_epoch}",
+            CONTAINER, "python3", "-c", _DUMP_SCRIPT,
+        ],
         capture_output=True, text=True, timeout=300,
     )
     if result.returncode != 0:
@@ -112,8 +121,10 @@ def dump_sessions() -> list[dict]:
 def attach(path: str, sessions: list[dict]) -> dict:
     """Join sessions to results by exact prompt text and enrich them."""
     by_prompt: dict[str, dict] = {}
+    # KEYPOINT: last session wins so a later CAITLYN rerun is not
+    # joined to an older baseline session with the same prompt.
     for s in sessions:
-        by_prompt.setdefault(s["prompt"], s)
+        by_prompt[s["prompt"]] = s
 
     data = json.load(open(path, encoding="utf-8"))
     matched = unmatched = 0
@@ -150,9 +161,15 @@ def attach(path: str, sessions: list[dict]) -> dict:
 def main() -> None:
     """Attach usage to every result file and print a summary."""
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--since-epoch",
+        type=float,
+        default=0.0,
+        help="Only read sessions with mtime >= this UNIX timestamp",
+    )
     parser.add_argument("paths", nargs="+")
     args = parser.parse_args()
-    sessions = dump_sessions()
+    sessions = dump_sessions(args.since_epoch)
     print(f"sessions with prompt + usage: {len(sessions)}")
     for p in args.paths:
         if not p.endswith(".json") or p.endswith(".withcost.json"):
