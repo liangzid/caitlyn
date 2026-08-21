@@ -52,8 +52,10 @@ run_agent() {
   local datasets=(aspi_subset safeclawbench_subset)
   # opencode's AgentDojo CAITLYN rerun (started before this matrix) still
   # owns MCP port 9877 on agent-eval; wait for it to release the port.
+  # NOTE: a pgrep -f pattern would match this function's own cmdline, so
+  # the wait uses the listening socket instead.
   if [[ "$agent" == "opencode" ]]; then
-    while pgrep -f 'run_benchmark.py --agent opencode' >/dev/null 2>&1; do
+    while ss -ltn 2>/dev/null | grep -q ':9877 '; do
       echo "WAIT opencode AD rerun holds port $port" >> "$log"
       sleep 60
     done
