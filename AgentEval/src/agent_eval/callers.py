@@ -231,9 +231,65 @@ class CodexCaller(AgentCaller):
     `-c provider=openrouter` override is not a valid Codex config key and
     silently falls back to the OpenAI provider.
     """
+
+    def _ensure_codex_binary(self) -> None:
+        """Restore the codex platform binary if the container lost it.
+
+        The agent-eval images have repeatedly lost
+        vendor/.../bin/codex (disk/overlay flakiness and a codex npm alias
+        layout), which makes every `codex exec` fail with "Missing
+        optional dependency". A local copy of the 0.144.4-linux-x64
+        tarball is kept at /tmp/codex-fix and copied back on demand.
+        """
+        probe = subprocess.run(
+            ["docker", "exec", CONTAINER, "bash", "-lc",
+             "test -x /usr/lib/node_modules/@openai/codex-linux-x64/"
+             "vendor/x86_64-unknown-linux-musl/bin/codex || "
+             "test -x /usr/lib/node_modules/@openai/codex/node_modules/"
+             "@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if probe.returncode == 0:
+            return
+        src = "/tmp/codex-fix/package/vendor/x86_64-unknown-linux-musl/bin/codex"
+        if not os.path.exists(src):
+            print("CODEX_BINARY_MISSING_AND_NO_LOCAL_COPY", flush=True)
+            return
+        targets = [
+            "/usr/lib/node_modules/@openai/codex-linux-x64/"
+            "vendor/x86_64-unknown-linux-musl/bin/codex",
+            "/usr/lib/node_modules/@openai/codex/node_modules/@openai/"
+            "codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex",
+        ]
+        for target in targets:
+            subprocess.run(
+                ["docker", "exec", CONTAINER, "bash", "-lc",
+                 f"mkdir -p $(dirname {target})"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            copied = subprocess.run(
+                ["docker", "cp", src, f"{CONTAINER}:{target}"],
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+            if copied.returncode == 0:
+                subprocess.run(
+                    ["docker", "exec", CONTAINER, "chmod", "+x", target],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                print(f"CODEX_BINARY_RESTORED {target}", flush=True)
+
     def call(self, task_input, timeout=300, model=DEFAULT_MODEL):
         prompt = task_input.get("problem_statement", task_input.get("task_id", ""))
         api_key = get_openrouter_api_key()
+        self._ensure_codex_binary()
         cmd = [
             "docker", "exec", "-e", f"OPENROUTER_API_KEY={api_key}",
             CONTAINER,
