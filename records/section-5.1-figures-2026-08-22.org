@@ -1,0 +1,19 @@
+#+TITLE: Section 5.1 tables and Figures 6--8
+#+DATE: 2026-08-22
+
+* Decision
+
+- Table 4 (Emerging examples) merged into Section 5.1 enumerate.
+- Table 5 (case study) replaced by single-column TikZ Figure 8.
+- Figure 6 Pareto: new inks only, same operating points.
+- Figure 7 Emerging: three horizontal panels, gray/navy/green, same ASR.
+
+* Dead ends
+
+- Rainbow bars on Figure 7 hid the static cluster.
+- Nested TikZ chips in Figure 8 overflowed the column.
+
+* Files
+
+- paper_caitlyn: evaluation.tex, fig-emerging-casestudy.tex, plot script, PDFs.
+- caitlyn: AgentEval/scripts/plot_detection_curves.py (PARETO_COLORS).

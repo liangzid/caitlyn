@@ -61,6 +61,14 @@ DETECTOR_COLORS = {
     "pi_detector": "#ff7f0e",
     "caitlyn": "#c1121f",
 }
+# REVIEW(团长): Pareto-only inks. ROC/PR keep DETECTOR_COLORS.
+PARETO_COLORS = {
+    "regex_guard": "#5C6570",
+    "llm_judge": "#0F4D92",
+    "llm_judge_fewshot": "#2A9D8F",
+    "pi_detector": "#C9A227",
+    "caitlyn": "#B64342",
+}
 DETECTOR_LINESTYLES = {
     "regex_guard": ":",
     "llm_judge": "-",
@@ -785,10 +793,17 @@ def plot_roc_pr_grid(
     plt.close(fig)
 
 
-# Scatter area in pt^2. Matplotlib `s` is area, so one value keeps every
-# marker visually comparable across shapes.
-PARETO_MARKER_SIZE = 88
-PARETO_MARKER_EDGE = 0.9
+# Scatter area in pt^2. Matplotlib `s` is marker area, but circles and
+# triangles read smaller than squares and diamonds at the same s.
+PARETO_MARKER_SIZE = 155
+PARETO_MARKER_EDGE = 1.05
+PARETO_MARKER_AREA_SCALE = {
+    "o": 1.18,
+    "s": 1.00,
+    "^": 1.38,
+    "v": 1.38,
+    "D": 0.98,
+}
 PARETO_DATASET_TITLES = {
     "agentdojo": "AgentDojo",
     "aspi": "ASPI-S",
@@ -798,13 +813,28 @@ PARETO_DATASET_TITLES = {
 
 
 def scatter_operating_point(ax: Any, x: float, y: float, detector: str) -> None:
-    """Draw one default-threshold point. Every detector uses the same size."""
+    """Draw one default-threshold point with shape-matched visual size."""
+    marker = OP_MARKERS[detector]
+    color = PARETO_COLORS[detector]
+    area = PARETO_MARKER_SIZE * PARETO_MARKER_AREA_SCALE[marker]
+    if detector == "caitlyn":
+        ax.scatter(
+            [x],
+            [y],
+            s=area * 2.15,
+            marker=marker,
+            facecolors="none",
+            edgecolors=color,
+            linewidths=1.35,
+            zorder=5,
+            clip_on=False,
+        )
     ax.scatter(
         [x],
         [y],
-        s=PARETO_MARKER_SIZE,
-        marker=OP_MARKERS[detector],
-        facecolors=DETECTOR_COLORS[detector],
+        s=area,
+        marker=marker,
+        facecolors=color,
         edgecolors="white",
         linewidths=PARETO_MARKER_EDGE,
         zorder=6 if detector == "caitlyn" else 4,
@@ -975,10 +1005,10 @@ def plot_pareto_grid(
             [0],
             marker=OP_MARKERS[d],
             color="none",
-            markerfacecolor=DETECTOR_COLORS[d],
+            markerfacecolor=PARETO_COLORS[d],
             markeredgecolor="white",
-            markeredgewidth=0.7,
-            markersize=8.5,
+            markeredgewidth=0.8,
+            markersize=11.5 * (PARETO_MARKER_AREA_SCALE[OP_MARKERS[d]] ** 0.5),
             linestyle="None",
             label=DETECTOR_LABELS[d],
         )
@@ -1020,11 +1050,17 @@ def _style_pareto_panel(
         ylabel_pad=4.0,
     )
     ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
+    ax.set_facecolor("#F7F5F0")
+    ax.grid(color="#D9D3C7", alpha=0.85, linewidth=0.55)
+    ax.spines["left"].set_color("#6B6256")
+    ax.spines["bottom"].set_color("#6B6256")
+    ax.spines["left"].set_linewidth(1.15)
+    ax.spines["bottom"].set_linewidth(1.15)
+    ax.tick_params(length=3.5, width=1.0, labelsize=11, colors="#3F3A34")
+    ax.xaxis.label.set_color("#3F3A34")
+    ax.yaxis.label.set_color("#3F3A34")
     if not show_ylabel:
         ax.tick_params(labelleft=False)
-    ax.spines["left"].set_linewidth(1.4)
-    ax.spines["bottom"].set_linewidth(1.4)
-    ax.tick_params(length=3.5, width=1.0, labelsize=11)
     if logx:
         ax.xaxis.set_major_locator(LogLocator(base=10, numticks=4))
         ax.xaxis.set_minor_locator(NullLocator())
