@@ -680,17 +680,13 @@ class BenchmarkRunner:
                     f"{filter_prompt_content(tc.injected_content)}"
                 )
             elif tc.source_dataset == "aspi":
-                # The clarification reply is the untrusted segment; keep
-                # the base task intact so a block does not destroy utility.
-                marker = "\n\n[The user replies]\n"
-                if marker in prompt:
-                    head, _, reply = prompt.partition(marker)
-                    prompt = head + marker + filter_prompt_content(reply)
-                elif tc.injected_content:
-                    prompt += (
-                        f"\n\n[The user replies]\n"
-                        f"{filter_prompt_content(tc.injected_content)}"
-                    )
+                # KEYPOINT (protocol review): scan the full ASPI prompt
+                # (base task + clarification reply) so every detector sees
+                # the task context that distinguishes a benign continuation
+                # from a redirection. Blocking replaces the whole prompt.
+                filtered = filter_prompt_content(tc.problem_statement)
+                if self._prompt_injection_blocked:
+                    prompt = filtered
             elif tc.source_dataset == "safeclawbench":
                 # The whole prompt is the attack carrier.
                 filtered = filter_prompt_content(tc.problem_statement)

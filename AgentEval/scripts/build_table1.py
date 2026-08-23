@@ -44,6 +44,13 @@ DATASETS = (
     "safeclawbench_subset",
 )
 AGENTS = ("opencode", "codex", "pi", "hermes", "openclaw")
+AGENT_MARKERS = {
+    "opencode": r"opencode\(^\dagger\)",
+    "codex": r"codex\(^\ddagger\)",
+    "pi": r"pi\(^\ddagger\)",
+    "hermes": r"hermes\(^\ddagger\)",
+    "openclaw": r"openclaw\(^\S\)",
+}
 
 # Table row order and the defense slug used in result file names.
 DEFENSES = (
@@ -57,10 +64,12 @@ DEFENSES = (
     ("CAITLYN (ours)", "caitlyn"),
 )
 
-# opencode AD/ASPI cells use action ASR (KEYPOINT from fill_caitlyn_table1).
+# opencode AgentDojo uses action ASR (tool-channel audit). ASPI reports
+# semantic-judge raw ASR for every agent because the opencode agent does
+# not reliably issue tool calls under the full-prompt ASPI protocol, so
+# action ASR would be 0.0% for all defenses and carry no signal.
 MCP_ACTION_ASR = {
     ("opencode", "agentdojo_subset"),
-    ("opencode", "aspi_subset"),
 }
 
 
@@ -169,6 +178,7 @@ def build_body() -> str:
     """Build the full tabular body (rows only) for Table 1."""
     lines: list[str] = []
     for agent in AGENTS:
+        lines.append(f"    \\multirow{{8}}{{*}}{{{AGENT_MARKERS[agent]}}}")
         raw_rows = [
             format_cells(agent, slug) for _, slug in DEFENSES
         ]
@@ -192,13 +202,19 @@ def build_body() -> str:
 def patch_latex() -> None:
     """Replace the tabular body between the header and bottomrule."""
     text = PAPER_TABLE.read_text(encoding="utf-8")
-    start = text.find("    \\midrule\n")
+    # Restrict the edit to the FIRST tabular (Table 1). The marker search
+    # starts after the first \begin{tabular} so a later table (e.g. the
+    # LLM API table) can never be captured by the replacement window.
+    tabular = text.find("\\begin{tabular}")
+    start = text.find("    \\midrule\n", tabular)
     if start < 0:
         raise RuntimeError("Table 1 first midrule not found")
     end = text.find("    \\bottomrule", start)
     if end < 0:
         raise RuntimeError("Table 1 bottomrule not found")
     new_text = text[: start + len("    \\midrule\n")] + build_body() + text[end:]
+    if "Shaded rows are CAITLYN" in text and "Shaded rows are CAITLYN" not in new_text:
+        raise RuntimeError("build_table1 would drop the Table 1 footnote; aborting")
     PAPER_TABLE.write_text(new_text, encoding="utf-8")
 
 

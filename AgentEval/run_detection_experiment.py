@@ -246,7 +246,9 @@ def load_attack_samples(
                 dataset=dataset,
                 sample_id=tc.task_id,
                 label="attack",
-                content=tc.injected_content,
+                # Full prompt (base task + reply) to match the e2e prompt
+                # channel protocol; see run_benchmark.py ASPI branch.
+                content=tc.problem_statement,
                 source_type="prompt",
                 metadata=tc.metadata,
             ))

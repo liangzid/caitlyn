@@ -30,7 +30,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from analyze_row import summarize  # noqa: E402
 
 EVAL_DIR = Path(__file__).resolve().parent.parent / "results" / "eval" / "table4"
-PAPER_TABLE = Path("/home/zi/paper_caitlyn/sections/tables/table-main.tex")
+PAPER_TABLE = Path("/home/zi/paper_caitlyn/sections/tables/table-llm-api.tex")
 PAPER_DIR = Path("/home/zi/paper_caitlyn")
 
 # KEYPOINT: display name -> OpenRouter slug. GPT/Claude stay TBD.
@@ -99,7 +99,11 @@ def patch_latex() -> int:
         # Overwrite the whole model row whether it is a placeholder or an
         # earlier protocol's numbers, so a protocol rerun stays consistent.
         pattern = rf"^    {re.escape(display)} & .*? \\\\$"
-        new_text, n = re.subn(pattern, row, text, count=1, flags=re.MULTILINE)
+        # Lambda replacement: re.sub interprets backslashes in a string
+        # replacement, which would collapse the LaTeX row terminator.
+        new_text, n = re.subn(
+            pattern, lambda _m: row, text, count=1, flags=re.MULTILINE
+        )
         if n != 1:
             print(f"SKIP {display}: latex row not found", flush=True)
             continue

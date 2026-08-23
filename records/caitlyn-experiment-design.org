@@ -395,3 +395,44 @@ openclaw 成本需扫 .jsonl.deleted（会话在后续 dataset 被轮转），
   (\($^{*}$\) -> \(^{*}\))。
 - run_v3_detection_pipeline.sh 备好：v3 检测扫描(4 数据集) + merge
   基线 + 出图 + System I ablation，主矩阵后执行。
+
+* 2026-08-23 主矩阵完成 + 全 prompt ASPI 重跑
+
+- Table 1 全矩阵（8 defenses x 5 agents x ASPI/SCB + pi/hermes/openclaw
+  AD caitlyn v3）完成；opencode/codex AD 也重跑并回填成本。
+- CAITLYN 关键结果（修复协议 + v3）：
+  - AgentDojo：所有 agent ASR 0.0%（openclaw 0.4% 为 judge FP）；
+  - SafeClawBench：opencode 2.9%、codex 4.6%、pi 2.1%、hermes 5.8%、
+    openclaw 3.8%，全部为列内最优；
+  - ASPI（全 prompt 协议，raw ASR）：opencode 2.2%、codex 2.2%、
+    pi 2.2%、hermes 1.1%、openclaw 1.1%，列内最优/并列最优；
+  - ASPI FPR 12.9-19.4%：对话式 benign 回复与指令型攻击固有相似，
+    全 prompt 协议未能显著改善（16.1% 为主），如实报告。
+- opencode ASPI 改用 raw ASR：全 prompt 协议下 opencode 不调工具，
+  action ASR 全 0 无信号。
+- v3 检测（全 prompt ASPI）：TPR 100.0/92.5/84.2/80.0，FPR 5.2%，
+  AUROC 0.992/0.947/0.893/0.878；Section 4.2/4.4 与图件已同步。
+- System I ablation v3：full=100.0/89.2/82.1/82.0，FPR 3.2%；
+  table-ablation.tex 已更新。
+- Table 2（LLM backbone）：deepseek/qwen/glm/kimi 完成且健康
+  （kimi 237/240、成本 100%），minimax 运行中；完成后 fill_table4。
+- 遗留：openclaw AD 基线 llm_judge/spotlighting 成本为 --（旧会话
+  已轮转，无法恢复），恢复旧表值 0.0060/0.0118。
+
+* 2026-08-23 12:35 Table 1/2 完成与提交
+
+- ASPI 全 prompt 重跑全部完成（5 agent x 8 defenses，含成本回填）。
+  CAITLYN ASPI raw ASR：opencode 2.2%、codex 2.2%、pi 2.2%、
+  hermes 1.1%、openclaw 1.1%；FPR 12.9-19.4%（对话歧义，如实报告）。
+- opencode ASPI 改用 raw ASR（全 prompt 下不调工具，action ASR 无信号）。
+- Table 2（LLM backbone）5 模型全部完成：DeepSeek 3.3%/49.2%、
+  Qwen 0.4%/25.8%、GLM 0.0%/37.5%、Kimi 1.7%/59.2%、
+  MiniMax 0.0%/27.9%（ASR/Utility）；fill_table4 修复 re.sub 吞反斜杠
+  的 bug，并指向独立 table-llm-api.tex。
+- table-main.tex 移除重复的 LLM API 表副本（防止 PDF 双表）。
+- build_table1.py 修复：恢复 multirow agent 标记、加防截断 guard。
+- 论文正文：Section 4.2（TPR/FPR/AUROC/延迟成本）、Section 4.4
+  （ablation 数字）、threat model（prompt 环境内容通道）、Table 1
+  caption 已同步；v3 图件已复制进 paper/figures。
+- openclaw AD 基线 llm_judge/spotlighting 成本沿用旧实测 0.0060/0.0118
+  （旧会话已轮转无法重算）。
