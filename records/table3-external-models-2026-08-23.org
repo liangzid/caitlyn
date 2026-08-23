@@ -53,6 +53,22 @@ judge pinned to deepseek/deepseek-chat on OpenRouter.
 Gemini 3.5 Flash is much slower on the relay; full run is expected to
 take ~12-16h while the other four take about 1h each.
 
+* Balance incident (2026-08-23 22:41)
+
+The relay account ran out of balance ("可用余额不足", HTTP 402
+BALANCE_INSUFFICIENT) partway through the batch:
+
+- claude-opus-4-6: 240/240 valid (the only complete row).
+- claude-fable-5: last ~81/240 failed with 402; result invalidated.
+- gpt-5.6-sol, gemini-3.5-flash, gemini-3.7-flash: 240/240 failed with
+  402; results invalidated.
+
+Invalid result files were renamed with .invalid-20260823-balance so
+fill_table4 ignores them and the paper rows stay placeholders.
+
+Needs 团长 to top up the AICodeMirror account, then rerun the four
+failed models with run_table4_external_models.sh.
+
 * Dead ends
 
 - Direct curl to the OpenAI Chat Completions path without /v1 returns the
