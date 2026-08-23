@@ -43,6 +43,45 @@ daemon_model_for() {
   echo "${1##*/}"
 }
 
+check_relay_balance() {
+  local model="$1"
+  local daemon_provider daemon_model code out
+  daemon_provider="$(daemon_provider_for "$model")"
+  daemon_model="$(daemon_model_for "$model")"
+  out="$(mktemp)"
+  # KEYPOINT-REVIEW: a minimal completion against the same relay channel
+  # before each 240-case run. The relay returns HTTP 402 with
+  # BALANCE_INSUFFICIENT when the account is dry; this avoids burning a
+  # whole batch on a dead channel.
+  case "$daemon_provider" in
+    anthropic)
+      code=$(curl -sS --max-time 40 -o "$out" -w '%{http_code}' \
+        https://api.aicodemirror.ai/api/claudecode/v1/messages \
+        -H "x-api-key: $(cat "$RELAY_KEY_FILE")" \
+        -H "anthropic-version: 2023-06-01" \
+        -H "Content-Type: application/json" \
+        -d "{\"model\":\"$daemon_model\",\"max_tokens\":4,\"messages\":[{\"role\":\"user\",\"content\":\"Reply OK\"}]}")
+      ;;
+    openai)
+      code=$(curl -sS --max-time 40 -o "$out" -w '%{http_code}' \
+        https://api.aicodemirror.ai/api/codex/backend-api/codex/v1/responses \
+        -H "Authorization: Bearer $(cat "$RELAY_KEY_FILE")" \
+        -H "Content-Type: application/json" \
+        -d "{\"model\":\"$daemon_model\",\"input\":\"Reply OK\",\"max_output_tokens\":4}")
+      ;;
+    google)
+      code=$(curl -sS --max-time 40 -o "$out" -w '%{http_code}' \
+        https://api.aicodemirror.ai/api/gemini/v1beta/models/$daemon_model:generateContent \
+        -H "x-goog-api-key: $(cat "$RELAY_KEY_FILE")" \
+        -H "Content-Type: application/json" \
+        -d '{"contents":[{"role":"user","parts":[{"text":"Reply OK"}]}]}')
+      ;;
+    *) code=000 ;;
+  esac
+  rm -f "$out"
+  [[ "$code" == "200" ]]
+}
+
 mkdir -p "$OUTDIR"
 
 if [[ ! -f "$RELAY_KEY_FILE" ]]; then
@@ -109,6 +148,11 @@ run_one() {
     echo "skip ${model} (result exists)"
     return 0
   fi
+  if ! check_relay_balance "$model"; then
+    echo "BLOCKED ${model}: relay balance/channel check failed (HTTP probe)"
+    echo "RELAY_BALANCE_BLOCKED"
+    exit 1
+  fi
   start_daemon "$model"
   local start_ms
   start_ms="$(python3 -c 'import time; print(int(time.time()*1000))')"
@@ -128,6 +172,27 @@ run_one() {
     --output "$out"
   uv run python scripts/attach_agent_cost.py --start-ms "$start_ms" "$out"
   uv run python scripts/analyze_row.py "$out.withcost.json"
+  # KEYPOINT-REVIEW: after the run, reject batches that look like API
+  # failures instead of real model behavior (nearly all cases failed in
+  # a few seconds, e.g. relay 402s), and stop before the next model.
+  if ! python3 - "$out.withcost.json" <<'PYEOF'
+import json, sys, statistics
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+rs = d["results"]
+if not rs:
+    sys.exit(1)
+failed = sum(1 for r in rs if not r.get("success"))
+lat = statistics.median(r.get("duration", 0.0) for r in rs)
+if failed / len(rs) > 0.5 and lat < 60:
+    sys.exit(2)
+PYEOF
+  then
+    echo "INVALID ${model}: >50% cases failed with p50 latency <60s (API error signature)"
+    mv "$out" "$out.invalid-20260823-api-error"
+    mv "$out.withcost.json" "$out.withcost.json.invalid-20260823-api-error"
+    echo "RELAY_RUN_API_ERROR"
+    exit 1
+  fi
   uv run python scripts/fill_table4.py --latex || true
   echo "===== DONE ${model} ====="
 }

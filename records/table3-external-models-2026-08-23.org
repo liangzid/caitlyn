@@ -69,6 +69,19 @@ fill_table4 ignores them and the paper rows stay placeholders.
 Needs 团长 to top up the AICodeMirror account, then rerun the four
 failed models with run_table4_external_models.sh.
 
+* Runner safeguards (2026-08-23)
+
+run_table4_external_models.sh now:
+
+1. Probes the relay channel with a minimal completion before each
+   240-case run and stops with RELAY_BALANCE_BLOCKED on non-200.
+2. Post-checks each batch: >50% failed cases with p50 latency <60s is
+   treated as an API-error signature, the files are renamed
+   .invalid-20260823-api-error, and the batch stops.
+
+Balance was still insufficient on the next check; rerun is ready to go
+as soon as the account is topped up.
+
 * Dead ends
 
 - Direct curl to the OpenAI Chat Completions path without /v1 returns the
