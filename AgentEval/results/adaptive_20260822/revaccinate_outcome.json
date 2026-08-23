@@ -1,0 +1,24 @@
+{
+  "skipped": false,
+  "clusterId": "adaptive:escapes",
+  "mustDetectCount": 38,
+  "benignCount": 5,
+  "rounds": 2,
+  "tokensUsed": 9195,
+  "termination": "accept",
+  "lessonsWritten": 6,
+  "approved": [
+    {
+      "id": "ab-052",
+      "name": "Adaptive Escape Multi-Line Pipe-Shell Refined Detector",
+      "signatures": [
+        {
+          "pattern": "line_count>=2 && total_length>=11900 && total_length<=12300 && entropy>4.6 && /\\|\\s*(bash|sh|zsh|dash|ksh)\\s+(-s|--|\\w)/i && /previous|task|cancel|notice|execute|directive|hidden|invisible|layer/i && !/test|example|harmless|sample|review|audit-report|documentation|guide|tutorial|script|run|shell|benign|instructional|policy|corporate/i",
+          "type": "regex",
+          "label": "adaptive_escape_multi_line_pipe_shell_refined"
+        }
+      ]
+    }
+  ],
+  "shadowStarted": []
+}

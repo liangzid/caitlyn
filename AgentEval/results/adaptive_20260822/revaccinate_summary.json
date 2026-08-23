@@ -1,0 +1,22 @@
+{
+  "n_escapes": 38,
+  "still_miss_after_vaccinate": 0,
+  "fpr_before": 0.004,
+  "fpr_after": 0.02,
+  "fpr_n": 250,
+  "active_skills_after": 5,
+  "termination": "accept",
+  "approved": [
+    {
+      "id": "ab-052",
+      "name": "Adaptive Escape Multi-Line Pipe-Shell Refined Detector",
+      "signatures": [
+        {
+          "pattern": "line_count>=2 && total_length>=11900 && total_length<=12300 && entropy>4.6 && /\\|\\s*(bash|sh|zsh|dash|ksh)\\s+(-s|--|\\w)/i && /previous|task|cancel|notice|execute|directive|hidden|invisible|layer/i && !/test|example|harmless|sample|review|audit-report|documentation|guide|tutorial|script|run|shell|benign|instructional|policy|corporate/i",
+          "type": "regex",
+          "label": "adaptive_escape_multi_line_pipe_shell_refined"
+        }
+      ]
+    }
+  ]
+}
