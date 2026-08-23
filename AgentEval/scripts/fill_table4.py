@@ -33,13 +33,20 @@ EVAL_DIR = Path(__file__).resolve().parent.parent / "results" / "eval" / "table4
 PAPER_TABLE = Path("/home/zi/paper_caitlyn/sections/tables/table-llm-api.tex")
 PAPER_DIR = Path("/home/zi/paper_caitlyn")
 
-# KEYPOINT: display name -> OpenRouter slug. GPT/Claude stay TBD.
+# KEYPOINT: display name -> model id used by run_benchmark.
+# OpenRouter rows use bare slugs; the AICodeMirror relay rows use the
+# provider-qualified ids configured in the container's opencode.jsonc.
 MODELS = (
     ("DeepSeek-V4-Flash", "deepseek/deepseek-v4-flash-0731"),
     ("Qwen3.8-Max", "qwen/qwen3.8-max"),
     ("GLM-5.3", "z-ai/glm-5.3"),
     ("Kimi-K3", "moonshotai/kimi-k3"),
     ("MiniMax-M3", "minimax/minimax-m3"),
+    ("Claude-Opus-4.6", "aicodemirror-claude/claude-opus-4-6"),
+    ("Claude-Fable-5", "aicodemirror-claude/claude-fable-5"),
+    ("GPT-5.6-Sol", "aicodemirror/gpt-5.6-sol"),
+    ("Gemini-3.5-Flash", "aicodemirror-gemini/gemini-3.5-flash"),
+    ("Gemini-3.7-Flash", "aicodemirror-gemini/gemini-3.7-flash"),
 )
 
 

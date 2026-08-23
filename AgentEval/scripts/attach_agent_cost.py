@@ -34,6 +34,22 @@ from pathlib import Path
 CONTAINER = os.environ.get("AGENT_EVAL_CONTAINER", "agent-eval")
 DB = "/root/.local/share/opencode/opencode.db"
 
+# KEYPOINT-REVIEW: official USD per 1M tokens for the AICodeMirror
+# external backbones (Table 3). opencode has no pricing for custom
+# providers, so when its session cost is zero we recompute it from the
+# recorded token usage. Order: input, output, cache_read, cache_write.
+RELAY_MODEL_PRICING = {
+    "claude-opus-4-6": (5.0, 25.0, 0.5, 6.25),
+    "claude-fable-5": (10.0, 50.0, 1.0, 12.5),
+    "gpt-5.6-sol": (5.0, 30.0, 0.5, 6.25),
+    "gemini-3.5-flash": (1.5, 9.0, 0.15, 0.0),
+    "gemini-3.7-flash": (0.75, 3.75, 0.0375, 0.0),
+}
+# GPT-5.6 Sol long-context tier: input > 272K tokens (OpenAI short/long
+# context split). Input and cache double, output is 1.5x.
+GPT56_LONG_CONTEXT_THRESHOLD = 272_000
+GPT56_LONG_CONTEXT_PRICING = (10.0, 45.0, 1.0, 12.5)
+
 
 def dump_sessions(start_ms: int) -> list[dict]:
     """Dump sessions (usage + user prompt text) from the container DB."""
@@ -44,17 +60,18 @@ cur = con.cursor()
 rows = cur.execute(
     "select s.id, s.cost, s.tokens_input, s.tokens_output, "
     "s.tokens_reasoning, s.tokens_cache_read, s.tokens_cache_write, "
-    "p.data, m.data "
+    "s.model, p.data, m.data "
     "from session s join part p on p.session_id = s.id "
     "join message m on m.id = p.message_id "
     "where s.time_created >= ? order by s.time_created",
     ({start_ms},),
 ).fetchall()
 out = {{}}
-for sid, cost, tin, tout, trea, tcr, tcw, pdata, mdata in rows:
+for sid, cost, tin, tout, trea, tcr, tcw, smodel, pdata, mdata in rows:
     try:
         pd = json.loads(pdata)
         md = json.loads(mdata)
+        model_id = json.loads(smodel or "{{}}").get("id")
     except Exception:
         continue
     if pd.get("type") != "text" or md.get("role") != "user":
@@ -73,6 +90,7 @@ for sid, cost, tin, tout, trea, tcr, tcw, pdata, mdata in rows:
     out[sid] = {{
         "session_id": sid,
         "cost": cost,
+        "model": model_id,
         "tokens_input": tin,
         "tokens_output": tout,
         "tokens_reasoning": trea,
@@ -93,6 +111,26 @@ print(json.dumps(list(out.values()), ensure_ascii=False))
     return json.loads(result.stdout.strip().splitlines()[-1])
 
 
+def relay_session_cost(session: dict) -> float | None:
+    """Compute a relay session cost from token usage when opencode
+    recorded none (custom providers have no models.dev pricing)."""
+    if session["cost"]:
+        return session["cost"]
+    pricing = RELAY_MODEL_PRICING.get(session.get("model") or "")
+    if pricing is None:
+        return None
+    tin = session.get("tokens_input") or 0
+    tout = session.get("tokens_output") or 0
+    tcr = session.get("tokens_cache_read") or 0
+    tcw = session.get("tokens_cache_write") or 0
+    if tin > GPT56_LONG_CONTEXT_THRESHOLD:
+        pricing = GPT56_LONG_CONTEXT_PRICING
+    return (
+        tin * pricing[0] + tout * pricing[1]
+        + tcr * pricing[2] + tcw * pricing[3]
+    ) / 1_000_000.0
+
+
 def attach(path: str, sessions: list[dict]) -> dict:
     """Join sessions to results by exact prompt text and enrich them."""
     by_prompt: dict[str, dict] = {}
@@ -109,9 +147,11 @@ def attach(path: str, sessions: list[dict]) -> dict:
         if session is None:
             unmatched += 1
             continue
+        cost = relay_session_cost(session)
         r["agent_usage"] = {
             "session_id": session["session_id"],
-            "cost_usd": session["cost"],
+            "cost_usd": cost if cost is not None else session["cost"],
+            "model": session.get("model"),
             "tokens_input": session["tokens_input"],
             "tokens_output": session["tokens_output"],
             "tokens_reasoning": session["tokens_reasoning"],

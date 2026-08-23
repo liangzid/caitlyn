@@ -21,7 +21,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
-from agent_eval.api_keys import get_openrouter_api_key
+from agent_eval.api_keys import get_aicodemirror_api_key, get_openrouter_api_key
 
 DEFAULT_MODEL = "openrouter/free"
 CONTAINER = os.environ.get("AGENT_EVAL_CONTAINER", "agent-eval")
@@ -122,15 +122,24 @@ class OpenClawCaller(AgentCaller):
 
 
 class OpenCodeCaller(AgentCaller):
-    """✅ Verified: opencode run -m openrouter/{model}"""
+    """✅ Verified: opencode run -m openrouter/{model}
+
+    Table 3 external backbones use provider-qualified relay model ids
+    (aicodemirror-claude/..., aicodemirror/..., aicodemirror-gemini/...)
+    that map to custom providers configured in the container's
+    opencode.jsonc. The relay key is injected per exec, never persisted.
+    """
     def call(self, task_input, timeout=300, model=DEFAULT_MODEL):
         prompt = task_input.get("problem_statement", task_input.get("task_id", ""))
         api_key = get_openrouter_api_key()
-        cmd = [
-            "docker", "exec", "-e", f"OPENROUTER_API_KEY={api_key}",
-            CONTAINER,
-            "opencode", "run", "-m", f"openrouter/{model}", prompt,
-        ]
+        cmd = ["docker", "exec", "-e", f"OPENROUTER_API_KEY={api_key}"]
+        if model.startswith("aicodemirror"):
+            cmd.append("-e")
+            cmd.append(f"AI_CODE_MIRROR_API_KEY={get_aicodemirror_api_key()}")
+            model_arg = model
+        else:
+            model_arg = f"openrouter/{model}"
+        cmd += [CONTAINER, "opencode", "run", "-m", model_arg, prompt]
         return _run_command(cmd, task_input.get("task_id", ""), timeout)
 
 

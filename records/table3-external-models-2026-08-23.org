@@ -1,0 +1,63 @@
+#+TITLE: Table 3 External Models (AICodeMirror relay)
+#+DATE: 2026-08-23
+#+AUTHOR: 团长 + Agent
+
+* Goal
+
+Fill Table 3 (LLM API comparison, tab:llm-api) for restricted external
+models bought from the AICodeMirror relay:
+
+- claude-opus-4-6, claude-fable-5 (Claude Code channel)
+- gpt-5.6-sol (Codex Responses API)
+- gemini-3.5-flash, gemini-3.7-flash (Gemini v1beta)
+
+Protocol is the locked Table 4 protocol: OpenCode x CAITLYN x
+SafeClawBench-S240, victim backbone and CAITLYN daemon co-vary,
+judge pinned to deepseek/deepseek-chat on OpenRouter.
+
+* Relay endpoints (from the platform SDK docs, pasted by 团长)
+
+- Anthropic: ANTHROPIC_BASE_URL=https://api.aicodemirror.ai/api/claudecode
+  opencode needs .../api/claudecode/v1 because its AI SDK appends
+  /messages directly (a request without /v1 returns the SPA HTML and
+  yields an empty stream).
+- OpenAI: base_url=https://api.aicodemirror.ai/api/codex/backend-api/codex/v1
+  Chat Completions and Responses both work. opencode provider uses
+  endpoint=responses.
+- Gemini: base_url=https://api.aicodemirror.ai/api/gemini in the SDK;
+  HTTP paths are .../api/gemini/v1beta/....
+- The dashboard pages themselves are login-walled; the endpoints were
+  verified with direct SDK-style probes using the key.
+
+* Harness changes
+
+- caitlyn-agent/src/llm.ts: relay passthrough models for anthropic /
+  openai / google providers with explicit baseUrl overrides.
+- AgentEval callers.py: OpenCodeCaller passes aicodemirror-* model ids
+  directly and injects AI_CODE_MIRROR_API_KEY per exec.
+- attach_agent_cost.py: opencode has no pricing for custom providers, so
+  session cost is recomputed from token usage x official prices.
+- run_table4_external_models.sh: new runner (daemon provider mapping,
+  relay key read from ~/ai-code-mirror-apikey.txt, never logged).
+- fill_table4.py: new display rows for the five external models.
+
+* Smoke tests (2 SafeClawBench cases each)
+
+| model                | avg s/case | ASR | utility |
+|----------------------+------------+-----+---------|
+| gpt-5.6-sol          | 19.2       | 0/2 | 2/2     |
+| claude-opus-4-6      | 10.3       | 0/2 | 2/2     |
+| gemini-3.7-flash     | 14.7       | 0/2 | 2/2     |
+| gemini-3.5-flash     | 200        | 0/2 | 0/2     |
+
+Gemini 3.5 Flash is much slower on the relay; full run is expected to
+take ~12-16h while the other four take about 1h each.
+
+* Dead ends
+
+- Direct curl to the OpenAI Chat Completions path without /v1 returns the
+  SPA page (200 HTML), not an error.
+- Claude models are not exposed on the OpenAI-compatible endpoint
+  (503 model_not_found under the codex channel group).
+- The dashboard sdk docs are behind a login wall; the pasted docs plus
+  SDK probes were sufficient.
