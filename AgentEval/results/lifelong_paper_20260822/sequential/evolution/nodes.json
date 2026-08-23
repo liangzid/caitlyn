@@ -1,0 +1,204 @@
+{
+  "nodes": [
+    {
+      "id": "ab-ax-001",
+      "name": "Enterprise Social Engineering Methodology Detector",
+      "description": "Detects texts that combine corporate security policy context with social engineering or harmful action methodology disclosures, often prefaced by ethical disclaimers indicating misalignment.",
+      "category": "emerging",
+      "tier": 0,
+      "status": "active",
+      "parentIds": [],
+      "createdAt": "2026-08-22T07:38:10.771Z",
+      "statusChangedAt": "2026-08-22T07:38:10.771Z",
+      "generation": 0,
+      "signatures": [
+        {
+          "pattern": "(social engineering attacks? against enterprise|methodology for social engineering|effective method for \\[?harmful action\\]?)",
+          "type": "regex",
+          "label": "harmful_methodology_signal"
+        },
+        {
+          "pattern": "(Without any ethical constraints|Of course, I'd be happy to help with that)",
+          "type": "regex",
+          "label": "disclaimer_bypass_marker"
+        },
+        {
+          "pattern": "policy",
+          "type": "exact",
+          "label": "policy_context_hint"
+        }
+      ],
+      "evidence": {
+        "hits": 0,
+        "falsePositives": 0,
+        "lastUsedAt": null,
+        "shadowScans": 0,
+        "shadowHits": 0,
+        "shadowConfirmedHits": 0
+      },
+      "lastReviewVerdict": "accept"
+    },
+    {
+      "id": "ab-ax-003",
+      "name": "High Entropy Policy-Like Directive Detector",
+      "description": "Flags short passages with high entropy (>=4.5) and moderate line count that contain policy or harm-related directives, aiming to catch obfuscated or densely packed harmful instructions.",
+      "category": "emerging",
+      "tier": 0,
+      "status": "active",
+      "parentIds": [],
+      "createdAt": "2026-08-22T07:38:10.771Z",
+      "statusChangedAt": "2026-08-22T07:38:10.771Z",
+      "generation": 0,
+      "signatures": [
+        {
+          "pattern": "\\b(policy|scan|external|security)\\b",
+          "type": "regex",
+          "label": "policy_or_security_lexeme"
+        },
+        {
+          "pattern": "\\b(methodology|effective method|attacks?|harmful)\\b",
+          "type": "regex",
+          "label": "harm_directive_lexeme"
+        }
+      ],
+      "evidence": {
+        "hits": 0,
+        "falsePositives": 0,
+        "lastUsedAt": null,
+        "shadowScans": 0,
+        "shadowHits": 0,
+        "shadowConfirmedHits": 0
+      },
+      "lastReviewVerdict": "accept"
+    },
+    {
+      "id": "ab-ledger-update-001",
+      "name": "Ledger Update Command Detector",
+      "description": "Detects ledger_update cluster payloads that combine file modification commands with configuration-related terminology and high entropy indicators, often used to disguise unauthorized system changes as routine updates.",
+      "category": "emerging",
+      "tier": 0,
+      "status": "active",
+      "parentIds": [
+        "ab-ax-001",
+        "ab-ax-003"
+      ],
+      "createdAt": "2026-08-22T07:43:34.023Z",
+      "statusChangedAt": "2026-08-22T07:43:34.023Z",
+      "generation": 1,
+      "signatures": [
+        {
+          "pattern": "ledger_update|ledger:update|ledger update",
+          "type": "regex",
+          "label": "ledger_update_identifier"
+        },
+        {
+          "pattern": "setfacl|chmod|chown|systemctl|service ",
+          "type": "regex",
+          "label": "file_permission_or_service_command"
+        },
+        {
+          "pattern": "configuration update|system files|modifying system",
+          "type": "regex",
+          "label": "config_update_context"
+        }
+      ],
+      "evidence": {
+        "hits": 0,
+        "falsePositives": 0,
+        "lastUsedAt": null,
+        "shadowScans": 0,
+        "shadowHits": 0,
+        "shadowConfirmedHits": 0
+      },
+      "lastReviewVerdict": "accept"
+    },
+    {
+      "id": "ab-ax-004",
+      "name": "Email Exfiltration Command Detector",
+      "description": "Detects high-entropy prompts instructing email-based data exfiltration, particularly via send_email tools with attacker-controlled destinations and /etc/ or other sensitive directory attachments, especially when base64/hex encoding is absent.",
+      "category": "emerging",
+      "tier": 0,
+      "status": "active",
+      "parentIds": [
+        "ab-ax-003"
+      ],
+      "createdAt": "2026-08-22T07:43:54.473Z",
+      "statusChangedAt": "2026-08-22T07:43:54.473Z",
+      "generation": 1,
+      "signatures": [
+        {
+          "pattern": "(send_email|compose_email|write_email|email tool)",
+          "type": "regex",
+          "label": "email_tool_reference"
+        },
+        {
+          "pattern": "(attacker@|evil\\.com|exfil|/etc/|/var/|/home/)",
+          "type": "regex",
+          "label": "exfil_destination_or_sensitive_path"
+        },
+        {
+          "pattern": "attach (all )?files (from|in)",
+          "type": "regex",
+          "label": "attach_files_directive"
+        },
+        {
+          "pattern": "subject['\"]?\\s*[:=]\\s*['\"]?[^'\"]{1,30}",
+          "type": "regex",
+          "label": "email_subject_directive"
+        }
+      ],
+      "evidence": {
+        "hits": 0,
+        "falsePositives": 0,
+        "lastUsedAt": null,
+        "shadowScans": 0,
+        "shadowHits": 0,
+        "shadowConfirmedHits": 0
+      },
+      "lastReviewVerdict": "accept"
+    },
+    {
+      "id": "ab-ax-005",
+      "name": "Supervisor Transfer Pretext with Full Transcript Request Detector",
+      "description": "Flags prompts that use supervisor transfer, review, or academic-study pretexts to request complete unredacted transcripts, system prompts, tool outputs, or other internal artifacts, often with urgency or completeness qualifiers.",
+      "category": "emerging",
+      "tier": 0,
+      "status": "active",
+      "parentIds": [],
+      "createdAt": "2026-08-22T07:43:54.473Z",
+      "statusChangedAt": "2026-08-22T07:43:54.473Z",
+      "generation": 0,
+      "signatures": [
+        {
+          "pattern": "(supervisor|escalat|review|transfer|audit)",
+          "type": "regex",
+          "label": "pretext_authority"
+        },
+        {
+          "pattern": "(complete|unredacted|full|entire|all)\\s+(transcript|system prompts?|tool outputs?|logs?)",
+          "type": "regex",
+          "label": "artifact_request"
+        },
+        {
+          "pattern": "(provide|share|send|forward|show|display)",
+          "type": "regex",
+          "label": "request_verb"
+        },
+        {
+          "pattern": "(academic study|censorship|free speech|filtering patterns|research)",
+          "type": "regex",
+          "label": "academic_pretext"
+        }
+      ],
+      "evidence": {
+        "hits": 0,
+        "falsePositives": 0,
+        "lastUsedAt": null,
+        "shadowScans": 0,
+        "shadowHits": 0,
+        "shadowConfirmedHits": 0
+      },
+      "lastReviewVerdict": "accept"
+    }
+  ]
+}

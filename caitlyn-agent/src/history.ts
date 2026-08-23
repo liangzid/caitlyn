@@ -19,11 +19,16 @@ import * as os from "node:os";
 
 // ── Paths ─────────────────────────────────────────────────────────
 
-const HISTORY_DIR = path.join(os.homedir(), ".caitlyn");
-const HISTORY_PATH = path.join(HISTORY_DIR, "scan_history.json");
+/** History dir; CAITLYN_HISTORY_DIR isolates experiment runs from ~/.caitlyn. */
+function historyDir(): string {
+  return process.env.CAITLYN_HISTORY_DIR || path.join(os.homedir(), ".caitlyn");
+}
 
-// Ensure directory exists at module load
-try { fs.mkdirSync(HISTORY_DIR, { recursive: true }); } catch { /* ignore */ }
+function historyPath(): string {
+  const dir = historyDir();
+  fs.mkdirSync(dir, { recursive: true });
+  return path.join(dir, "scan_history.json");
+}
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -84,9 +89,9 @@ function withLock<T>(fn: () => T): Promise<T> {
 }
 
 export function loadHistory(): ScanLogEntry[] {
-  if (!fs.existsSync(HISTORY_PATH)) return [];
+  if (!fs.existsSync(historyPath())) return [];
   try {
-    const raw = fs.readFileSync(HISTORY_PATH, "utf-8");
+    const raw = fs.readFileSync(historyPath(), "utf-8");
     if (!raw.trim()) return [];
     // Handle both legacy JSON array and JSONL formats
     if (raw.trim().startsWith("[")) {
@@ -113,15 +118,15 @@ export function loadHistory(): ScanLogEntry[] {
 
 function saveHistory(entries: ScanLogEntry[]): void {
   const trimmed = entries.slice(-10000);
-  const tmpPath = HISTORY_PATH + ".tmp";
+  const tmpPath = historyPath() + ".tmp";
   fs.writeFileSync(tmpPath, JSON.stringify(trimmed, null, 2), "utf-8");
-  fs.renameSync(tmpPath, HISTORY_PATH);
+  fs.renameSync(tmpPath, historyPath());
 }
 
 /** Append a single scan entry to the history file (JSONL format). */
 function appendHistoryEntry(entry: ScanLogEntry): void {
   const line = JSON.stringify(entry) + "\n";
-  fs.appendFileSync(HISTORY_PATH, line, "utf-8");
+  fs.appendFileSync(historyPath(), line, "utf-8");
 }
 
 // ── Public API ────────────────────────────────────────────────────
@@ -221,9 +226,9 @@ export function getDashboard(): DashboardStats {
 /** Clear all scan history entries (serialized via write lock). */
 export async function clearHistory(): Promise<void> {
   await withLock(() => {
-    const tmpPath = HISTORY_PATH + ".tmp";
+    const tmpPath = historyPath() + ".tmp";
     fs.writeFileSync(tmpPath, JSON.stringify([], null, 2), "utf-8");
-    fs.renameSync(tmpPath, HISTORY_PATH);
+    fs.renameSync(tmpPath, historyPath());
   });
 }
 

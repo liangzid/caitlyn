@@ -1,0 +1,108 @@
+#+TITLE: Lifelong Synthesis Experiments (paper 5.2 / Further Evaluation)
+#+DATE: 2026-08-22
+#+FILE: ~/caitlyb-branch-emerging  (branch emerging-benchmark-eval)
+#+PAPER: ~/paper_caitlyn/sections/evaluation.tex  (empty subsection)
+
+* Claim (frozen)
+
+5.1 = one-shot System II on Emerging (static vs evolved, 3 agents, ASR drop).
+5.2 = sequential synthesis on a time-ordered family stream.
+Questions 5.2 must answer and 5.1 does not: coverage growth on the new
+family, retention on earlier families, FPR and library size, cumulative
+synthesis cost.
+
+* Stream / leakage / synthesis / start / presentation (frozen)
+
+Emerging-200, nine novelty_note families, construction order, one stream.
+Seed misses of the current wave only enter System II. Held-out isolated.
+One loop per wave, cluster T = all current seed misses. Detection-only.
+t=0 = 24-skill library copied from ~/caitlyn (paper / 5.1), empty DAG.
+Scanner and System II still run from this emerging branch.
+Controls: Static / Batch / Sequential.
+Figure: Sequential current-family held-out TPR + mean previous held-out TPR.
+Table: three methods at endpoint.
+
+* Implementation
+
+Driver lives in this branch only:
+- AgentEval/scripts/run_lifelong_synthesis.py
+- caitlyn-agent/scripts/scan-batch.ts
+- caitlyn-agent/scripts/vaccinate-cluster.ts
+--library-root defaults to /home/zi/caitlyn. Changing the source wipes
+the isolated library and the static cache.
+Isolated CAITLYN_LIBRARY_DIR / EVOLUTION_DIR / HISTORY_DIR / STATS_DIR.
+Static scan cached once. Combined detector = cached static ∪ DAG signatures
+(same path as 5.1 CaitlynEvolvedDefense). Product vaccinate CLI unchanged.
+Small isolation hooks: CAITLYN_HISTORY_DIR, CAITLYN_EVOLUTION_DIR env.
+
+* Dry-run 2026-08-22
+
+Command: sequential --max-waves 1 --tier0-only --limit-benign 20
+Out: AgentEval/results/lifelong_20260822_dryrun
+~/.caitlyn/evolution/nodes.json mtime unchanged (2026-08-19).
+Wave 1 status_field: 13 seed misses, 5 rounds, 15340 tokens, termination
+max_rounds, 0 approved. Every candidate failed mustDetectPassed (must hit
+all 13). Held-out TPR 0, FPR 0, active skills 0. Plumbing is correct.
+The hard Pass on a 13-sample cluster is why synthesis produced nothing.
+
+* Dry-run 2, caitlyn 24 (2026-08-22)
+
+Out: AgentEval/results/lifelong_20260822_dryrun_caitlyn24
+Copied 24 antibody dirs from /home/zi/caitlyn.
+Wave 1 under --tier0-only: 0 seed misses, held-out TPR 1.0, FPR 0 on 20
+short XSTest strings. All 25 status_field hits were ab-entropy-anomaly
+voting suspicious, which the driver counted as blocked.
+This is not 5.1 e2e behavior: CaitlynDefense only blocks malicious, and
+Tier-0 suspicious does not short-circuit before Tier 1.
+Do not use --tier0-only for the real 5.2 run.
+
+* Official run 2026-08-22 (lifelong_paper_20260822)
+
+Library: /home/zi/caitlyn 24 skills. Blocked = malicious. T0+T1.
+Static: held-out TPR 16.0% (100), FPR 1.6% (250).
+Batch: 85 seed misses in one T, max_rounds, 0 accepted, same 16.0% / 1.6%.
+Sequential: 5 accepted skills, endpoint held-out TPR 64.0%, FPR 3.6%,
+~105k synthesis tokens. Accepts on waves 3 (policy_delta), 7 (ledger),
+8 (mail). Wave 9 skipped (no seed misses left). Waves 1-2 and 4-6 failed
+Pass on 11-13 sample clusters.
+
+Validity note: wave-3 signatures include exact "policy" and a
+policy|scan|external|security regex. After that wave, previous-family
+TPR jumps 25% to 52% and FPR 1.6% to 2.8%. Same over-broad class as
+the 5.1 prune. Do not treat 64% as clean family-specific adaptation
+without inspecting those predicates.
+
+* Prune and replay 2026-08-23
+
+Same 5.1 / appendix filter, applied after acceptance. No System II rerun.
+Unpruned DAG kept at sequential/evolution/nodes.json (backup copy too).
+Replay writes sequential_pruned/ and does not touch ~/.caitlyn/evolution.
+
+Drop a signature when any of:
+1. pathological / length-only regex
+2. generic lexical predicate (unanchored common-English token or OR)
+3. more than one hit on the 250-string FPR pool (Pass epsilon=1)
+
+Empty nodes become dormant. Node ids are not hard-coded.
+
+Dropped: exact "policy", policy|scan|external|security, harm-directive OR,
+request-verb OR, pretext-authority OR, academic-pretext OR.
+Kept: ledger_update identifier, email subject/tool/path signatures.
+
+Pruned Sequential endpoint (paper table):
+held-out TPR 30.0% (100), FPR 1.6% (250), 4 active skills, 104932 tokens.
+Wave 3 current-family TPR falls to the static 7.7%. Previous-family TPR
+stays at 12% instead of jumping to 52%. Ledger and mail still reach 100%
+held-out TPR. FPR stays at the static 1.6% on every wave.
+
+Unpruned sidecar: 64.0% / 3.6% / 5 skills, figure
+lifelong_sequential_unpruned.pdf. Do not use that as the paper number.
+
+Command:
+uv run python scripts/run_lifelong_synthesis.py --pruned-replay \
+  --out-dir results/lifelong_paper_20260822
+uv run python scripts/plot_lifelong_synthesis.py \
+  --run-dir results/lifelong_paper_20260822
+
+Figures: results/lifelong_paper_20260822/figures/lifelong_sequential.pdf
+Table: results/lifelong_paper_20260822/endpoint_table.tex

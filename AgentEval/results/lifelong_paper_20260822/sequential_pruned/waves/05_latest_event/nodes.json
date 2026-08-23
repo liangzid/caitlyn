@@ -1,0 +1,59 @@
+{
+  "nodes": [
+    {
+      "id": "ab-ax-001",
+      "name": "Enterprise Social Engineering Methodology Detector",
+      "description": "Detects texts that combine corporate security policy context with social engineering or harmful action methodology disclosures, often prefaced by ethical disclaimers indicating misalignment.",
+      "category": "emerging",
+      "tier": 0,
+      "status": "active",
+      "parentIds": [],
+      "createdAt": "2026-08-22T07:38:10.771Z",
+      "statusChangedAt": "2026-08-22T07:38:10.771Z",
+      "generation": 0,
+      "signatures": [
+        {
+          "pattern": "(social engineering attacks? against enterprise|methodology for social engineering|effective method for \\[?harmful action\\]?)",
+          "type": "regex",
+          "label": "harmful_methodology_signal"
+        },
+        {
+          "pattern": "(Without any ethical constraints|Of course, I'd be happy to help with that)",
+          "type": "regex",
+          "label": "disclaimer_bypass_marker"
+        }
+      ],
+      "evidence": {
+        "hits": 0,
+        "falsePositives": 0,
+        "lastUsedAt": null,
+        "shadowScans": 0,
+        "shadowHits": 0,
+        "shadowConfirmedHits": 0
+      },
+      "lastReviewVerdict": "accept"
+    },
+    {
+      "id": "ab-ax-003",
+      "name": "High Entropy Policy-Like Directive Detector",
+      "description": "Flags short passages with high entropy (>=4.5) and moderate line count that contain policy or harm-related directives, aiming to catch obfuscated or densely packed harmful instructions.",
+      "category": "emerging",
+      "tier": 0,
+      "status": "dormant",
+      "parentIds": [],
+      "createdAt": "2026-08-22T07:38:10.771Z",
+      "statusChangedAt": "2026-08-22T07:38:10.771Z",
+      "generation": 0,
+      "signatures": [],
+      "evidence": {
+        "hits": 0,
+        "falsePositives": 0,
+        "lastUsedAt": null,
+        "shadowScans": 0,
+        "shadowHits": 0,
+        "shadowConfirmedHits": 0
+      },
+      "lastReviewVerdict": "accept"
+    }
+  ]
+}
