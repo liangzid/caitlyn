@@ -118,6 +118,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--caitlyn-daemon-model", default="deepseek/deepseek-chat")
     p.add_argument("--agentdefense-size", type=int, default=250)
     p.add_argument("--workers", type=int, default=8)
+    p.add_argument(
+        "--interleave",
+        action="store_true",
+        help=(
+            "Round-robin detectors over samples inside one worker pool so "
+            "LLM-based detectors share the same measurement window."
+        ),
+    )
     p.add_argument("--output-dir", default="results/detection_experiment")
     return p.parse_args()
 
@@ -583,6 +591,85 @@ def main() -> None:
     done_count = 0
     total_jobs = len(args.detectors) * len(samples)
     with records_path.open("w", encoding="utf-8") as fh:
+        if args.interleave:
+            # PI Detector shares a class-level HF pipeline and must stay
+            # sequential; the other detectors are interleaved round-robin so
+            # provider load cannot drift between detector blocks.
+            sequential_detectors = [d for d in args.detectors if d == "pi_detector"]
+            pooled_detectors = [d for d in args.detectors if d != "pi_detector"]
+            for detector_name in sequential_detectors:
+                with ThreadPoolExecutor(max_workers=1) as executor:
+                    futures = [
+                        executor.submit(
+                            run_one_job,
+                            detector_name,
+                            sample,
+                            params,
+                            api_key,
+                            args.base_url,
+                            args.model,
+                            args.caitlyn_port,
+                        )
+                        for sample in samples
+                    ]
+                    for future in as_completed(futures):
+                        record = future.result()
+                        with write_lock:
+                            fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+                            fh.flush()
+                            records.append(record)
+                            done_count += 1
+                            if done_count % 100 == 0 or done_count == total_jobs:
+                                print(
+                                    f"  progress {done_count}/{total_jobs} "
+                                    f"(detector={detector_name})",
+                                    flush=True,
+                                )
+            jobs = [
+                (detector_name, sample)
+                for sample in samples
+                for detector_name in pooled_detectors
+            ]
+            with ThreadPoolExecutor(max_workers=args.workers) as executor:
+                futures = [
+                    executor.submit(
+                        run_one_job,
+                        detector_name,
+                        sample,
+                        params,
+                        api_key,
+                        args.base_url,
+                        args.model,
+                        args.caitlyn_port,
+                    )
+                    for detector_name, sample in jobs
+                ]
+                for future in as_completed(futures):
+                    record = future.result()
+                    with write_lock:
+                        fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+                        fh.flush()
+                        records.append(record)
+                        done_count += 1
+                        if done_count % 100 == 0 or done_count == total_jobs:
+                            print(
+                                f"  progress {done_count}/{total_jobs} (interleaved)",
+                                flush=True,
+                            )
+            summary = summarize(records)
+            summary_path.write_text(
+                json.dumps({
+                    "config": vars(args),
+                    "run_id": run_id,
+                    "records_path": str(records_path),
+                    "summary": summary,
+                }, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            print_summary(summary)
+            print(f"\nRecords saved to {records_path}")
+            print(f"Summary saved to {summary_path}")
+            return
         for detector_name in args.detectors:
             # PI Detector shares a class-level HF pipeline; keep it sequential.
             # Other detectors honor --workers. Do not pin CAITLYN to 8: merged-pair

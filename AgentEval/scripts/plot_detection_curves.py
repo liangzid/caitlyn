@@ -292,12 +292,19 @@ def per_detector_arrays(
             / len(benign_scores)
             if benign_scores else 0.0
         )
+        # The Pareto and the appendix table share one metric: mean
+        # per-sample latency/cost over every sample in the dataset column
+        # (attacks plus the shared benign pool). This keeps Figure 6 and
+        # summary.json on the same numbers.
+        pool = attacks + [
+            r for r in benign if r["detector"] == detector
+        ]
         latencies = [
             (r.get("cost") or {}).get("latency_ms")
-            for r in attacks
+            for r in pool
             if (r.get("cost") or {}).get("latency_ms") is not None
         ]
-        costs = [usd_cost_of(r, detector) for r in attacks]
+        costs = [usd_cost_of(r, detector) for r in pool]
         out[detector] = {
             "scores": scores,
             "labels": labels,
@@ -929,8 +936,9 @@ def plot_pareto_grid(
 ) -> None:
     """Save a 2x4 TPR vs latency/cost figure, one column per dataset.
 
-    Each point is the mean over attack samples at the default threshold.
-    Marker size is shared across detectors.
+    Each point is the mean over all samples in the dataset column (attacks
+    plus the shared benign pool) at the default threshold. Marker size is
+    shared across detectors.
     """
     plt.rcParams.update({
         "font.family": "serif",
