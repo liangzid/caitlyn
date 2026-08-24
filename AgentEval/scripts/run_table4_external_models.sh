@@ -22,12 +22,12 @@ JUDGE_MODEL="${JUDGE_MODEL:-deepseek/deepseek-chat}"
 RELAY_KEY_FILE="${RELAY_KEY_FILE:-$HOME/ai-code-mirror-apikey.txt}"
 
 # opencode provider-qualified model -> daemon provider/model
+# Order follows 团长: GPT-5.6-Sol first, then Gemini-3.7-Flash, then
+# Claude-Fable-5. Gemini-3.5-Flash was dropped from the paper table.
 MODELS=(
-  aicodemirror-claude/claude-opus-4-6
-  aicodemirror-claude/claude-fable-5
   aicodemirror/gpt-5.6-sol
-  aicodemirror-gemini/gemini-3.5-flash
   aicodemirror-gemini/gemini-3.7-flash
+  aicodemirror-claude/claude-fable-5
 )
 
 daemon_provider_for() {

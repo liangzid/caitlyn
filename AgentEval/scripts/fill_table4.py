@@ -45,7 +45,6 @@ MODELS = (
     ("Claude-Opus-4.6", "aicodemirror-claude/claude-opus-4-6"),
     ("Claude-Fable-5", "aicodemirror-claude/claude-fable-5"),
     ("GPT-5.6-Sol", "aicodemirror/gpt-5.6-sol"),
-    ("Gemini-3.5-Flash", "aicodemirror-gemini/gemini-3.5-flash"),
     ("Gemini-3.7-Flash", "aicodemirror-gemini/gemini-3.7-flash"),
 )
 

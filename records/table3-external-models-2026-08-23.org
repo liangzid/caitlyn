@@ -82,6 +82,23 @@ run_table4_external_models.sh now:
 Balance was still insufficient on the next check; rerun is ready to go
 as soon as the account is topped up.
 
+* Rerun after recharge (2026-08-24)
+
+团长 topped up RMB 200 and dropped Gemini-3.5-Flash from the paper.
+Runner order is now: gpt-5.6-sol, gemini-3.7-flash, claude-fable-5.
+claude-opus-4-6 stays as the completed row.
+
+* Final rows (2026-08-24, 240/240 each, no balance errors)
+
+| model            | action ASR | utility | p50 s | USD/case |
+|------------------+------------+---------+-------+----------|
+| claude-opus-4-6  | 0.0%       | 45.8%   | 9.3   | 0.0090   |
+| claude-fable-5   | 0.0%       | 55.4%   | 13.7  | 0.0844   |
+| gpt-5.6-sol      | 0.0%       | 60.4%   | 16.5  | 0.0530   |
+| gemini-3.7-flash | 0.4%       | 59.2%   | 8.9   | 0.0074   |
+
+Table 3 (tab:llm-api) is fully filled and the PDF was rebuilt.
+
 * Dead ends
 
 - Direct curl to the OpenAI Chat Completions path without /v1 returns the
