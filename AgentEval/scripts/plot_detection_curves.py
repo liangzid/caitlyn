@@ -61,13 +61,14 @@ DETECTOR_COLORS = {
     "pi_detector": "#ff7f0e",
     "caitlyn": "#c1121f",
 }
-# REVIEW(团长): Pareto-only inks. ROC/PR keep DETECTOR_COLORS.
+# Pareto markers share DETECTOR_COLORS with ROC/PR so the paper keeps
+# one detector ink set. REVIEW(团长): previously a muted earth palette.
 PARETO_COLORS = {
-    "regex_guard": "#5C6570",
-    "llm_judge": "#0F4D92",
-    "llm_judge_fewshot": "#2A9D8F",
-    "pi_detector": "#C9A227",
-    "caitlyn": "#B64342",
+    "regex_guard": "#4d4d4d",
+    "llm_judge": "#1f77b4",
+    "llm_judge_fewshot": "#17becf",
+    "pi_detector": "#ff7f0e",
+    "caitlyn": "#c1121f",
 }
 DETECTOR_LINESTYLES = {
     "regex_guard": ":",
@@ -486,7 +487,8 @@ def plot_combined_figure(
     """Save one publication-quality 2x5 figure (ROC / PR / Pareto)."""
     plt.rcParams.update({
         "font.family": "serif",
-        "font.serif": ["Liberation Serif", "DejaVu Serif", "Times New Roman"],
+        "font.serif": ["Times New Roman", "Liberation Serif", "DejaVu Serif"],
+        "mathtext.fontset": "stix",
         "font.size": 15,
         "axes.titlesize": 14,
         "axes.labelsize": 15,
@@ -670,7 +672,8 @@ def plot_roc_pr_grid(
     """Save the main 2x4 ROC/PR figure with large, print-ready fonts."""
     plt.rcParams.update({
         "font.family": "serif",
-        "font.serif": ["Liberation Serif", "DejaVu Serif", "Times New Roman"],
+        "font.serif": ["Times New Roman", "Liberation Serif", "DejaVu Serif"],
+        "mathtext.fontset": "stix",
         "font.size": 12.5,
         "axes.titlesize": 12.5,
         "axes.labelsize": 12.5,
@@ -687,11 +690,25 @@ def plot_roc_pr_grid(
         "agentdefense": "AgentDefense",
     }
     letters = "abcdefgh"
-    fig, axes = plt.subplots(2, 4, figsize=(10.0, 4.8), dpi=200)
+    fig = plt.figure(figsize=(10.0, 4.18), dpi=200)
+    gs = fig.add_gridspec(
+        2,
+        4,
+        hspace=0.72,
+        wspace=0.60,
+        left=0.13,
+        right=0.985,
+        top=0.94,
+        bottom=0.185,
+    )
+    axes = [
+        [fig.add_subplot(gs[row, col]) for col in range(4)]
+        for row in range(2)
+    ]
     for i, dataset in enumerate(datasets):
         data = all_data[dataset]
-        ax_roc = axes[0, i]
-        ax_pr = axes[1, i]
+        ax_roc = axes[0][i]
+        ax_pr = axes[1][i]
         curve_order = [
             det for det in DETECTORS if det in data and det != "caitlyn"
         ]
@@ -751,11 +768,11 @@ def plot_roc_pr_grid(
         )
         ax_roc.set_title(
             f"({letters[i]}) {titles[dataset]}",
-            fontsize=12.5, fontweight="bold", pad=6,
+            fontsize=12.5, fontweight="bold", pad=3,
         )
         ax_pr.set_title(
             f"({letters[4 + i]}) {titles[dataset]}",
-            fontsize=12.5, fontweight="bold", pad=6,
+            fontsize=12.5, fontweight="bold", pad=3,
         )
         _style_axes(ax_roc, "FPR", "TPR", (-0.02, 1.02), (-0.02, 1.06))
         # KEYPOINT (review): PR x-axis starts at 0.5. The 0-0.5 band is a
@@ -767,6 +784,10 @@ def plot_roc_pr_grid(
         ax_roc.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
         ax_pr.set_xticks([0.5, 0.75, 1.0])
         ax_pr.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
+        ax_roc.xaxis.labelpad = 0.5
+        ax_pr.xaxis.labelpad = 0.8
+        ax_roc.tick_params(axis="x", pad=1.0)
+        ax_pr.tick_params(axis="x", pad=1.0)
 
     handles_methods = [
         Line2D(
@@ -779,22 +800,24 @@ def plot_roc_pr_grid(
     ]
     fig.legend(
         handles=handles_methods,
-        loc="lower center", ncol=5, frameon=False,
-        fontsize=14.5, bbox_to_anchor=(0.5, -0.07),
-        columnspacing=2.2, handlelength=2.8, handletextpad=0.7,
-        borderaxespad=0.2,
+        loc="lower center",
+        ncol=5,
+        frameon=False,
+        fontsize=13.0,
+        bbox_to_anchor=(0.53, 0.014),
+        columnspacing=1.6,
+        handlelength=2.4,
+        handletextpad=0.55,
+        borderaxespad=0.0,
+        handleheight=0.7,
     )
     fig.text(
-        0.012, 0.66, "ROC", rotation=90, va="center", ha="center",
+        0.012, 0.73, "ROC", rotation=90, va="center", ha="center",
         fontsize=12.5, fontweight="bold",
     )
     fig.text(
-        0.012, 0.29, "PR", rotation=90, va="center", ha="center",
+        0.012, 0.42, "PR", rotation=90, va="center", ha="center",
         fontsize=12.5, fontweight="bold",
-    )
-    fig.subplots_adjust(
-        wspace=0.60, hspace=0.60, left=0.13,
-        right=0.985, top=0.94, bottom=0.19,
     )
     fig.savefig(out_path, bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
@@ -879,8 +902,8 @@ def _pareto_metric_row(
     gs = spec.subgridspec(
         3,
         4,
-        height_ratios=[0.11, 0.14, 1.0],
-        hspace=0.02,
+        height_ratios=[0.07, 0.10, 0.72],
+        hspace=0.008,
         wspace=0.16,
     )
     ax_metric = fig.add_subplot(gs[0, :])
@@ -942,7 +965,8 @@ def plot_pareto_grid(
     """
     plt.rcParams.update({
         "font.family": "serif",
-        "font.serif": ["Liberation Serif", "DejaVu Serif", "Times New Roman"],
+        "font.serif": ["Times New Roman", "Liberation Serif", "DejaVu Serif"],
+        "mathtext.fontset": "stix",
         "font.size": 12,
         "axes.titlesize": 12,
         "axes.labelsize": 12,
@@ -960,16 +984,16 @@ def plot_pareto_grid(
                 max_cost = max(max_cost, d["avg_cost_usd"])
     cost_xmax = max(max_cost * 1000.0 * 1.12, 0.2)
 
-    fig = plt.figure(figsize=(11.0, 5.55), dpi=300)
-    outer = GridSpec(
+    fig = plt.figure(figsize=(11.0, 4.20), dpi=300)
+    panels = GridSpec(
         2,
         1,
         figure=fig,
-        hspace=0.26,
+        hspace=0.32,
         left=0.06,
         right=0.995,
-        top=0.97,
-        bottom=0.14,
+        top=0.98,
+        bottom=0.22,
     )
 
     def lat_x(d: dict[str, Any]) -> float | None:
@@ -982,7 +1006,7 @@ def plot_pareto_grid(
 
     sharey = _pareto_metric_row(
         fig,
-        outer[0],
+        panels[0],
         metric_name="Latency",
         all_data=all_data,
         datasets=datasets,
@@ -995,7 +1019,7 @@ def plot_pareto_grid(
     )
     _pareto_metric_row(
         fig,
-        outer[1],
+        panels[1],
         metric_name="Cost",
         all_data=all_data,
         datasets=datasets,
@@ -1024,17 +1048,17 @@ def plot_pareto_grid(
     ]
     fig.legend(
         handles=handles,
-        loc="lower center",
+        loc="upper center",
         ncol=5,
         frameon=False,
         fontsize=12,
-        bbox_to_anchor=(0.54, -0.01),
+        bbox_to_anchor=(0.54, 0.07),
         columnspacing=1.6,
         handlelength=1.4,
         handletextpad=0.4,
         borderaxespad=0.0,
     )
-    fig.savefig(out_path, dpi=300, bbox_inches="tight", pad_inches=0.04)
+    fig.savefig(out_path, dpi=300, bbox_inches="tight", pad_inches=0.02)
     plt.close(fig)
 
 
@@ -1052,21 +1076,22 @@ def _style_pareto_panel(
         xlabel,
         "TPR" if show_ylabel else "",
         xlim,
-        (-0.05, 1.12),
+        (-0.03, 1.05),
         logx=logx,
         grid_alpha=0.22,
-        ylabel_pad=4.0,
+        ylabel_pad=3.0,
     )
     ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
-    ax.set_facecolor("#F7F5F0")
-    ax.grid(color="#D9D3C7", alpha=0.85, linewidth=0.55)
-    ax.spines["left"].set_color("#6B6256")
-    ax.spines["bottom"].set_color("#6B6256")
+    ax.set_facecolor("white")
+    ax.grid(color="#D0D0D0", alpha=0.75, linewidth=0.55)
+    ax.spines["left"].set_color("#444444")
+    ax.spines["bottom"].set_color("#444444")
     ax.spines["left"].set_linewidth(1.15)
     ax.spines["bottom"].set_linewidth(1.15)
-    ax.tick_params(length=3.5, width=1.0, labelsize=11, colors="#3F3A34")
-    ax.xaxis.label.set_color("#3F3A34")
-    ax.yaxis.label.set_color("#3F3A34")
+    ax.tick_params(length=3.0, width=1.0, labelsize=11, colors="#333333", pad=1.2)
+    ax.xaxis.labelpad = 1.5
+    ax.xaxis.label.set_color("#333333")
+    ax.yaxis.label.set_color("#333333")
     if not show_ylabel:
         ax.tick_params(labelleft=False)
     if logx:
