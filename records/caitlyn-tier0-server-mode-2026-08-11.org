@@ -1,5 +1,5 @@
 #+TITLE: Tier0 常驻 Server 模式 + Tier1 超时/并发控制
-#+AUTHOR: Zi Liang (团长) + Agent
+#+AUTHOR: [AUTHOR] (团长) + Agent
 #+DATE: 2026-08-11
 
 * 背景

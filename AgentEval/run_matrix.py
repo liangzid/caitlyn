@@ -11,8 +11,8 @@ Usage:
     PYTHONPATH=src python3 run_matrix.py \
         --agent opencode --defense none --model deepseek/deepseek-chat
 
-    Author: Zi Liang <zi1415926.liang@connect.polyu.hk>
-    Copyright (C) 2026, Zi Liang, all rights reserved.
+    Author: [AUTHOR] <[EMAIL]>
+    Copyright (C) 2026, [AUTHOR], all rights reserved.
     Created: 10 August 2026
 ======================================================================
 """

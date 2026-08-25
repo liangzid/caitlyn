@@ -1,5 +1,5 @@
 #+TITLE: 抗体正确性审计 + 时间/token 效率测量
-#+AUTHOR: Zi Liang (团长) + Agent
+#+AUTHOR: [AUTHOR] (团长) + Agent
 #+DATE: 2026-08-11
 
 * 目标

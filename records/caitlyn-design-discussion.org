@@ -75,7 +75,7 @@
 - 覆盖：Claw-style ×2 + Coding ×3; MCP ×3 + 非MCP ×2; 商业 ×2 + 开源 ×3
 
 ** Turn 11: AgentEval 框架复用 & 扩展
-- 团长提供 AgentEval (github.com/liangzid/AgentEval)：统一的 Python agent caller 框架
+- 团长提供 AgentEval (github.com/[GITHUB_USER]/AgentEval)：统一的 Python agent caller 框架
 - 10+ agent 已实现 (Docker-based)，OpenClaw/ClaudeCode/Codex/OpenCode/Hermes 均有
 - CLI 兼容性诊断：OpenClaw model 格式变, Hermes 现在有 -z 模式, OpenCode 183K★架构大改
 

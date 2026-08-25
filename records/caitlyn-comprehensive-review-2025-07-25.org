@@ -1,5 +1,5 @@
 #+TITLE: CAITLYN: Comprehensive Code Review 2025-07-25
-#+AUTHOR: Zi Liang (团长) + Agent
+#+AUTHOR: [AUTHOR] (团长) + Agent
 #+DATE: 2026-07-25
 
 * Session Summary

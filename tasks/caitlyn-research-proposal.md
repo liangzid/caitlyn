@@ -93,4 +93,4 @@ Manual layer/rule auditing             →  Autonomous defense generation
 
 ---
 
-*Zi Liang, 2026*
+*[AUTHOR], 2026*

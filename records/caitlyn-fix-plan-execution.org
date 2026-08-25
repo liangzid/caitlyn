@@ -1,5 +1,5 @@
 #+TITLE: CAITLYN 修复计划执行记录
-#+AUTHOR: Zi Liang (团长) + Agent
+#+AUTHOR: [AUTHOR] (团长) + Agent
 #+DATE: 2026-08-01
 
 * 背景

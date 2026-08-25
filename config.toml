@@ -81,3 +81,16 @@ max_entries = 100000
 db_path = "./caitlyn.db"
 antibody_dir = "./antibodies"
 valset_dir = "./valsets"
+
+# User-local sync/update settings live in ~/.caitlyn/settings.toml
+# (not this file):
+#   [cloud_sync]
+#   contribute = false          # opt-in contribution packing
+#   [update]
+#   check = true                # delayed GitHub version check
+#   github_repo = "[GITHUB_USER]/caitlyn"
+#   npm_package = "caitlyn-agent"
+#
+# Commands: `caitlyn update`, `caitlyn contribute`
+# Staging path for audited PRs: library/incoming/<contrib-id>/
+

@@ -1,5 +1,5 @@
 #+TITLE: CAITLYN Antibodies Collection Plan — Systematic Survey of Agentic/Prompt Injection Attacks & Defenses
-#+AUTHOR: Zi Liang
+#+AUTHOR: [AUTHOR]
 #+DATE: 2026-07-24
 #+DESCRIPTION: A detailed plan for collecting mainstream agentic injection or prompt injection attacks and defenses works, serving as the prepared antibodies knowledge base for CAITLYN's immune system.
 

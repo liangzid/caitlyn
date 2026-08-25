@@ -1,5 +1,5 @@
 #+TITLE: 抗体库断线修复（Antibody Library Repair）
-#+AUTHOR: Zi Liang (团长) + Agent
+#+AUTHOR: [AUTHOR] (团长) + Agent
 #+DATE: 2026-08-10
 
 * 背景

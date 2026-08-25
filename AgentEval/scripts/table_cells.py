@@ -13,8 +13,8 @@ Usage:
     python3 scripts/table_cells.py results/eval/hermes-none-*.json
     python3 scripts/table_cells.py --json results/eval/hermes-none-*.json
 
-    Author: Zi Liang <zi1415926.liang@connect.polyu.hk>
-    Copyright (C) 2026, Zi Liang, all rights reserved.
+    Author: [AUTHOR] <[EMAIL]>
+    Copyright (C) 2026, [AUTHOR], all rights reserved.
     Created: 11 August 2026
 ======================================================================
 """

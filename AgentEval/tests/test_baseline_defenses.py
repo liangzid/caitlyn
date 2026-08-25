@@ -5,8 +5,8 @@ TEST-BASELINE-DEFENSES
 Unit tests for the three prompt-injection defense baselines added for
 the paper: spotlighting+delimiting, tool filter, transformer PI detector.
 
-    Author: Zi Liang <zi1415926.liang@connect.polyu.hk>
-    Copyright (C) 2026, Zi Liang, all rights reserved.
+    Author: [AUTHOR] <[EMAIL]>
+    Copyright (C) 2026, [AUTHOR], all rights reserved.
     Created: 10 August 2026
 ======================================================================
 """

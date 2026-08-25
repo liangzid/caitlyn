@@ -24,8 +24,8 @@ Usage:
         --model deepseek/deepseek-v4-flash-0731 \
         --output-dir results/detection_minimal
 
-    Author: Zi Liang <zi1415926.liang@connect.polyu.hk>
-    Copyright (C) 2026, Zi Liang, all rights reserved.
+    Author: [AUTHOR] <[EMAIL]>
+    Copyright (C) 2026, [AUTHOR], all rights reserved.
     Created: 10 August 2026
 ======================================================================
 """

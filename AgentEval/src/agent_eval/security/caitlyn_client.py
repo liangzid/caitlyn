@@ -13,8 +13,8 @@ CAITLYN-CLIENT
 3. Modification history:
    - 2026-07-14: Initial implementation
 
-    Author: Zi Liang <zi1415926.liang@connect.polyu.hk>
-    Copyright (C) 2026, Zi Liang, all rights reserved.
+    Author: [AUTHOR] <[EMAIL]>
+    Copyright (C) 2026, [AUTHOR], all rights reserved.
     Created: 14 July 2026
 ======================================================================
 """
@@ -207,14 +207,22 @@ class CaitlynDefense:
         safe_output, was_blocked = defense.filter(tool_output, source="web_search")
     """
 
-    def __init__(self, caitlyn_port: int = 9070, enabled: bool = True):
+    def __init__(
+        self,
+        caitlyn_port: int = 9070,
+        enabled: bool = True,
+        scan_mode: str = "merged-pair",
+    ):
         self.enabled = enabled
+        self.scan_mode = scan_mode
         self.caitlyn: CaitlynClient | None = None
         self._stats = CaitlynDefenseStats()
         self._case_latency_ms: float = 0.0
         self._case_tokens: int = 0
         self._case_calls: int = 0
         self._case_stats_snapshot: tuple[int, int, int] = (0, 0, 0)
+        self._case_events: list[dict] = []
+        self.last_result: dict = {}
 
         if enabled:
             self.caitlyn = CaitlynClient(port=caitlyn_port)
@@ -251,16 +259,31 @@ class CaitlynDefense:
             return content, False
 
         try:
-            verdict = self.caitlyn.scan(content, source=source, agent_task=agent_task)
+            verdict = self.caitlyn.scan(
+                content,
+                source=source,
+                agent_task=agent_task,
+                mode=self.scan_mode,
+            )
             self._case_latency_ms += verdict.latency_ms
             self._case_tokens += verdict.tokens
             self._case_calls += 1
+            self.last_result = {
+                "verdict": verdict.verdict,
+                "confidence": verdict.confidence,
+                "blocked": verdict.verdict in ("malicious", "suspicious"),
+                "latency_ms": verdict.latency_ms,
+                "tokens": verdict.tokens,
+                "cost_usd": verdict.cost_usd,
+            }
         except ConnectionError:
-            # CAITLYN unreachable — fall through
-            self._stats.passed += 1
-            return content, False
+            # Fail closed: do not pass unsanitized tool output through.
+            logger.critical("CAITLYN daemon unreachable during scan")
+            raise
 
-        if verdict.is_malicious:
+        # Same operating point as the detection sweep: malicious and
+        # suspicious both count as attack-like and are blocked.
+        if verdict.verdict in ("malicious", "suspicious"):
             self._stats.blocked += 1
             warning = (
                 f"[SECURITY WARNING: This content was blocked by CAITLYN defense]\n"
@@ -272,26 +295,23 @@ class CaitlynDefense:
                 f"appears to contain malicious instructions."
             )
             return warning, True
-        elif verdict.is_suspicious:
-            self._stats.flagged += 1
-            flagged = (
-                f"[SECURITY NOTICE: This content was flagged as suspicious]\n"
-                f"Reason: {verdict.reasoning[:200]}\n\n"
-                f"{content}"
-            )
-            return flagged, False
-        else:
-            self._stats.passed += 1
-            return content, False
+        self._stats.passed += 1
+        return content, False
 
     @property
     def stats(self) -> "CaitlynDefenseStats":
         return self._stats
 
+    def record_event(self, event: dict) -> None:
+        """Append one per-filter event for the current case."""
+        self._case_events.append(event)
+
     def reset_case(self) -> None:
         self._case_latency_ms = 0.0
         self._case_tokens = 0
         self._case_calls = 0
+        self._case_events = []
+        self.last_result = {}
         s = self.stats
         self._case_stats_snapshot = (s.blocked, s.flagged, s.passed)
 
@@ -305,6 +325,7 @@ class CaitlynDefense:
             "blocked": s.blocked - blocked0,
             "flagged": s.flagged - flagged0,
             "passed": s.passed - passed0,
+            "events": self._case_events,
         }
 
 

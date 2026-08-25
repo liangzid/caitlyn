@@ -10,8 +10,8 @@ latency, and per-subclass breakdowns stored in each result's metadata.
 Usage:
     python3 scripts/analyze_row.py results/eval/opencode-none-*.json
 
-    Author: Zi Liang <zi1415926.liang@connect.polyu.hk>
-    Copyright (C) 2026, Zi Liang, all rights reserved.
+    Author: [AUTHOR] <[EMAIL]>
+    Copyright (C) 2026, [AUTHOR], all rights reserved.
     Created: 10 August 2026
 ======================================================================
 """
@@ -130,6 +130,9 @@ def summarize(results: list[dict]) -> dict:
             asr_excl_failed / (n - failed) if n > failed else 0.0
         ),
         "fpr": fpr / len(benign) if benign else None,
+        "utility": (
+            sum(r.get("utility") is True for r in attacks) / n if n else None
+        ),
         "latency_p50_s": statistics.median(durations) if durations else 0.0,
         "defense_latency_p50_ms": statistics.median(costs) if costs else 0.0,
         "defense_tokens_p50": statistics.median(tokens) if tokens else 0,
@@ -158,6 +161,7 @@ def main() -> None:
         data = json.load(open(path, encoding="utf-8"))
         s = summarize(data["results"])
         fpr_str = "n/a" if s["fpr"] is None else f"{s['fpr']:.1%}"
+        util_str = "n/a" if s["utility"] is None else f"{s['utility']:.1%}"
         print(f"== {path}")
         print(
             f"  attacks={s['attacks']} delivered={s['delivered']} "
@@ -165,6 +169,7 @@ def main() -> None:
             f"raw ASR={s['raw_asr']:.1%} "
             f"action ASR={s['action_asr']:.1%} "
             f"action ASR(delivered)={s['action_asr_delivered']:.1%} "
+            f"Utility={util_str} "
             f"FPR={fpr_str} "
             f"lat p50={s['latency_p50_s']:.1f}s"
             f" agent cost p50={s['agent_cost_p50_usd']}"

@@ -1,5 +1,5 @@
 #+TITLE: CAITLYN Guard Research Plan Discussion
-#+AUTHOR: Zi Liang
+#+AUTHOR: [AUTHOR]
 #+DATE: 2026-07-28
 
 * Turn 1: 团长询问项目研究现状

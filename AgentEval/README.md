@@ -322,7 +322,7 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 ## Research Attribution
 
-This framework was developed as part of independent research on LLM agents by Zi Liang. It provides the evaluation infrastructure necessary for rigorous, reproducible assessment of agent capabilities across diverse problem domains and model configurations.
+This framework was developed as part of independent research on LLM agents by [AUTHOR]. It provides the evaluation infrastructure necessary for rigorous, reproducible assessment of agent capabilities across diverse problem domains and model configurations.
 
 ## Citation
 
@@ -331,9 +331,9 @@ If you use AgentEval in your research, please cite:
 ```bibtex
 @software{agenteval2026,
   title = {AgentEval: A Unified Framework for Evaluating LLM Coding Agents},
-  author = {Zi Liang},
+  author = {[AUTHOR]},
   year = {2026},
-  url = {https://github.com/liangzid/agent-eval}
+  url = {https://github.com/[GITHUB_USER]/agent-eval}
 }
 ```
 
@@ -342,7 +342,7 @@ If you use AgentEval in your research, please cite:
 For questions, issues, or collaboration inquiries:
 - Open an issue on GitHub
 - Submit a pull request
-- Email: zi1415926.liang@connect.polyu.hk
+- Email: [EMAIL]
 
 ---
 

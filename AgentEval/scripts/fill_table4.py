@@ -11,8 +11,8 @@ Usage:
     python3 scripts/fill_table4.py
     python3 scripts/fill_table4.py --latex
 
-    Author: Zi Liang <zi1415926.liang@connect.polyu.hk>
-    Copyright (C) 2026, Zi Liang, all rights reserved.
+    Author: [AUTHOR] <[EMAIL]>
+    Copyright (C) 2026, [AUTHOR], all rights reserved.
     Created: 20 August 2026
 ======================================================================
 """

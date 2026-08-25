@@ -1,5 +1,5 @@
 #+TITLE: CAITLYN 研究 proposal 设计讨论
-#+AUTHOR: Zi Liang (团长) + Agent
+#+AUTHOR: [AUTHOR] (团长) + Agent
 #+DATE: 2026-08-06
 
 * 背景

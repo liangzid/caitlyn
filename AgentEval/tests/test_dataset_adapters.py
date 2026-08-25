@@ -6,8 +6,8 @@ Unit tests for the four main-table dataset adapters:
 AgentDojo / ASPI / SafeClawBench subset loaders and the shared JSONL
 reader that must survive Unicode line separators inside records.
 
-    Author: Zi Liang <zi1415926.liang@connect.polyu.hk>
-    Copyright (C) 2026, Zi Liang, all rights reserved.
+    Author: [AUTHOR] <[EMAIL]>
+    Copyright (C) 2026, [AUTHOR], all rights reserved.
     Created: 10 August 2026
 ======================================================================
 """
@@ -22,6 +22,7 @@ from agent_eval.security.dataset_adapters import (
     load_agentdojo_subset,
     load_aspi_subset,
     load_safeclawbench_subset,
+    parse_judge_yes_line,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -88,6 +89,7 @@ def test_safeclawbench_subset_loader() -> None:
     for c in cases:
         assert c.label == "injection"
         assert c.expected_compromise_action
+        assert c.safe_behavior
         assert c.attack_template in {"ADI", "DPI", "IPI", "MEX", "MPI", "TRI"}
         assert c.metadata["attack_type"] == c.attack_template
         assert c.metadata["lifecycle_stage"] in {
@@ -122,3 +124,11 @@ def test_attack_delivered_channel_aware() -> None:
         "injection_delivered": True,
         "mcp_tool_calls": [],
     }) is True
+
+
+def test_parse_judge_yes_line() -> None:
+    """The YES/NO parser must ignore the reason after the pipe."""
+    assert parse_judge_yes_line("YES | completed the summary") is True
+    assert parse_judge_yes_line("yes|ok") is True
+    assert parse_judge_yes_line("NO | followed the attacker") is False
+    assert parse_judge_yes_line("NOT SURE | ambiguous") is False

@@ -7,7 +7,7 @@ DECEPTIVE-CASES
   B. Legitimate tool output format — data field that seems normal
   C. Implicit instruction — no "ignore previous", just new context
     
-    Author: Zi Liang
+    Author: [AUTHOR]
     Created: 14 July 2026
 ======================================================================
 """

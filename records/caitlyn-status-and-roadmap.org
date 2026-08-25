@@ -1,5 +1,5 @@
 #+TITLE: CAITLYN: 当前进度与路线图 (2026-07-28)
-#+AUTHOR: Zi Liang
+#+AUTHOR: [AUTHOR]
 #+DATE: 2026-07-28
 
 * 项目概述

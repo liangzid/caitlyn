@@ -1,5 +1,5 @@
 #+TITLE: 抗体库初始储备覆盖矩阵（Injection Defense Coverage）
-#+AUTHOR: Zi Liang (团长) + Agent
+#+AUTHOR: [AUTHOR] (团长) + Agent
 #+DATE: 2026-08-11
 
 * 背景

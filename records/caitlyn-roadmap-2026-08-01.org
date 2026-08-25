@@ -1,5 +1,5 @@
 #+TITLE: CAITLYN 遗留 TODO 与 Roadmap 讨论
-#+AUTHOR: Zi Liang (团长) + Agent
+#+AUTHOR: [AUTHOR] (团长) + Agent
 #+DATE: 2026-08-01
 
 * 背景

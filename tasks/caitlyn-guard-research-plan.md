@@ -1,6 +1,6 @@
 # CAITLYN Guard: Research Plan & Experiment Design
 
-*Zi Liang, 2026-07-28*
+*[AUTHOR], 2026-07-28*
 
 ## 1. Overview
 

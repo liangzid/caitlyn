@@ -12,7 +12,7 @@ Attack strategies:
  13-16: Multi-turn trust building (first benign, then exploit)
  17-20: Edge cases (encoding tricks, multi-language, formatting)
 
-    Author: Zi Liang
+    Author: [AUTHOR]
     Created: 14 July 2026
 ======================================================================
 """

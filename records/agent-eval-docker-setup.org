@@ -1,5 +1,5 @@
 #+TITLE: AgentEval 评测环境：Docker + OpenRouter 讨论与落地
-#+AUTHOR: Zi Liang (团长) + Agent
+#+AUTHOR: [AUTHOR] (团长) + Agent
 #+DATE: 2026-08-03
 
 * 背景

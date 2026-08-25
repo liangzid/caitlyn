@@ -1,5 +1,5 @@
 #+TITLE: CAITLYN Antibody Knowledge Base — Annotated Papers
-#+AUTHOR: Zi Liang
+#+AUTHOR: [AUTHOR]
 #+DATE: 2026-07-24
 
 *,* PAPER: Ignore Previous Prompt: Attack Techniques for Language Models

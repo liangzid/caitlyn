@@ -5,8 +5,8 @@ SUMMARIZE-SYSTEM-I-ABLATION
 Print TPR / FPR / latency / USD for every System I ablation variant
 under one output root.
 
-    Author: Zi Liang <zi1415926.liang@connect.polyu.hk>
-    Copyright (C) 2026, Zi Liang, all rights reserved.
+    Author: [AUTHOR] <[EMAIL]>
+    Copyright (C) 2026, [AUTHOR], all rights reserved.
     Created: 20 August 2026
 ======================================================================
 """

@@ -12,7 +12,7 @@ FAKE-MCP-STANDALONE
 3. Modification history:
    - 2026-07-14: Initial.
 
-    Author: Zi Liang
+    Author: [AUTHOR]
     Created: 14 July 2026
 ======================================================================
 """

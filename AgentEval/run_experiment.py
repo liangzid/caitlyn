@@ -9,7 +9,7 @@ Uses subtle compromise detection (format following, attribution).
 Usage:
     python run_experiment.py
 
-    Author: Zi Liang
+    Author: [AUTHOR]
     Created: 14 July 2026
 ======================================================================
 """

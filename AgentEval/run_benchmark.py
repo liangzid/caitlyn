@@ -20,8 +20,8 @@ RUN-BENCHMARK
 3. Modification history:
    - 2026-07-14: Initial implementation
 
-    Author: Zi Liang <zi1415926.liang@connect.polyu.hk>
-    Copyright (C) 2026, Zi Liang, all rights reserved.
+    Author: [AUTHOR] <[EMAIL]>
+    Copyright (C) 2026, [AUTHOR], all rights reserved.
     Created: 14 July 2026
 ======================================================================
 """

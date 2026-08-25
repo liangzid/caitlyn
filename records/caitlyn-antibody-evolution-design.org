@@ -1,5 +1,5 @@
 #+TITLE: CAITLYN 抗体进化（免疫 System 2）设计讨论
-#+AUTHOR: Zi Liang (团长) + Agent
+#+AUTHOR: [AUTHOR] (团长) + Agent
 #+DATE: 2026-08-01
 
 * 背景

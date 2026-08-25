@@ -1,5 +1,5 @@
 #+TITLE: Methodology 撰写计划与待对齐事项
-#+AUTHOR: Zi Liang (团长) + Agent
+#+AUTHOR: [AUTHOR] (团长) + Agent
 #+DATE: 2026-08-14
 
 * 任务
@@ -210,3 +210,79 @@ FPR 先搁置 (结果未齐)。远端地址不动, 直接 git push origin master
 1. FPR 口径 (evaluation 0% vs sweep 6.0): 团长决定搁置, 等结果补齐。
 2. remote 地址: 团长决定不动, 沿用 paper_zeri 推送到 master。
 3. 框架图 TODO 仍在 methodology 顶部, 待团长手绘。
+
+* 3.2 System I 对齐仓库 + 改写 (2026-08-18)
+
+对照 caitlyn-agent scanner/escalation, 按仓库改 3.2:
+- 默认 safe: 干净流量仍跑 fast 子集, none 只在 aggressive。
+- 阈值写成 τ, 不再写 0.6 / θ_s。
+- 三值判决, 终裁只看执行过的 Tier 1。
+- 去掉无网无写盘沙箱表述。
+
+团长要求去说明书腔: 短段 + paragraph, 黑话下沉到算法。
+再补 I/II 与 Tier 0/1 的动机:
+- I/II = 执法与适应的时间尺度不合。
+- Tier 0/1 = 规则 vs LLM 两种方法, LLM 必须路由。
+- 观察后的衔接段团长要求还原为 "rule out the obvious extremes"
+  那一版, 不把 Observation 1/2 硬接到两条裂口。
+
+待定: methodology 开篇 XXXX, intro 三个 foundational vs 库规模,
+3.3 是否用同一口径写合成动机。
+
+* 3.3 实现对齐 (2026-08-18)
+
+团长要写 methodology 3.3 (Counterexample-Guided Skill Synthesis)。
+实现全在 caitlyn-agent/src/evolution/, 入口 EvolutionEngine。
+
+** 回路 (真实代码)**
+触发 (显式 vaccinate / daemon 统计异常) -> 抗原画像 (features.ts)
+-> 生成器 (generator.ts, 原始触发不进 prompt) -> 确定性验证
+(verifier.ts 子进程 + ReDoS 启发式 + 200ms) -> 独立评审
+(reviewer.ts accept/revise/reject) -> lessons.jsonl -> 固化 DAG
+(nodes.json) -> candidate 才进 shadow; hasSamples+autonomy=auto
+则直接 active。默认 3 候选/轮, 5 轮, 40k token。
+
+** 与当前 3.3 草稿的硬差 (写之前必须拍板)**
+1. 闭环缺口: 合成结果只进 ~/.caitlyn/evolution/, 不写 antibodies/。
+   System I 扫描从不加载 DAG active 节点。scanner 有 matchSignatures
+   是为签名-only 技能准备的, 但进化回路没有调用 saveAntibody。
+2. 无样本路径没有 "isolate execution pattern": daemon 异常触发
+   mustDetect=[], 只有 metric/p99/ewma 特征。
+3. 默认有样本路径跳过 shadow (测试 evolution-engine.test.ts 已钉死)。
+4. confirmHit / recordFalsePositive 生产路径从未调用, 自动晋升的
+   "至少一次确认命中" 与 "任何 FP 立即降级" 在线上不会发生。
+5. 没有机械交叉/变异算子, 只有全 DAG LLM 合成 + SHM fallback
+   (上一轮 revise 候选的定向微调)。
+6. 相似样本簇会把 knowledge_base 原始 payload 塞进生成器
+   (anti-overfitting 上下文, 不是触发样本本身)。
+7. 良性样本来自扫描历史 content_preview (截断 120 字符), 不是固定语料。
+8. unknown_threat_action 配置存在但 engine 未读取。
+9. 评审一致性抽查默认关; 当前 config.toml 生成器与评审同一模型。
+
+** 待团长拍板 (一次只问一个)**
+先问闭环: 3.3 按设计意图写 (合成技能进入 System I), 还是按仓库
+现状写 (DAG 独立于扫描库, 闭环未接上)?
+
+* 远端新分支核对 (2026-08-18)
+
+两仓各一条, 不是同一件事。
+
+1. paper_caitlyn origin/agent/emerging-paper-update (云端 Cursor agent)
+   tip=cd11859, 是当前 paper master 的祖先, 无独有 commit。
+   emerging-benchmark.tex 已在 master: miss→反例→合成→剪过宽谓词→保留 4 技能。
+   对 3.3 方法写法几乎无新信息。
+
+2. caitlyn origin/emerging-benchmark-eval (团长确认: 这是最新版)
+   产品 evolution/scanner 与 master 无 diff。新增的是实验闭环:
+   - 显式 vaccinate seed 漏检
+   - CaitlynEvolvedDefense 读 DAG active 签名
+   - 人工剪枝后保留 ab-044/045/049/051
+   3.3 按此口径: 合成结果以 DAG 签名参与检测, 但是 AgentEval
+   包装层, 不是 caitlyn-agent scanner 热加载。
+
+* 3.3 实现文档 (2026-08-18)
+
+已写 =records/methodology-3.3-implementation.md=。
+结构: master 为主文, emerging-benchmark-eval 用「增量」标注。
+供团长写 methodology 3.3 时对照, 非论文正文。
+

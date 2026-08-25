@@ -16,8 +16,8 @@ Metric mapping matches the agreed Table 1 protocol:
 Usage:
     python3 scripts/build_table1.py --latex
 
-    Author: Zi Liang <zi1415926.liang@connect.polyu.hk>
-    Copyright (C) 2026, Zi Liang, all rights reserved.
+    Author: [AUTHOR] <[EMAIL]>
+    Copyright (C) 2026, [AUTHOR], all rights reserved.
     Created: 21 August 2026
 ======================================================================
 """

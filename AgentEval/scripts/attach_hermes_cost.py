@@ -13,8 +13,8 @@ Usage:
 
 Writes <input>.withcost.json next to each input.
 
-    Author: Zi Liang <zi1415926.liang@connect.polyu.hk>
-    Copyright (C) 2026, Zi Liang, all rights reserved.
+    Author: [AUTHOR] <[EMAIL]>
+    Copyright (C) 2026, [AUTHOR], all rights reserved.
     Created: 11 August 2026
 ======================================================================
 """

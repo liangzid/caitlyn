@@ -1,5 +1,5 @@
 #+TITLE: Detection-Only Sweep 正式运行计划
-#+AUTHOR: Zi Liang (团长) + Agent
+#+AUTHOR: [AUTHOR] (团长) + Agent
 #+DATE: 2026-08-10
 #+STATUS: 已确认，正式版启动
 

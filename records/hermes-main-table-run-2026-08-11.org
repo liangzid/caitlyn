@@ -1,5 +1,5 @@
 #+TITLE: Hermes 主表（Table 4）正式运行记录
-#+AUTHOR: Zi Liang (团长) + Agent
+#+AUTHOR: [AUTHOR] (团长) + Agent
 #+DATE: 2026-08-11
 #+STATUS: 运行中
 

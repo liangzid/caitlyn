@@ -13,8 +13,8 @@ Usage:
         --override results/detection_caitlyn_20260813/records.jsonl \
         --output results/detection_merged_20260813
 
-    Author: Zi Liang <zi1415926.liang@connect.polyu.hk>
-    Copyright (C) 2026, Zi Liang, all rights reserved.
+    Author: [AUTHOR] <[EMAIL]>
+    Copyright (C) 2026, [AUTHOR], all rights reserved.
     Created: 13 August 2026
 ======================================================================
 """

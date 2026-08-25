@@ -16,8 +16,8 @@ GENERATE_ANTIBODIES
 3. Modification history and reason:
    - 2026-07-24: Initial creation for CAITLYN knowledge base collection.
 
-    Author: Zi Liang <zi1415926.liang@connect.polyu.hk>
-    Copyright (c) 2026, Zi Liang, all rights reserved.
+    Author: [AUTHOR] <[EMAIL]>
+    Copyright (c) 2026, [AUTHOR], all rights reserved.
     Created: 24 July 2026
 ======================================================================
 """
