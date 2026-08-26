@@ -53,21 +53,6 @@ deterministic verification and independent review.
 
 ## Architecture
 
-```
-                      ┌──────────────────────────────────────────────┐
-                      │                 CAITLYN Agent               │
-   agent              │   CLI / TUI ──► scanner ──► verdict/block    │
-        │             │        │            ▲                        │
-        │ hook-bin    │   stats events      │                        │
-        ├────────────►│        │            │                        │
-        │             │   StatsCollector ───┘                        │
-        │             │        ▼                                    │
-        │             │   anomaly trigger ──► Immune System 2        │
-        │             │   FSWatcher          (evolution loop)        │
-        │             │        └──► scan ◄──── verify + review       │
-        └─────────────┴──────────────────────────────────────────────┘
-```
-
 ### System 1: Fast Defense
 
 - **Tier 0** runs `detect.ts` scripts (precompiled to `detect.mjs`) in child
