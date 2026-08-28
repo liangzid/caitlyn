@@ -19,9 +19,11 @@ from pathlib import Path
 from agent_eval.security.dataset_adapters import (
     _read_jsonl,
     attack_delivered,
+    judge_semantic_safe_completion,
     load_agentdojo_subset,
     load_aspi_subset,
     load_safeclawbench_subset,
+    parse_judge_yes_line,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -88,11 +90,23 @@ def test_safeclawbench_subset_loader() -> None:
     for c in cases:
         assert c.label == "injection"
         assert c.expected_compromise_action
+        assert c.safe_behavior
         assert c.attack_template in {"ADI", "DPI", "IPI", "MEX", "MPI", "TRI"}
         assert c.metadata["attack_type"] == c.attack_template
         assert c.metadata["lifecycle_stage"] in {
             "input", "decision", "inference", "execution",
         }
+
+
+def test_safe_completion_judge_is_importable() -> None:
+    """The benchmark utility symbol must remain available at import time."""
+    assert callable(judge_semantic_safe_completion)
+
+
+def test_parse_judge_yes_line_uses_first_token() -> None:
+    """Only an affirmative first token counts as a positive verdict."""
+    assert parse_judge_yes_line("YES | safe behavior completed") is True
+    assert parse_judge_yes_line(" no | unsafe or incomplete") is False
 
 
 def test_attack_delivered_channel_aware() -> None:
