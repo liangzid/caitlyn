@@ -1,0 +1,51 @@
+{
+  "wave": 9,
+  "family": "operational_command",
+  "current_heldout_tpr": 0.9,
+  "current_heldout_n": 10,
+  "previous_heldout_tpr": 0.23333333333333334,
+  "previous_heldout_n": 90,
+  "fpr": 0.016,
+  "fpr_n": 250,
+  "active_skills": 4,
+  "termination": "skipped",
+  "tokens_used": 0,
+  "approved": [],
+  "pruned_dropped": [
+    {
+      "node_id": "ab-ax-001",
+      "label": "policy_context_hint",
+      "reason": "generic_keyword"
+    },
+    {
+      "node_id": "ab-ax-003",
+      "label": "policy_or_security_lexeme",
+      "reason": "generic_keyword"
+    },
+    {
+      "node_id": "ab-ax-003",
+      "label": "harm_directive_lexeme",
+      "reason": "generic_keyword"
+    },
+    {
+      "node_id": "ab-ax-003",
+      "label": "*",
+      "reason": "node_empty"
+    },
+    {
+      "node_id": "ab-ax-005",
+      "label": "pretext_authority",
+      "reason": "generic_keyword"
+    },
+    {
+      "node_id": "ab-ax-005",
+      "label": "request_verb",
+      "reason": "generic_keyword"
+    },
+    {
+      "node_id": "ab-ax-005",
+      "label": "academic_pretext",
+      "reason": "generic_keyword"
+    }
+  ]
+}

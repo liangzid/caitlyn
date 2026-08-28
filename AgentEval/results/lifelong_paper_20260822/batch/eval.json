@@ -1,0 +1,19 @@
+{
+  "method": "batch",
+  "overall_heldout_tpr": 0.16,
+  "overall_heldout_n": 100,
+  "fpr": 0.016,
+  "active_skills": 0,
+  "outcome": {
+    "skipped": false,
+    "clusterId": "lifelong:batch",
+    "mustDetectCount": 85,
+    "benignCount": 5,
+    "rounds": 5,
+    "tokensUsed": 20331,
+    "termination": "max_rounds",
+    "lessonsWritten": 15,
+    "approved": [],
+    "shadowStarted": []
+  }
+}

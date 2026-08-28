@@ -1,0 +1,15 @@
+{
+  "wave": 2,
+  "family": "freshness_framing",
+  "current_heldout_tpr": 0.0,
+  "current_heldout_n": 13,
+  "previous_heldout_tpr": 0.25,
+  "previous_heldout_n": 12,
+  "fpr": 0.016,
+  "fpr_n": 250,
+  "active_skills": 0,
+  "termination": "max_rounds",
+  "tokens_used": 21397,
+  "approved": [],
+  "pruned_dropped": []
+}

@@ -1,0 +1,26 @@
+[
+  {
+    "method": "Static",
+    "heldout_tpr": 0.16,
+    "heldout_n": 100,
+    "fpr": 0.016,
+    "active_skills": 0,
+    "tokens": 0
+  },
+  {
+    "method": "Batch",
+    "heldout_tpr": 0.16,
+    "heldout_n": 100,
+    "fpr": 0.016,
+    "active_skills": 0,
+    "tokens": 20331
+  },
+  {
+    "method": "Sequential",
+    "heldout_tpr": 0.3,
+    "heldout_n": 100,
+    "fpr": 0.016,
+    "active_skills": 4,
+    "tokens": 104932
+  }
+]

@@ -1,0 +1,15 @@
+{
+  "wave": 1,
+  "family": "status_field",
+  "current_heldout_tpr": 0.25,
+  "current_heldout_n": 12,
+  "previous_heldout_tpr": null,
+  "previous_heldout_n": 0,
+  "fpr": 0.016,
+  "fpr_n": 250,
+  "active_skills": 0,
+  "termination": "generation_failed",
+  "tokens_used": 4064,
+  "approved": [],
+  "pruned_dropped": []
+}

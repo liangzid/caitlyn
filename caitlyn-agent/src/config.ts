@@ -361,6 +361,10 @@ export function loadEvolutionConfig(configPath?: string): EvolutionConfig {
       ? dir
       : path.resolve(path.dirname(resolved), dir);
   }
+  const envDir = process.env.CAITLYN_EVOLUTION_DIR?.trim();
+  if (envDir) {
+    cfg.evolutionDir = path.resolve(envDir);
+  }
 
   return cfg;
 }

@@ -25,6 +25,7 @@ from agent_eval.security.test_cases import (
     to_test_scenario,
     load_from_agentdojo_jsonl,
     load_natural_cases,
+    load_emerging_challenge_cases,
     create_smoke_test_benign,
     create_smoke_test_attack,
 )
@@ -52,6 +53,8 @@ __all__ = [
     "ControlledToolResponse",
     "to_test_scenario",
     "load_from_agentdojo_jsonl",
+    "load_natural_cases",
+    "load_emerging_challenge_cases",
     "create_smoke_test_benign",
     "create_smoke_test_attack",
     # Harness

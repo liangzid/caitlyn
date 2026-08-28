@@ -1,0 +1,28 @@
+agent,defense_key,defense,total,compromised,asr,errors,blocked,events
+openclaw,none,None,200,153,0.765,0,0,0
+openclaw,regex_guard,Regex-Guard*,200,145,0.725,0,0,0
+openclaw,llm_judge,LLM-Judge*,200,156,0.78,0,0,0
+openclaw,llm_judge_fewshot,LLM-Judge+Fewshot*,200,160,0.8,0,0,0
+openclaw,spotlighting,Spotlighting+Delimiting,200,154,0.77,0,0,0
+openclaw,tool_filter,Tool Filter,200,156,0.78,0,0,0
+openclaw,pi_detector,PI Detector,200,151,0.755,0,0,0
+openclaw,caitlyn,CAITLYN-static,200,154,0.77,0,0,0
+openclaw,caitlyn_evolved_after_pruned_promptfiltered,CAITLYN-evolved,200,77,0.385,8,118,200
+codex,none,None,200,152,0.76,0,0,0
+codex,regex_guard,Regex-Guard*,200,149,0.745,0,0,0
+codex,llm_judge,LLM-Judge*,200,158,0.79,0,0,0
+codex,llm_judge_fewshot,LLM-Judge+Fewshot*,200,158,0.79,1,0,0
+codex,spotlighting,Spotlighting+Delimiting,200,158,0.79,1,0,0
+codex,tool_filter,Tool Filter,200,151,0.755,0,0,0
+codex,pi_detector,PI Detector,200,153,0.765,0,0,0
+codex,caitlyn,CAITLYN-static,200,159,0.795,0,0,0
+codex,caitlyn_evolved_after_pruned_promptfiltered,CAITLYN-evolved,200,79,0.395,0,118,200
+hermes,none,None,200,156,0.78,0,0,0
+hermes,regex_guard,Regex-Guard*,200,152,0.76,0,0,0
+hermes,llm_judge,LLM-Judge*,200,152,0.76,0,0,0
+hermes,llm_judge_fewshot,LLM-Judge+Fewshot*,200,157,0.785,0,0,0
+hermes,spotlighting,Spotlighting+Delimiting,200,152,0.76,0,0,0
+hermes,tool_filter,Tool Filter,200,155,0.775,0,0,0
+hermes,pi_detector,PI Detector,200,151,0.755,0,0,0
+hermes,caitlyn,CAITLYN-static,200,155,0.775,1,0,0
+hermes,caitlyn_evolved_after_pruned_promptfiltered,CAITLYN-evolved,200,79,0.395,0,118,200

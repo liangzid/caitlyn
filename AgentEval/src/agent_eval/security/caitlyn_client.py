@@ -215,6 +215,7 @@ class CaitlynDefense:
         self._case_tokens: int = 0
         self._case_calls: int = 0
         self._case_stats_snapshot: tuple[int, int, int] = (0, 0, 0)
+        self._case_events: list[dict] = []
 
         if enabled:
             self.caitlyn = CaitlynClient(port=caitlyn_port)
@@ -292,8 +293,12 @@ class CaitlynDefense:
         self._case_latency_ms = 0.0
         self._case_tokens = 0
         self._case_calls = 0
+        self._case_events = []
         s = self.stats
         self._case_stats_snapshot = (s.blocked, s.flagged, s.passed)
+
+    def record_event(self, event: dict) -> None:
+        self._case_events.append(event)
 
     def case_cost(self) -> dict:
         s = self.stats
@@ -305,6 +310,7 @@ class CaitlynDefense:
             "blocked": s.blocked - blocked0,
             "flagged": s.flagged - flagged0,
             "passed": s.passed - passed0,
+            "events": self._case_events,
         }
 
 

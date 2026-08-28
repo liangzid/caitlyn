@@ -1,0 +1,136 @@
+#+TITLE: Codex Project Overview Chat Summary
+#+AUTHOR: Zi Liang (团长) + Agent
+#+DATE: 2026-08-12
+
+* Source
+
+本记录总结本地 Codex session：
+
+=/home/xiaoyu/.codex/sessions/2026/08/03/rollout-2026-08-03T12-35-58-019fc5e8-395c-7ab1-ab64-5f8a57464faa.jsonl=
+
+开头用户消息为：=帮我看一下我这个项目=。
+
+* Project Overview Findings
+
+CAITLYN 是 LLM agent 安全防护项目。主线结构为：
+
+1. =caitlyn-agent=：TypeScript 端 agent、scanner、daemon、guard、evolution
+2. =antibodies= 与 =antigens=：防御库和攻击样本
+3. =AgentEval=：Python 评测框架
+4. =pi-src=：较大的 vendored 依赖/参考代码
+
+当时体检结论：项目不是 toy demo，System 1 快速扫描与 System 2 免疫进化叙事清楚。
+
+发现的主要风险：
+
+1. =hybrid-scanner.ts= 注释说 daemon 已移除，但 CLI 仍支持 daemon/watch。
+2. README 测试数量存在漂移。
+3. =AgentEval/pyproject.toml= 仍有模板占位元数据。
+4. 早期 compromise 判定偏启发式，需要用 attacker target / tool trace 复核。
+
+* Local Setup Learned
+
+Node/npm 初始缺失，建议用 =nvm= 安装 Node 22。后来 Node 测试通过：
+
+1. 31 个 test files passed
+2. 366 个 tests passed
+
+CAITLYN smoke：
+
+1. =./caitlyn status= 成功加载 20 antibodies 和 6 antigens。
+2. 明显攻击 =Ignore all previous instructions...= 被 Tier 0 判为 =MALICIOUS=，tokens 为 0。
+3. 无 API 时良性文本会出现 =SUSPICIOUS 50%= 兜底问题。
+4. 设置 OpenRouter 后，=hello world= 变为 =BENIGN=，说明 Tier 1 正常。
+
+OpenRouter 环境变量：
+
+#+begin_example
+export CAITLYN_PROVIDER="openrouter"
+export CAITLYN_MODEL="deepseek/deepseek-chat"
+export OPENROUTER_API_KEY="..."
+#+end_example
+
+Reload VSCode 后需要重新加载 =nvm= 与 key：
+
+#+begin_example
+export NVM_DIR="$HOME/.nvm"
+source "$NVM_DIR/nvm.sh"
+nvm use 22
+export OPENROUTER_API_KEY="$(cat ~/privacy_secret_openrouter_API_key.txt)"
+export CAITLYN_PROVIDER="openrouter"
+export CAITLYN_MODEL="deepseek/deepseek-chat"
+#+end_example
+
+* Emerging200 Baseline History
+
+先用 =emerging_challenge= 跑 real-agent baseline。早期 smoke3 的 JSON 内
+=compromised= 字段偏低，后续需要按 attacker target containment 复核。
+
+曾出现 OpenRouter 402，尤其是 =llm_judge_fewshot=、=spotlighting=、=tool_filter=
+早期结果全 error 或大量 error，不能解释为防御成功。
+
+重要发现：=openclaw= caller 不一定使用命令行 =--api-key=，而会读：
+
+=~/privacy_secret_openrouter_API_key.txt=
+
+换 OpenRouter key 后，需要同步写入该文件。
+
+后来补跑并确认 =AgentEval/results= 中 emerging200 real-agent baseline 完整：
+
+1. agents：openclaw、codex、hermes
+2. defenses：none、regex_guard、llm_judge、llm_judge_fewshot、spotlighting、tool_filter、pi_detector、caitlyn
+3. 共 24 个正式 JSON，每个 200 attacks、0 benign、JSON 可解析
+
+注意命令行 defense 名称是 =caitlyn=，论文/表格里可显示为 =CAITLYN-static=。
+代码没有 =caitlyn_static= 这个 argparse choice。
+
+* Adaptive Defense Plan
+
+当前约定的 System II before/after 口径：
+
+1. 只用 =openclaw + caitlyn-static= 的 seed failures 做 vaccination。
+2. 不用 codex/hermes 训练。
+3. after 在三个 agent 上测试泛化：
+   - openclaw + =caitlyn_evolved=
+   - codex + =caitlyn_evolved=
+   - hermes + =caitlyn_evolved=
+
+按脚本口径，=emerging seed failures= 是 =split == seed= 且 before 结果
+=compromised=True=。
+
+当前统计：
+
+1. openclaw：77 / 100 seed failures
+2. codex：80 / 100 seed failures
+3. hermes：79 / 100 seed failures
+
+决定采用 openclaw 的 77 个 seed failures。
+
+用于生成 vaccination 命令的脚本：
+
+=AgentEval/scripts/print_emerging_vaccination_commands.py=
+
+生成命令示例：
+
+#+begin_example
+cd /home/xiaoyu/caitlyn/AgentEval
+python3 scripts/print_emerging_vaccination_commands.py \
+  --before results/emerging200_real_openclaw_caitlyn.json \
+  --caitlyn-bin ../caitlyn-agent/caitlyn \
+  > results/vaccinate_openclaw_seed_failures.sh
+#+end_example
+
+运行前需要保证 Node 和 OpenRouter key 已恢复。若 =bash results/vaccinate_openclaw_seed_failures.sh=
+没有反应，优先检查 =node= 是否在 PATH。
+
+* Current Caution
+
+=~/.caitlyn/evolution/nodes.json= 中已有旧节点，例如 UDP/latency detector。
+这些不是 emerging adaptive defense 产物，不应直接 approve 作为本实验结果。
+
+正确做法是：
+
+1. vaccination 前记录已有 node ids。
+2. 跑 openclaw seed failure vaccination。
+3. 只 approve 本次新增的 antibody。
+4. 再跑 =--defense caitlyn_evolved=。

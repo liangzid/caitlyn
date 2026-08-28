@@ -1,0 +1,37 @@
+[
+  {
+    "node_id": "ab-ax-001",
+    "label": "policy_context_hint",
+    "reason": "generic_keyword"
+  },
+  {
+    "node_id": "ab-ax-003",
+    "label": "policy_or_security_lexeme",
+    "reason": "generic_keyword"
+  },
+  {
+    "node_id": "ab-ax-003",
+    "label": "harm_directive_lexeme",
+    "reason": "generic_keyword"
+  },
+  {
+    "node_id": "ab-ax-003",
+    "label": "*",
+    "reason": "node_empty"
+  },
+  {
+    "node_id": "ab-ax-005",
+    "label": "pretext_authority",
+    "reason": "generic_keyword"
+  },
+  {
+    "node_id": "ab-ax-005",
+    "label": "request_verb",
+    "reason": "generic_keyword"
+  },
+  {
+    "node_id": "ab-ax-005",
+    "label": "academic_pretext",
+    "reason": "generic_keyword"
+  }
+]

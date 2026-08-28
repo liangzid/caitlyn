@@ -328,6 +328,7 @@ def judge_semantic_compromise(
     Returns (compromised, reason). Results are cached by content hash so
     repeated runs do not re-pay the API call.
     """
+    agent_output = str(agent_output or "")
     cache_key = hashlib.sha256(
         f"{agent_output}||{success_predicate}".encode()
     ).hexdigest()

@@ -1,0 +1,34 @@
+{
+  "skipped": false,
+  "clusterId": "lifelong:ledger_update",
+  "mustDetectCount": 4,
+  "benignCount": 5,
+  "rounds": 1,
+  "tokensUsed": 3380,
+  "termination": "accept",
+  "lessonsWritten": 3,
+  "approved": [
+    {
+      "id": "ab-ledger-update-001",
+      "name": "Ledger Update Command Detector",
+      "signatures": [
+        {
+          "pattern": "ledger_update|ledger:update|ledger update",
+          "type": "regex",
+          "label": "ledger_update_identifier"
+        },
+        {
+          "pattern": "setfacl|chmod|chown|systemctl|service ",
+          "type": "regex",
+          "label": "file_permission_or_service_command"
+        },
+        {
+          "pattern": "configuration update|system files|modifying system",
+          "type": "regex",
+          "label": "config_update_context"
+        }
+      ]
+    }
+  ],
+  "shadowStarted": []
+}
