@@ -1,0 +1,20 @@
+#+title: CAITLYN 0.2.0 Release
+#+date: 2026-08-28
+
+* Scope
+- Publish the expanded 39-entry defense library through npm.
+- Add synchronized English and Chinese README sections for externally
+  referenced defense research and evaluation benchmarks.
+
+* Release boundary
+- Version: 0.2.0.
+- Existing evaluation outputs, datasets, and unrelated dirty files remain
+  outside the release commits.
+- Experimental and reference defenses remain disabled by default.
+
+* Required verification
+- [X] TypeScript build and complete test suite: 434 tests across 37 files.
+- [X] Antibody library audit: 39 entries and 15 detectors.
+- [X] Isolated npm tarball installation and runtime smoke test: 275 files.
+- [X] Referenced-work link audit: all listed external sources returned HTTP 200.
+- [ ] GitHub Release workflow and npm registry publication checks.
