@@ -33,6 +33,13 @@ describe("isDangerousRegex", () => {
   it("does not flag safe patterns", () => {
     expect(isDangerousRegex("^attack\\s+payload$")).toBe(false);
     expect(isDangerousRegex("[a-z]+\\d+")).toBe(false);
+    // Optional group with inner quantifier (common in shipped detectors)
+    expect(isDangerousRegex("ignore\\s+(all\\s+)?previous")).toBe(false);
+    expect(isDangerousRegex("(a+)?$")).toBe(false);
+    // Escaped whitespace after a group must not look like nested +/*
+    expect(
+      isDangerousRegex("(restrictions|filters|safety protocols?)\\s+(REMOVED|bypassed)"),
+    ).toBe(false);
   });
 });
 

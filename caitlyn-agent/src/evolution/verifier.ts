@@ -77,16 +77,20 @@ process.stdin.on("end", () => {
 `;
 
 /**
- * Static ReDoS heuristic: nested quantifiers like (a+)+, (a*)*, (a|aa)+.
- * Escapes and character classes are stripped before the check.
+ * Static ReDoS heuristic: nested quantifiers like (a+)+, (a*)*, (a+)* .
+ * An outer `?` (optional group) is allowed: patterns such as `(all\s+)?` are
+ * common and not catastrophic.
+ * Escapes and character classes are replaced with a placeholder (not deleted)
+ * so `\s+` does not become a bare `+` glued to the previous group.
  * KEYPOINT-REVIEW: 这是启发式，覆盖已知灾难性回溯模式；未知模式由
  * 子进程超时兜底，但理论上仍存在漏网风险。
  */
 export function isDangerousRegex(pattern: string): boolean {
   const stripped = pattern
-    .replace(/\\./g, "")
-    .replace(/\[[^\]]*\]/g, "");
-  return /\([^()]*[+*?][^()]*\)[+*?]/.test(stripped);
+    .replace(/\\./g, "a")
+    .replace(/\[[^\]]*\]/g, "a");
+  // Outer quantifier must be + or * (not ?). `(foo+)?` is safe; `(foo+)+` is not.
+  return /\([^()]*[+*?][^()]*\)[+*]/.test(stripped);
 }
 
 export class VerificationSandbox {
