@@ -3,14 +3,20 @@
  *
  * Loads antibodies and antigens from the filesystem, maintains the forest index.
  *
- * Directory layout:
+ * Dual-root layout (production):
+ *   shipped: <repo-or-package>/antibodies|antigens   (curated, read-mostly)
+ *   user:    ~/.caitlyn/library/antibodies|antigens  (local edits / evolution)
+ * Scanner unions both roots; user entries override shipped by id.
+ *
+ * Single-root (tests): CAITLYN_LIBRARY_DIR points at one root for read+write.
+ *
+ * Per-entry layout:
  *   antibodies/<id>/  README.md  config.yaml  detect.ts (optional)
- *   antibodies/index.json
  *   antigens/<id>/    README.md  config.yaml  payload.txt
- *   antigens/index.json
  */
 
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
@@ -30,21 +36,72 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PKG_ROOT = path.resolve(__dirname, "..");
 const PROJECT_ROOT = path.resolve(__dirname, "../..");
-/** Library root; CAITLYN_LIBRARY_DIR overrides it for isolated tests. */
-function libraryRoot(): string {
-  return process.env.CAITLYN_LIBRARY_DIR
-    ? path.resolve(process.env.CAITLYN_LIBRARY_DIR)
-    : PROJECT_ROOT;
+
+/** True when tests redirect the whole library to one isolated root. */
+export function isSingleLibraryMode(): boolean {
+  if (!process.env.CAITLYN_LIBRARY_DIR) return false;
+  if (process.env.CAITLYN_USER_LIBRARY_DIR) {
+    return (
+      path.resolve(process.env.CAITLYN_LIBRARY_DIR) ===
+      path.resolve(process.env.CAITLYN_USER_LIBRARY_DIR)
+    );
+  }
+  return true;
 }
 
-/** Antibody library directory (resolved per call so tests can redirect). */
+/**
+ * Curated library root shipped with the package / repo checkout.
+ * CAITLYN_LIBRARY_DIR overrides shipped root (and is single-root unless USER differs).
+ */
+export function shippedLibraryRoot(): string {
+  if (process.env.CAITLYN_LIBRARY_DIR) {
+    return path.resolve(process.env.CAITLYN_LIBRARY_DIR);
+  }
+  const projectAntibodies = path.join(PROJECT_ROOT, "antibodies");
+  if (fs.existsSync(projectAntibodies)) return PROJECT_ROOT;
+  return PKG_ROOT;
+}
+
+/**
+ * Writable user library root (~/.caitlyn/library).
+ * When CAITLYN_LIBRARY_DIR is set alone, user root equals that dir (test isolation).
+ */
+export function userLibraryRoot(): string {
+  if (process.env.CAITLYN_USER_LIBRARY_DIR) {
+    return path.resolve(process.env.CAITLYN_USER_LIBRARY_DIR);
+  }
+  if (process.env.CAITLYN_LIBRARY_DIR) {
+    return path.resolve(process.env.CAITLYN_LIBRARY_DIR);
+  }
+  return path.join(os.homedir(), ".caitlyn", "library");
+}
+
+/** Writable antibody directory (user root; same as shipped in single-root mode). */
 export function antibodiesDir(): string {
-  return path.join(libraryRoot(), "antibodies");
+  return path.join(userLibraryRoot(), "antibodies");
 }
 
-/** Antigen library directory (resolved per call so tests can redirect). */
+/** Writable antigen directory (user root; same as shipped in single-root mode). */
 export function antigensDir(): string {
-  return path.join(libraryRoot(), "antigens");
+  return path.join(userLibraryRoot(), "antigens");
+}
+
+/** Shipped curated antibody directory. */
+export function shippedAntibodiesDir(): string {
+  return path.join(shippedLibraryRoot(), "antibodies");
+}
+
+/** Shipped curated antigen directory. */
+export function shippedAntigensDir(): string {
+  return path.join(shippedLibraryRoot(), "antigens");
+}
+
+/** Whether folderPath lives under the shipped (non-user) tree in dual-root mode. */
+export function isShippedLibraryPath(folderPath: string): boolean {
+  if (isSingleLibraryMode()) return false;
+  const shipped = path.resolve(shippedLibraryRoot());
+  const resolved = path.resolve(folderPath);
+  return resolved === shipped || resolved.startsWith(shipped + path.sep);
 }
 
 // ── Simple YAML parser imported from yaml-parser.ts ───────────────
@@ -224,13 +281,9 @@ export function invalidateLibraryCache(): void {
 
 // ── Load Antibodies ───────────────────────────────────────────────
 
-export function loadAntibodies(): AntibodyEntry[] {
-  if (!cacheExpired() && _cachedAntibodies) return _cachedAntibodies;
-  const dir = antibodiesDir();
-  if (!fs.existsSync(dir)) {
-    console.warn(`⚠️  Antibodies directory not found: ${dir}`);
-    return [];
-  }
+/** Load antibody entries from one directory (no cache). */
+function loadAntibodiesFromDir(dir: string): AntibodyEntry[] {
+  if (!fs.existsSync(dir)) return [];
   const entries: AntibodyEntry[] = [];
 
   for (const dirName of fs.readdirSync(dir)) {
@@ -269,6 +322,35 @@ export function loadAntibodies(): AntibodyEntry[] {
       console.warn(`⚠️  Skipping antibody '${dirName}': failed to load config — ${err instanceof Error ? err.message : String(err)}`);
     }
   }
+  return entries;
+}
+
+/**
+ * Merge shipped then user antibodies; user wins on id collision.
+ * KEYPOINT-REVIEW: dual-root is the production trust split; tests stay single-root via CAITLYN_LIBRARY_DIR.
+ */
+export function loadAntibodies(): AntibodyEntry[] {
+  if (!cacheExpired() && _cachedAntibodies) return _cachedAntibodies;
+
+  let entries: AntibodyEntry[];
+  if (isSingleLibraryMode()) {
+    const dir = antibodiesDir();
+    if (!fs.existsSync(dir)) {
+      console.warn(`⚠️  Antibodies directory not found: ${dir}`);
+      entries = [];
+    } else {
+      entries = loadAntibodiesFromDir(dir);
+    }
+  } else {
+    const byId = new Map<string, AntibodyEntry>();
+    for (const ab of loadAntibodiesFromDir(shippedAntibodiesDir())) {
+      byId.set(ab.config.id, ab);
+    }
+    for (const ab of loadAntibodiesFromDir(antibodiesDir())) {
+      byId.set(ab.config.id, ab);
+    }
+    entries = [...byId.values()];
+  }
 
   _cachedAntibodies = entries;
   _cacheTime = Date.now();
@@ -285,6 +367,10 @@ function yamlEscape(value: unknown): string {
   return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\r/g, "\\r")}"`;
 }
 
+/**
+ * Persist an antibody under the writable user root.
+ * If the entry still points at a shipped path, copy-on-write into the user library.
+ */
 export function saveAntibody(entry: AntibodyEntry): void {
   if (process.env.CAITLYN_TEST_TRACE) {
     fs.appendFileSync(
@@ -292,6 +378,24 @@ export function saveAntibody(entry: AntibodyEntry): void {
       `[saveAntibody pid=${process.pid} dir=${entry.folderPath}]\n${new Error().stack}\n`,
     );
   }
+  if (isShippedLibraryPath(entry.folderPath)) {
+    const dest = path.join(antibodiesDir(), entry.config.id);
+    fs.mkdirSync(dest, { recursive: true });
+    if (fs.existsSync(entry.folderPath)) {
+      for (const name of fs.readdirSync(entry.folderPath)) {
+        if (name === "config.yaml") continue;
+        fs.cpSync(path.join(entry.folderPath, name), path.join(dest, name), {
+          recursive: true,
+        });
+      }
+    }
+    entry.folderPath = dest;
+    if (entry.scriptPath) {
+      const scriptName = path.basename(entry.scriptPath);
+      entry.scriptPath = path.join(dest, scriptName);
+    }
+  }
+
   const dirPath = entry.folderPath;
   fs.mkdirSync(dirPath, { recursive: true });
 
@@ -327,15 +431,9 @@ export function saveAntibody(entry: AntibodyEntry): void {
   saveAntibodyIndex(buildAntibodyIndex(all));
 }
 
-export function loadAntigens(): AntigenEntry[] {
-  if (!cacheExpired() && _cachedAntigens) return _cachedAntigens;
-  const dir = antigensDir();
-  if (!fs.existsSync(dir)) {
-    console.warn(`⚠️  Antigens directory not found: ${dir}`);
-    _cachedAntigens = [];
-    _cacheTime = Date.now();
-    return [];
-  }
+/** Load antigen entries from one directory (no cache). */
+function loadAntigensFromDir(dir: string): AntigenEntry[] {
+  if (!fs.existsSync(dir)) return [];
   const entries: AntigenEntry[] = [];
 
   for (const dirName of fs.readdirSync(dir)) {
@@ -369,6 +467,34 @@ export function loadAntigens(): AntigenEntry[] {
     } catch (err) {
       console.warn(`⚠️  Skipping antigen '${dirName}': failed to load config — ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+  return entries;
+}
+
+/**
+ * Merge shipped then user antigens; user wins on id collision.
+ */
+export function loadAntigens(): AntigenEntry[] {
+  if (!cacheExpired() && _cachedAntigens) return _cachedAntigens;
+
+  let entries: AntigenEntry[];
+  if (isSingleLibraryMode()) {
+    const dir = antigensDir();
+    if (!fs.existsSync(dir)) {
+      console.warn(`⚠️  Antigens directory not found: ${dir}`);
+      entries = [];
+    } else {
+      entries = loadAntigensFromDir(dir);
+    }
+  } else {
+    const byId = new Map<string, AntigenEntry>();
+    for (const ag of loadAntigensFromDir(shippedAntigensDir())) {
+      byId.set(ag.config.id, ag);
+    }
+    for (const ag of loadAntigensFromDir(antigensDir())) {
+      byId.set(ag.config.id, ag);
+    }
+    entries = [...byId.values()];
   }
 
   _cachedAntigens = entries;
@@ -446,6 +572,13 @@ export function loadAntibodyIndex(): AntibodyIndex | null {
     const parsed = JSON.parse(raw) as AntibodyIndex;
     // Treat empty index (no roots, no trees) as stale — return null so caller rebuilds
     if (!parsed.roots || parsed.roots.length === 0) return null;
+    // Dual-root: user-side index can lag behind newly shipped skills.
+    // If the live library has ids the index does not know, force rebuild.
+    const live = loadAntibodies();
+    const indexed = new Set(Object.keys(parsed.trees ?? {}));
+    for (const ab of live) {
+      if (!indexed.has(ab.config.id)) return null;
+    }
     return parsed;
   } catch {
     return null;

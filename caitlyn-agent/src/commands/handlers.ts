@@ -209,6 +209,13 @@ export async function doAntibodyAddFull(
 export async function doAntibodyRemove(self: TUIHost, id: string): Promise<void> {
   const dirPath = path.join(antibodiesDir(), id);
   if (!fs.existsSync(dirPath)) {
+    const shipped = loadAntibodies().find((a) => a.config.id === id);
+    if (shipped) {
+      self.showSystemMessage(
+        `Antibody "${id}" is shipped (read-only). Add a local override to replace it, or leave it in place.`,
+      );
+      return;
+    }
     self.showSystemMessage(`Antibody "${id}" not found.`);
     return;
   }
