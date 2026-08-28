@@ -137,7 +137,19 @@ System II 从已观察到的漏检中保留了 4 个经过验证的技能。加�
 
 Tier 0 扫描不需要 API key。
 
-### 构建智能体
+### 安装 CLI
+
+全局安装后，`caitlyn` 与 `caitlyn-hook` 两个命令都会进入可执行路径：
+
+```bash
+npm install -g caitlyn
+caitlyn status
+caitlyn
+```
+
+如果需要安装为项目依赖，可使用 `npm install caitlyn`，并通过 `npx caitlyn` 运行命令行界面。
+
+### 从源码构建
 
 ```bash
 git clone https://github.com/liangzid/caitlyn.git
@@ -146,7 +158,7 @@ npm ci
 npm run build
 ```
 
-运行仓库内的启动脚本：
+构建完成后，运行仓库内的启动脚本：
 
 ```bash
 ./caitlyn status

@@ -189,7 +189,20 @@ from 0.4% to 2.0%.
 
 Tier 0 scanning does not require an API key.
 
-### Build the agent
+### Install the CLI
+
+Install CAITLYN globally to make both `caitlyn` and `caitlyn-hook` available:
+
+```bash
+npm install -g caitlyn
+caitlyn status
+caitlyn
+```
+
+For a project-local installation, use `npm install caitlyn` and run the CLI
+through `npx caitlyn`.
+
+### Build from source
 
 ```bash
 git clone https://github.com/liangzid/caitlyn.git
@@ -198,7 +211,7 @@ npm ci
 npm run build
 ```
 
-Run the repository-local launcher:
+Run the repository-local launcher after building:
 
 ```bash
 ./caitlyn status

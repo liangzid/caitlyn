@@ -1,19 +1,45 @@
 {
-  "name": "caitlyn-agent",
+  "name": "caitlyn",
   "version": "0.1.0",
   "description": "CAITLYN Security Guardian Agent — interactive defense agent for LLM agent protection",
   "type": "module",
   "bin": {
-    "caitlyn": "dist/cli.js"
+    "caitlyn": "dist/cli.js",
+    "caitlyn-hook": "dist/hook-bin.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "dist/**/*.mjs",
+    "antibodies/**",
+    "antigens/**",
+    "extension/*.ts",
+    "extension/*.py",
+    "extension/*.md",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json && npm run build-antibodies && npm run build-plugins",
     "build-antibodies": "npx tsx src/scripts/precompile-antibodies.ts",
     "build-plugins": "mkdir -p dist/plugins dist/scripts && cp src/plugins/opencode-plugin.ts dist/plugins/opencode-plugin.js && cp src/plugins/openclaw-plugin.ts dist/plugins/openclaw-plugin.js && cp src/scripts/tier0-worker.mjs dist/scripts/tier0-worker.mjs",
     "audit:library": "npx tsx src/scripts/audit-library.ts",
-    "test": "vitest run"
+    "stage:package": "node scripts/stage-package-assets.mjs",
+    "clean:package": "node scripts/stage-package-assets.mjs --clean",
+    "prepack": "npm run build && npm run stage:package",
+    "postpack": "npm run clean:package",
+    "prepublishOnly": "npm test && npm run audit:library",
+    "test": "vitest run",
+    "test:package": "node scripts/test-package-install.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "^0.80.6",
@@ -30,5 +56,24 @@
   "engines": {
     "node": ">=22.19.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "keywords": [
+    "llm",
+    "agent",
+    "security",
+    "prompt-injection",
+    "mcp"
+  ],
+  "homepage": "https://xiaoyuxu1.github.io/Caitlyn-project/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/liangzid/caitlyn.git",
+    "directory": "caitlyn-agent"
+  },
+  "bugs": {
+    "url": "https://github.com/liangzid/caitlyn/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
 }

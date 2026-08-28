@@ -23,6 +23,8 @@ jobs:
         run: npm run build
       - name: Run unit tests
         run: npm test
+      - name: Verify npm package installation
+        run: npm run test:package
 
   agent-eval:
     runs-on: ubuntu-latest

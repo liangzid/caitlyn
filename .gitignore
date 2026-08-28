@@ -4,6 +4,9 @@ dist/
 __pycache__/
 *.db
 caitlyn-agent/scan_history.json
+caitlyn-agent/antibodies/
+caitlyn-agent/antigens/
+caitlyn-agent/*.tgz
 cost_log.jsonl
 memory_bank.jsonl
 *~undo-tree~
