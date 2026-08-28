@@ -17,4 +17,11 @@
 - [X] Antibody library audit: 39 entries and 15 detectors.
 - [X] Isolated npm tarball installation and runtime smoke test: 275 files.
 - [X] Referenced-work link audit: all listed external sources returned HTTP 200.
-- [ ] GitHub Release workflow and npm registry publication checks.
+- [X] GitHub Release workflow and npm registry publication checks.
+
+* Published artifacts
+- GitHub Release: https://github.com/liangzid/caitlyn/releases/tag/v0.2.0
+- Publish workflow: https://github.com/liangzid/caitlyn/actions/runs/33166569380
+- npm package: caitlyn@0.2.0, with latest pointing to 0.2.0.
+- Registry installation loaded 39 antibodies and 6 antigens. All 10 active
+  Tier 0 scripts executed without errors.
