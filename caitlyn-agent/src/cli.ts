@@ -18,6 +18,8 @@
  *   caitlyn vaccinate --approve <id>  Explicitly activate a candidate
  *   caitlyn vaccinate --status       Show the evolution DAG
  *   caitlyn vaccinate --redteam [category]  Run the active red-team drill
+ *   caitlyn update [--check] [--yes]        Check GitHub release / apply npm update
+ *   caitlyn contribute                      Pack local library into library/incoming bundle
  */
 
 import { spawnSync } from "node:child_process";
@@ -56,6 +58,8 @@ import {
   runVaccination,
   runRedTeamCommand,
 } from "./commands/evolution.js";
+import { runUpdateCommand } from "./sync/update.js";
+import { runContributeCommand } from "./sync/contribute.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -576,13 +580,23 @@ daemon_url = "http://127.0.0.1:9070"
       console.log("  providers                  List available LLM providers");
       console.log("  init                       Generate default config.toml");
       console.log("  vaccinate <pattern>        Submit vaccination pattern");
+      console.log("  update [--check] [--yes]   Check GitHub release / npm update");
+      console.log("  contribute                 Pack library into library/incoming bundle");
       console.log("  help                       Show this help");
       console.log("");
       process.exit(0);
     }
+    case "update": {
+      await runUpdateCommand(args.slice(1));
+      process.exit(0);
+    }
+    case "contribute": {
+      await runContributeCommand(args.slice(1));
+      process.exit(0);
+    }
     default: {
       console.log(`Unknown command: ${command}`);
-      console.log("Usage: caitlyn [tui|repl|scan|status|dashboard|history|detect|install|uninstall|providers|init|setup|vaccinate]");
+      console.log("Usage: caitlyn [tui|repl|scan|status|dashboard|history|detect|install|uninstall|providers|init|setup|vaccinate|update|contribute]");
       process.exit(1);
     }
   }

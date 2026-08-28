@@ -1,0 +1,75 @@
+#+TITLE: Cloud sync / library update plan (paper § deployment)
+#+DATE: 2026-08-25
+#+AUTHOR: 团长 + Agent
+
+* Goal
+
+Implement paper Cloud Synchronization for attack + evolved defense library:
+opt-in contribute, human audit, never auto-activate remote submissions;
+library refresh via product update (no separate sync pull).
+
+* Decisions (locked)
+
+1. Substrate :: GitHub curated repo now (Option A); custom sync API later (B).
+2. Pull :: No =caitlyn sync pull=. Fold into =caitlyn update=.
+3. Release binding :: v1 library ships inside Caitlyn release (Option 1);
+   layout must allow later =library-vX= channel (Option 3) under same update UX.
+4. Opt-in gate :: Contribute upload only. Normal update/library-in-release is not “cloud sync”.
+5. Contribute UX :: Interactive picker over *all* local entries (Option C).
+6. Hub :: Same repo (=caitlyn=).
+7. Pre-audit path :: =library/incoming/<contrib-id>/...=; promote into
+   =antibodies/= / =antigens/= only after maintainer audit.
+8. Sanitize :: Strip stats/PII/paths; antigen payloads hashed/redacted by default;
+   full payload only per-entry explicit opt-in in picker.
+9. Local verify :: Hard gate L2+schema for defenses; soft warn for antigens.
+10. Install :: npm package =caitlyn= + wget/curl install shell.
+11. Upgrade apply :: npm (and install-method aware later as needed).
+12. Upgrade prompt :: TUI soft nudge + one-key confirm (not silent auto-update).
+13. Library roots :: Dual roots — package shipped tree + =~/.caitlyn/library/=;
+    scanner unions; local overrides by =id=.
+14. Version discovery :: GitHub Releases tag as source of truth; npm applies for
+    npm installs (Option C).
+15. Version check policy :: Default on, delayed/idle after TUI interactive;
+    =CAITLYN_OFFLINE= / config kill switch. Not the same switch as contribute.
+16. Contribute auth :: First-run wizard (opt-in + =gh= auth); if no =gh=,
+    still write PR-ready bundle under =~/.caitlyn/contribute/=.
+
+* Paper alignment
+
+- Disabled-by-default cloud sync ≡ contribute opt-in.
+- Human audit ≡ PR review + promote from =library/incoming/=.
+- Never auto-activate remote ≡ incoming never on scanner path until promote;
+  client contribute does not activate peers.
+- “Integrated into base updates” ≡ curated library rides =caitlyn update=.
+
+* Open (next grill / impl)
+
+- ~~v1 implementation phase order (MVP slice).~~ Done: thin vertical (Option 3).
+- Exact =library/incoming= manifest schema + PR template. (MANIFEST.json shipped; PR template later)
+- Migration of current in-tree =antibodies/= into package-root vs user-root. (dual-root live)
+- ~~Package name for public release.~~ Resolved: =caitlyn=.
+- Install script URL for public release.
+- Follow-ups: wget install shell, TUI one-key update nudge, =gh pr create=.
+
+* Correctness review (2026-08-25)
+
+Findings:
+1. *Critical (fixed)*: =isDangerousRegex= false-positives blocked contribute of core
+   shipped skills (was 6/24, then 4/24). Causes: (a) outer =?= treated as nested;
+   (b) deleting =\.= escapes turned =\s+= into bare =+= glued to prior group.
+   Fix: placeholder replace for escapes; outer quantifier only =+/*=. Now 24/24 pass.
+2. *Medium (fixed)*: user-side =index.json= could lag shipped library; =loadAntibodyIndex=
+   now rebuilds when live ids are missing from the index.
+
+** Open issues (recorded; do not fix yet)
+
+- COW on scan feedback :: first =recordScanFeedback= on a shipped skill copies the
+  whole entry into =~/.caitlyn/library/=. Correct for dual-root trust split, but
+  user lib can grow after many scans. Possible later fix: stats-only overlay
+  without full copy.
+- =caitlyn update= apply path :: needs published npm =caitlyn= and GitHub
+  Releases; otherwise check/apply fails for ops reasons (not a logic bug).
+- Contribute =--ids= typos :: unknown ids dropped silently; can leave an empty
+  contrib dir then exit 1. Later: warn on unknown ids before packing.
+- Deferred from v1 slice :: wget install shell; TUI one-key update nudge;
+  =gh pr create= automation.
