@@ -1,7 +1,11 @@
 {
   "roots": [
     "ab-adversarial-suffix",
+    "ab-agentflow-policy",
+    "ab-camel-capability-flow",
     "ab-classifier-injection",
+    "ab-composkill-chain-audit",
+    "ab-datasentinel",
     "ab-delimiter-sandwich",
     "ab-entropy-anomaly",
     "ab-escalation-coordinator",
@@ -11,6 +15,8 @@
     "ab-injection-general",
     "ab-instruction-hierarchy",
     "ab-instruction-redirection",
+    "ab-ipiguard-tool-graph",
+    "ab-isolategpt-runtime",
     "ab-jailbreak-general",
     "ab-obfuscation-detector",
     "ab-output-secrets-guard",
@@ -21,9 +27,18 @@
     "ab-poisoning-general",
     "ab-re-execution-verifier",
     "ab-retrieval-hijack",
+    "ab-sara-action-authorization",
+    "ab-secalign-model",
     "ab-self-examination",
+    "ab-skillsmetric-static-audit",
     "ab-spotlighting",
-    "ab-tool-firewall"
+    "ab-struq-structured-query",
+    "ab-task-shield",
+    "ab-tool-firewall",
+    "ab-tool-minimize",
+    "ab-tracegrant-contract",
+    "ab-truss-skill-validation",
+    "ab-trustshift-monitor"
   ],
   "trees": {
     "ab-adversarial-suffix": {
@@ -36,8 +51,48 @@
         "avg_latency_us": 0
       }
     },
+    "ab-agentflow-policy": {
+      "id": "ab-agentflow-policy",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "ab-camel-capability-flow": {
+      "id": "ab-camel-capability-flow",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
     "ab-classifier-injection": {
       "id": "ab-classifier-injection",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "ab-composkill-chain-audit": {
+      "id": "ab-composkill-chain-audit",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "ab-datasentinel": {
+      "id": "ab-datasentinel",
       "children": [],
       "stats_aggregated": {
         "total_scans": 0,
@@ -128,6 +183,26 @@
     },
     "ab-instruction-redirection": {
       "id": "ab-instruction-redirection",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "ab-ipiguard-tool-graph": {
+      "id": "ab-ipiguard-tool-graph",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "ab-isolategpt-runtime": {
+      "id": "ab-isolategpt-runtime",
       "children": [],
       "stats_aggregated": {
         "total_scans": 0,
@@ -236,8 +311,38 @@
         "avg_latency_us": 0
       }
     },
+    "ab-sara-action-authorization": {
+      "id": "ab-sara-action-authorization",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "ab-secalign-model": {
+      "id": "ab-secalign-model",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
     "ab-self-examination": {
       "id": "ab-self-examination",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "ab-skillsmetric-static-audit": {
+      "id": "ab-skillsmetric-static-audit",
       "children": [],
       "stats_aggregated": {
         "total_scans": 0,
@@ -256,8 +361,68 @@
         "avg_latency_us": 0
       }
     },
+    "ab-struq-structured-query": {
+      "id": "ab-struq-structured-query",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "ab-task-shield": {
+      "id": "ab-task-shield",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
     "ab-tool-firewall": {
       "id": "ab-tool-firewall",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "ab-tool-minimize": {
+      "id": "ab-tool-minimize",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "ab-tracegrant-contract": {
+      "id": "ab-tracegrant-contract",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "ab-truss-skill-validation": {
+      "id": "ab-truss-skill-validation",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "ab-trustshift-monitor": {
+      "id": "ab-trustshift-monitor",
       "children": [],
       "stats_aggregated": {
         "total_scans": 0,

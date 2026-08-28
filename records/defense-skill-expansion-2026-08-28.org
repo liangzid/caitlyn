@@ -1,0 +1,39 @@
+#+title: Defense Skill Library Expansion
+#+date: 2026-08-28
+
+* Objective
+- Audit whether the shipped antibody library contains substantive and executable defenses.
+- Search recent defense research and add non-duplicate methods that fit the CAITLYN defense-skill model.
+
+* Current library findings
+- The shipped library contains 24 entries: 14 detectors and 10 non-detectors.
+- Tier 0 has 10 scripted detectors and 2 signature-only detectors.
+- Only 2 Tier 1 entries execute as independent detectors.
+- Eight non-detectors contribute prompt knowledge only in merged execution.
+- Two Tier 0 non-detectors are not reachable from the scanner.
+- All 24 shipped antibody directories lack the README required by the documented skill format.
+
+* Research scope
+- Established 2024--2025 candidates: Task Shield, CaMeL, IPIGuard,
+  IsolateGPT, DataSentinel, StruQ, and SecAlign.
+- Experimental 2026 candidates: SARA, ToolMinimize, AgentFlow,
+  TrustShiftProbe, TraceGrant, TRUSS, CompoSkill, and SkillsMetric.
+- Existing implementations such as Spotlighting, Instruction Hierarchy,
+  and MELON must not be duplicated.
+
+* Agreed direction
+- 团长 approved collecting reasonable methods from both periods.
+- New 2026 methods must be marked experimental until independently validated.
+- A method must not be represented as executable when CAITLYN lacks the
+  context, model, runtime hook, or policy mechanism required by the paper.
+
+* Result
+- Added 15 source-linked research entries, comprising 7 works from 2024--2025
+  and 8 works from 2026.
+- Added implementation_status, execution_stages, references, and
+  runtime_requirements to the library schema.
+- Runtime selectors execute only active entries. Experimental and reference
+  entries are disabled by default.
+- Documented all 24 pre-existing entries and rebuilt the 39-entry index.
+- Verified all 15 source URLs, the TypeScript build, the library audit, all 10
+  active Tier 0 scripts, and 434 automated tests.

@@ -25,7 +25,7 @@
 
 CAITLYN 保护大语言模型智能体消费网页、文件、搜索结果、API 响应、用户后续输入和 Model Context Protocol（MCP）工具输出时的信任边界。其核心思想是将安全控制表示为一组可执行技能，使这些技能能够被检查、测试、版本化，并在部署后持续扩展。
 
-本仓库包含可运行的 TypeScript 中间件、24 个初始防御技能、6 个攻击条目、终端界面、智能体集成、System II 合成引擎，以及论文实验使用的 Python 评测框架。
+本仓库包含可运行的 TypeScript 中间件、39 个防御技能条目、6 个攻击条目、终端界面、智能体集成、System II 合成引擎，以及论文实验使用的 Python 评测框架。
 
 ## 为什么选择 CAITLYN
 
@@ -257,9 +257,13 @@ antibodies/<skill-id>/
 ```
 
 - `README.md` 记录威胁模型与检测依据。
-- `config.yaml` 存储类别、层级、阈值、谱系、签名与证据统计。
+- `config.yaml` 存储类别、层级、实现状态、执行阶段、论文来源、运行要求、谱系、签名与证据统计。
 - `detect.ts` 实现可选的 Tier 0 检测。
 - `detect.mjs` 是预编译的运行时产物。
+
+39 个条目按照实现成熟度明确分层，其中 22 个为 `active`，12 个为 `experimental`，5 个为 `reference`。只有 `active` 条目会参与运行时扫描与提示构造。`experimental` 条目定义了尚需接入相应运行时 hook 的适配契约。`reference` 条目记录需要专用模型、训练流程或隔离架构的方法，不将文字说明冒充为论文方法的完整复现。
+
+本次研究扩展收录了 7 项 2024 至 2025 年工作，包括 Task Shield、CaMeL、IPIGuard、IsolateGPT、DataSentinel、StruQ 与 SecAlign。同时收录了 8 项 2026 年工作，包括 SARA、ToolMinimize、AgentFlow、TrustShiftProbe、TraceGrant、TRUSS、CompoSkill 与 SkillsMetric。每个条目均链接主要论文来源，并声明其真正执行所需的上下文。2026 年条目均默认为实验性，因为这些工作属于近期预印本，尚未经过 CAITLYN 评测流程验证。
 
 攻击条目采用平行结构：
 

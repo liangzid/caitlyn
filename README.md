@@ -30,8 +30,8 @@ and Model Context Protocol tool outputs. Its core idea is to represent security
 controls as a library of executable skills that can be inspected, tested,
 versioned, and extended after deployment.
 
-The repository contains the runnable TypeScript middleware, 24 seed defense
-skills, six attack entries, a terminal interface, agent integrations, the
+The repository contains the runnable TypeScript middleware, 39 defense-skill
+entries, six attack entries, a terminal interface, agent integrations, the
 System II synthesis engine, and the Python evaluation framework used for the
 paper experiments.
 
@@ -315,10 +315,26 @@ antibodies/<skill-id>/
 ```
 
 - `README.md` documents the threat model and detection rationale.
-- `config.yaml` stores category, tier, threshold, lineage, signatures, and
-  evidence statistics.
+- `config.yaml` stores category, tier, implementation status, execution stages,
+  source references, runtime requirements, lineage, signatures, and evidence
+  statistics.
 - `detect.ts` implements optional Tier 0 detection.
 - `detect.mjs` is the precompiled runtime artifact.
+
+The 39 entries are deliberately separated by implementation maturity: 22 are
+`active`, 12 are `experimental`, and five are `reference`. Only `active`
+entries participate in runtime scanning and prompt construction. Experimental
+entries define adapter contracts that still need their declared runtime hooks.
+Reference entries document methods that require a dedicated model, training
+procedure, or isolation architecture and are not presented as reproductions.
+
+The research expansion adds seven methods published in 2024 or 2025: Task
+Shield, CaMeL, IPIGuard, IsolateGPT, DataSentinel, StruQ, and SecAlign. It also
+tracks eight 2026 methods: SARA, ToolMinimize, AgentFlow, TrustShiftProbe,
+TraceGrant, TRUSS, CompoSkill, and SkillsMetric. Each entry links its primary
+source and declares the context required to make it executable. The 2026
+entries remain experimental by default because they are recent preprints and
+have not yet been validated in the CAITLYN evaluation pipeline.
 
 Attack entries use a parallel structure:
 
