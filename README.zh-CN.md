@@ -137,17 +137,24 @@ System II 从已观察到的漏检中保留了 4 个经过验证的技能。加�
 
 Tier 0 扫描不需要 API key。
 
-### 安装 CLI
+### npm 一键安装
 
-全局安装后，`caitlyn` 与 `caitlyn-hook` 两个命令都会进入可执行路径：
+CAITLYN 已发布至 npm，不需要克隆仓库或从源码构建。全局安装最新版本后，`caitlyn` 与 `caitlyn-hook` 两个命令都会进入可执行路径：
 
 ```bash
-npm install -g caitlyn
+npm install -g caitlyn@latest
 caitlyn status
 caitlyn
 ```
 
-如果需要安装为项目依赖，可使用 `npm install caitlyn`，并通过 `npx caitlyn` 运行命令行界面。
+如果需要安装为项目依赖：
+
+```bash
+npm install caitlyn
+npx caitlyn status
+```
+
+全局安装适合使用交互式终端和智能体 hook。项目内安装适合通过程序调用扫描 API，并在自身的 `package.json` 中固定 CAITLYN 版本。
 
 ### 从源码构建
 
@@ -170,13 +177,36 @@ npm run build
 
 ### 配置 LLM 服务
 
-仓库默认使用 OpenRouter：
+CAITLYN 使用 `@earendil-works/pi-ai` 提供的 provider 集成与模型目录，支持目前主流的托管 API 平台，包括 OpenRouter、DeepSeek、OpenAI、Anthropic、Google Gemini、Groq、Mistral、Moonshot AI、MiniMax、xAI、Cerebras、Together AI、Fireworks AI、NVIDIA、Amazon Bedrock、GitHub Copilot、Cloudflare Workers AI、Vercel AI Gateway 与 OpenCode。运行 `caitlyn providers` 可以查看当前安装版本实际提供的完整 provider 与模型列表。
+
+OpenRouter 是默认配置，适合希望通过一个 API key 访问多个厂商模型的用户：
 
 ```bash
 export OPENROUTER_API_KEY="your-key"
+export CAITLYN_PROVIDER="openrouter"
+export CAITLYN_MODEL="deepseek/deepseek-v4-flash"
 ```
 
-主配置文件是 [`config.toml`](config.toml)。环境变量 `CAITLYN_PROVIDER` 和 `CAITLYN_MODEL` 可以覆盖其中的服务商与模型配置。不同服务使用各自的标准凭据变量，包括 `OPENROUTER_API_KEY`、`OPENAI_API_KEY`、`ANTHROPIC_API_KEY` 和 `DEEPSEEK_API_KEY`。
+如果希望直接连接 DeepSeek 平台，应使用 DeepSeek 原生模型标识：
+
+```bash
+export DEEPSEEK_API_KEY="your-key"
+export CAITLYN_PROVIDER="deepseek"
+export CAITLYN_MODEL="deepseek-v4-flash"
+```
+
+常用平台如下。模型目录会随版本与平台供给变化，部署前应使用 `caitlyn providers` 确认模型标识。
+
+| 平台 | Provider 值 | 凭据变量 | 模型示例 | 说明 |
+| --- | --- | --- | --- | --- |
+| [OpenRouter](https://openrouter.ai/) | `openrouter` | `OPENROUTER_API_KEY` | `deepseek/deepseek-v4-flash` | 聚合多个厂商的模型，也是 CAITLYN 默认选项 |
+| [DeepSeek](https://platform.deepseek.com/) | `deepseek` | `DEEPSEEK_API_KEY` | `deepseek-v4-flash` | 直接连接 DeepSeek API |
+| [OpenAI](https://platform.openai.com/) | `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` | 直接连接 OpenAI API |
+| [Anthropic](https://console.anthropic.com/) | `anthropic` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` | 直接连接 Claude API |
+| [Google AI Studio](https://aistudio.google.com/) | `google` | `GOOGLE_API_KEY` | `gemini-2.5-flash` | 直接连接 Gemini API，也接受 `GOOGLE_GENERATIVE_AI_API_KEY` |
+| [GroqCloud](https://console.groq.com/) | `groq` | `GROQ_API_KEY` | `llama-3.3-70b-versatile` | 托管当前支持的开源权重模型 |
+
+主配置文件是 [`config.toml`](config.toml)。`CAITLYN_PROVIDER` 与 `CAITLYN_MODEL` 可以覆盖其中的 provider 与模型配置。API key 可以通过环境变量提供，也可以在交互式界面中使用 `/login <provider> <api-key>` 保存。持久化凭据位于本机的 `~/.caitlyn/auth.json`。
 
 ### 保护已安装的智能体
 

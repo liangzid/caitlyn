@@ -189,18 +189,28 @@ from 0.4% to 2.0%.
 
 Tier 0 scanning does not require an API key.
 
-### Install the CLI
+### One-command npm installation
 
-Install CAITLYN globally to make both `caitlyn` and `caitlyn-hook` available:
+CAITLYN is published on npm. No repository clone or source build is required.
+Install the latest release globally to make both `caitlyn` and `caitlyn-hook`
+available:
 
 ```bash
-npm install -g caitlyn
+npm install -g caitlyn@latest
 caitlyn status
 caitlyn
 ```
 
-For a project-local installation, use `npm install caitlyn` and run the CLI
-through `npx caitlyn`.
+For a project-local installation:
+
+```bash
+npm install caitlyn
+npx caitlyn status
+```
+
+The global installation is recommended for the interactive terminal and agent
+hooks. The local installation is useful when an application imports the
+scanner API and pins CAITLYN in its own `package.json`.
 
 ### Build from source
 
@@ -223,17 +233,49 @@ The final command opens the full-screen terminal interface.
 
 ### Configure an LLM provider
 
-The repository default uses OpenRouter:
+CAITLYN uses the provider integrations and model catalogue bundled with
+`@earendil-works/pi-ai`. It supports the major hosted API platforms, including
+OpenRouter, DeepSeek, OpenAI, Anthropic, Google Gemini, Groq, Mistral,
+Moonshot AI, MiniMax, xAI, Cerebras, Together AI, Fireworks AI, NVIDIA,
+Amazon Bedrock, GitHub Copilot, Cloudflare Workers AI, Vercel AI Gateway, and
+OpenCode. Run `caitlyn providers` to see the authoritative provider and model
+list for the installed version.
+
+OpenRouter is the default and the simplest option when one key should provide
+access to models from several vendors:
 
 ```bash
 export OPENROUTER_API_KEY="your-key"
+export CAITLYN_PROVIDER="openrouter"
+export CAITLYN_MODEL="deepseek/deepseek-v4-flash"
 ```
 
-The main configuration is [`config.toml`](config.toml). Environment variables
-`CAITLYN_PROVIDER` and `CAITLYN_MODEL` override its provider and model values.
-Provider-specific credentials use their standard variables, including
-`OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, and
-`DEEPSEEK_API_KEY`.
+For direct DeepSeek access, use the DeepSeek platform and its native model
+identifiers:
+
+```bash
+export DEEPSEEK_API_KEY="your-key"
+export CAITLYN_PROVIDER="deepseek"
+export CAITLYN_MODEL="deepseek-v4-flash"
+```
+
+Common choices are summarized below. Model availability changes over time, so
+confirm identifiers with `caitlyn providers` before deployment.
+
+| Platform | Provider value | Credential | Example model | Notes |
+| --- | --- | --- | --- | --- |
+| [OpenRouter](https://openrouter.ai/) | `openrouter` | `OPENROUTER_API_KEY` | `deepseek/deepseek-v4-flash` | Aggregated access to models from many vendors; CAITLYN default |
+| [DeepSeek](https://platform.deepseek.com/) | `deepseek` | `DEEPSEEK_API_KEY` | `deepseek-v4-flash` | Direct DeepSeek API access |
+| [OpenAI](https://platform.openai.com/) | `openai` | `OPENAI_API_KEY` | `gpt-4o-mini` | Direct OpenAI API access |
+| [Anthropic](https://console.anthropic.com/) | `anthropic` | `ANTHROPIC_API_KEY` | `claude-sonnet-4-6` | Direct Claude API access |
+| [Google AI Studio](https://aistudio.google.com/) | `google` | `GOOGLE_API_KEY` | `gemini-2.5-flash` | Direct Gemini API access; `GOOGLE_GENERATIVE_AI_API_KEY` is also accepted |
+| [GroqCloud](https://console.groq.com/) | `groq` | `GROQ_API_KEY` | `llama-3.3-70b-versatile` | Hosted access to supported open-weight models |
+
+The main configuration is [`config.toml`](config.toml). `CAITLYN_PROVIDER` and
+`CAITLYN_MODEL` override its provider and model values. API keys may be supplied
+through environment variables or saved from the interactive interface with
+`/login <provider> <api-key>`. Persisted keys are stored locally in
+`~/.caitlyn/auth.json`.
 
 ### Protect an installed agent
 
