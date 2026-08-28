@@ -437,7 +437,7 @@ uv sync --extra dev
 uv run pytest -q
 ```
 
-The current local suites contain 428 TypeScript tests across 36 files and 41
+The current local suites contain 434 TypeScript tests across 37 files and 41
 Python tests. Continuous integration runs the build and both suites on pushes
 and pull requests.
 
@@ -456,6 +456,59 @@ and pull requests.
   not establish complete coverage of future injection techniques.
 - Repository tests avoid paid inference and therefore do not replace a live
   provider and Docker integration run.
+
+## Referenced work
+
+The following external work is directly represented by a shipped defense skill
+or by the evaluation suite. An `active` relation means that CAITLYN executes an
+implementation or includes the method as runtime classifier knowledge. It does
+not imply a complete reproduction of a separately trained model or architecture.
+`Experimental` and `reference` entries remain disabled by default, as described
+in the defense-library section.
+
+### Defense foundations used by active skills
+
+| Work | Year | CAITLYN relation | Source |
+| --- | ---: | --- | --- |
+| PINT Benchmark: Prompt Injection Test | 2024 | Injection-classifier inspiration | [Repository](https://github.com/lakeraai/pint-benchmark) |
+| LLM Self Defense: By Self Examination, LLMs Know They Are Being Tricked | 2023 | Self-examination knowledge | [arXiv:2308.07308](https://arxiv.org/abs/2308.07308) |
+| Defending Against Indirect Prompt Injection Attacks With Spotlighting | 2024 | Spotlighting knowledge | [arXiv:2403.14720](https://arxiv.org/abs/2403.14720) |
+| The Instruction Hierarchy: Training LLMs to Prioritize Privileged Instructions | 2024 | Instruction-hierarchy detector | [arXiv:2404.13208](https://arxiv.org/abs/2404.13208) |
+| Jailbreaking Large Language Models in Infinitely Many Ways | 2025 | Paraphrase-normalization motivation | [arXiv:2501.10800](https://arxiv.org/abs/2501.10800) |
+| Indirect Prompt Injections: Are Firewalls All You Need, or Stronger Benchmarks? | 2025 | Tool-firewall knowledge | [arXiv:2510.05244](https://arxiv.org/abs/2510.05244) |
+| AgentWard: A Lifecycle Security Architecture for Autonomous AI Agents | 2026 | Execution-tracing knowledge | [arXiv:2604.24657](https://arxiv.org/abs/2604.24657) |
+| ClawGuard: A Runtime Security Framework for Tool-Augmented LLM Agents Against Indirect Prompt Injection | 2026 | Permission-gating knowledge | [arXiv:2604.11790](https://arxiv.org/abs/2604.11790) |
+| SafeMCP: Proactive Power Regulation for LLM Agent Defense via Environment-Grounded Look-Ahead Reasoning | 2026 | Permission-gating knowledge | [arXiv:2606.01991](https://arxiv.org/abs/2606.01991) |
+
+### Research entries in the defense library
+
+| Work | Year | Status | Source |
+| --- | ---: | --- | --- |
+| The Task Shield: Enforcing Task Alignment to Defend Against Indirect Prompt Injection in LLM Agents | 2024 | Experimental | [arXiv:2412.16682](https://arxiv.org/abs/2412.16682) |
+| StruQ: Defending Against Prompt Injection with Structured Queries | 2024 | Reference | [arXiv:2402.06363](https://arxiv.org/abs/2402.06363) |
+| SecAlign: Defending Against Prompt Injection with Preference Optimization | 2024 | Reference | [arXiv:2410.05451](https://arxiv.org/abs/2410.05451) |
+| IsolateGPT: An Execution Isolation Architecture for LLM-Based Agentic Systems | 2024 | Reference | [arXiv:2403.04960](https://arxiv.org/abs/2403.04960) |
+| Defeating Prompt Injections by Design (CaMeL) | 2025 | Reference | [arXiv:2503.18813](https://arxiv.org/abs/2503.18813) |
+| IPIGuard: A Novel Tool Dependency Graph-Based Defense Against Indirect Prompt Injection in LLM Agents | 2025 | Experimental | [EMNLP 2025](https://aclanthology.org/2025.emnlp-main.53/) |
+| DataSentinel: A Game-Theoretic Detection of Prompt Injection Attacks | 2025 | Reference | [arXiv:2504.11358](https://arxiv.org/abs/2504.11358) |
+| When Tool Outputs Become Commands: Separating Action Induction from Runtime Authorization in Tool-Augmented LLM Agents | 2026 | Experimental | [arXiv:2608.27146](https://arxiv.org/abs/2608.27146) |
+| ToolMinimize: Auditing and Rewriting LLM Agent Tool Calls to Minimize Privacy Exposure | 2026 | Experimental | [arXiv:2608.24957](https://arxiv.org/abs/2608.24957) |
+| AgentFlow: A Flow-Centric Policy Language and Framework for Securing LLM Agent Systems | 2026 | Experimental | [arXiv:2608.22868](https://arxiv.org/abs/2608.22868) |
+| TrustShiftProbe: Characterizing, Benchmarking, and Defending Staged Trust Attacks on MCP Servers | 2026 | Experimental | [arXiv:2608.23763](https://arxiv.org/abs/2608.23763) |
+| TraceGrant: A Contract-Governed Security Framework for the Task-Effect Lifecycle of Networked LLM Agents | 2026 | Experimental | [arXiv:2608.21126](https://arxiv.org/abs/2608.21126) |
+| TRUSS: Towards Task-Reliable and User-Safe Automated Agent Skill Generation | 2026 | Experimental | [arXiv:2608.17588](https://arxiv.org/abs/2608.17588) |
+| CompoSkill: Compositional Skill Chain Attacks from Individually Scanner-Passing LLM Agent Skills | 2026 | Experimental | [arXiv:2608.16246](https://arxiv.org/abs/2608.16246) |
+| SkillsMetric: Mapping the Detection Boundary of Static Analysis for Malicious Agent Skills | 2026 | Experimental | [arXiv:2608.08468](https://arxiv.org/abs/2608.08468) |
+
+### Evaluation benchmarks
+
+| Work | Use in this repository | Source |
+| --- | --- | --- |
+| AgentDojo | Detection and end-to-end agent evaluation | [arXiv:2406.13352](https://arxiv.org/abs/2406.13352) |
+| ASPI | Ambiguity-driven prompt-injection evaluation | [arXiv:2605.17324](https://arxiv.org/abs/2605.17324) |
+| SafeClawBench | Tool-agent semantic and sandbox-harm evaluation | [arXiv:2606.18356](https://arxiv.org/abs/2606.18356) |
+| AgentDefense-Bench | Model Context Protocol security evaluation | [Repository](https://github.com/arunsanna/AgentDefense-Bench) |
+| InjecAgent | Indirect prompt-injection corpus source | [Findings of ACL 2024](https://aclanthology.org/2024.findings-acl.624/) |
 
 ## Citation
 

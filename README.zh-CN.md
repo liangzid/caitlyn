@@ -357,7 +357,7 @@ uv sync --extra dev
 uv run pytest -q
 ```
 
-当前本地测试套件包含 36 个文件中的 428 个 TypeScript 测试，以及 41 个 Python 测试。持续集成会在 push 和 pull request 时执行构建与两组测试。
+当前本地测试套件包含 37 个文件中的 434 个 TypeScript 测试，以及 41 个 Python 测试。持续集成会在 push 和 pull request 时执行构建与两组测试。
 
 ## 适用范围与限制
 
@@ -367,6 +367,54 @@ uv run pytest -q
 - 由于部分智能体的 MCP 工具通道在实验容器中不够可靠，其评测使用了 prompt 投递后备方案。
 - 当前合成结果验证的是特定 Emerging 攻击家族，不能据此推断对所有未来注入技术的完整覆盖。
 - 仓库测试避免付费推理，因此不能取代配置真实模型服务与 Docker 的集成测试。
+
+## 引用工作
+
+下列外部工作被当前防御技能库或评测套件直接采用。`active` 表示 CAITLYN 会执行相应实现，或在运行时分类器中使用该方法的知识，但不代表完整复现了需要独立训练的模型或专用架构。`experimental` 与 `reference` 条目默认关闭，其含义见防御技能库章节。
+
+### Active 技能采用的防御基础
+
+| 工作 | 年份 | 与 CAITLYN 的关系 | 来源 |
+| --- | ---: | --- | --- |
+| PINT Benchmark: Prompt Injection Test | 2024 | 注入分类器设计参考 | [代码仓库](https://github.com/lakeraai/pint-benchmark) |
+| LLM Self Defense: By Self Examination, LLMs Know They Are Being Tricked | 2023 | 自检知识 | [arXiv:2308.07308](https://arxiv.org/abs/2308.07308) |
+| Defending Against Indirect Prompt Injection Attacks With Spotlighting | 2024 | Spotlighting 知识 | [arXiv:2403.14720](https://arxiv.org/abs/2403.14720) |
+| The Instruction Hierarchy: Training LLMs to Prioritize Privileged Instructions | 2024 | 指令层级检测器 | [arXiv:2404.13208](https://arxiv.org/abs/2404.13208) |
+| Jailbreaking Large Language Models in Infinitely Many Ways | 2025 | 改写归一化方法的动机来源 | [arXiv:2501.10800](https://arxiv.org/abs/2501.10800) |
+| Indirect Prompt Injections: Are Firewalls All You Need, or Stronger Benchmarks? | 2025 | 工具防火墙知识 | [arXiv:2510.05244](https://arxiv.org/abs/2510.05244) |
+| AgentWard: A Lifecycle Security Architecture for Autonomous AI Agents | 2026 | 执行轨迹分析知识 | [arXiv:2604.24657](https://arxiv.org/abs/2604.24657) |
+| ClawGuard: A Runtime Security Framework for Tool-Augmented LLM Agents Against Indirect Prompt Injection | 2026 | 权限门控知识 | [arXiv:2604.11790](https://arxiv.org/abs/2604.11790) |
+| SafeMCP: Proactive Power Regulation for LLM Agent Defense via Environment-Grounded Look-Ahead Reasoning | 2026 | 权限门控知识 | [arXiv:2606.01991](https://arxiv.org/abs/2606.01991) |
+
+### 防御技能库中的研究条目
+
+| 工作 | 年份 | 状态 | 来源 |
+| --- | ---: | --- | --- |
+| The Task Shield: Enforcing Task Alignment to Defend Against Indirect Prompt Injection in LLM Agents | 2024 | Experimental | [arXiv:2412.16682](https://arxiv.org/abs/2412.16682) |
+| StruQ: Defending Against Prompt Injection with Structured Queries | 2024 | Reference | [arXiv:2402.06363](https://arxiv.org/abs/2402.06363) |
+| SecAlign: Defending Against Prompt Injection with Preference Optimization | 2024 | Reference | [arXiv:2410.05451](https://arxiv.org/abs/2410.05451) |
+| IsolateGPT: An Execution Isolation Architecture for LLM-Based Agentic Systems | 2024 | Reference | [arXiv:2403.04960](https://arxiv.org/abs/2403.04960) |
+| Defeating Prompt Injections by Design（CaMeL） | 2025 | Reference | [arXiv:2503.18813](https://arxiv.org/abs/2503.18813) |
+| IPIGuard: A Novel Tool Dependency Graph-Based Defense Against Indirect Prompt Injection in LLM Agents | 2025 | Experimental | [EMNLP 2025](https://aclanthology.org/2025.emnlp-main.53/) |
+| DataSentinel: A Game-Theoretic Detection of Prompt Injection Attacks | 2025 | Reference | [arXiv:2504.11358](https://arxiv.org/abs/2504.11358) |
+| When Tool Outputs Become Commands: Separating Action Induction from Runtime Authorization in Tool-Augmented LLM Agents | 2026 | Experimental | [arXiv:2608.27146](https://arxiv.org/abs/2608.27146) |
+| ToolMinimize: Auditing and Rewriting LLM Agent Tool Calls to Minimize Privacy Exposure | 2026 | Experimental | [arXiv:2608.24957](https://arxiv.org/abs/2608.24957) |
+| AgentFlow: A Flow-Centric Policy Language and Framework for Securing LLM Agent Systems | 2026 | Experimental | [arXiv:2608.22868](https://arxiv.org/abs/2608.22868) |
+| TrustShiftProbe: Characterizing, Benchmarking, and Defending Staged Trust Attacks on MCP Servers | 2026 | Experimental | [arXiv:2608.23763](https://arxiv.org/abs/2608.23763) |
+| TraceGrant: A Contract-Governed Security Framework for the Task-Effect Lifecycle of Networked LLM Agents | 2026 | Experimental | [arXiv:2608.21126](https://arxiv.org/abs/2608.21126) |
+| TRUSS: Towards Task-Reliable and User-Safe Automated Agent Skill Generation | 2026 | Experimental | [arXiv:2608.17588](https://arxiv.org/abs/2608.17588) |
+| CompoSkill: Compositional Skill Chain Attacks from Individually Scanner-Passing LLM Agent Skills | 2026 | Experimental | [arXiv:2608.16246](https://arxiv.org/abs/2608.16246) |
+| SkillsMetric: Mapping the Detection Boundary of Static Analysis for Malicious Agent Skills | 2026 | Experimental | [arXiv:2608.08468](https://arxiv.org/abs/2608.08468) |
+
+### 评测基准
+
+| 工作 | 在本仓库中的用途 | 来源 |
+| --- | --- | --- |
+| AgentDojo | 检测与端到端智能体评测 | [arXiv:2406.13352](https://arxiv.org/abs/2406.13352) |
+| ASPI | 歧义驱动的提示注入评测 | [arXiv:2605.17324](https://arxiv.org/abs/2605.17324) |
+| SafeClawBench | 工具智能体语义与沙箱危害评测 | [arXiv:2606.18356](https://arxiv.org/abs/2606.18356) |
+| AgentDefense-Bench | Model Context Protocol 安全评测 | [代码仓库](https://github.com/arunsanna/AgentDefense-Bench) |
+| InjecAgent | 间接提示注入语料来源 | [Findings of ACL 2024](https://aclanthology.org/2024.findings-acl.624/) |
 
 ## 引用
 
