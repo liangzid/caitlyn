@@ -1,0 +1,31 @@
+id: "ab-secalign-model"
+name: "SecAlign Preference-Aligned Model"
+parent_id: null
+category: "injection"
+tier: 2
+threshold: 0.8
+description: "Reference entry for preference optimization that trains models to favor secure task completion over injected instructions"
+prompt: ""
+role: "non_detector"
+implementation_status: "reference"
+execution_stages:
+  - "model_training"
+  - "content_scan"
+references:
+  - title: "SecAlign: Defending Against Prompt Injection with Preference Optimization"
+    url: "https://arxiv.org/abs/2410.05451"
+    year: 2024
+runtime_requirements:
+  - "SecAlign preference dataset"
+  - "preference-optimized model checkpoint"
+  - "task utility and adaptive-attack evaluation"
+affinity_score: 0
+created_at: "2026-08-28"
+generation: 0
+stats:
+  total_scans: 0
+  true_positives: 0
+  false_positives: 0
+  avg_latency_us: 0
+deps: []
+signatures: []

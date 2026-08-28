@@ -1,0 +1,32 @@
+id: "ab-camel-capability-flow"
+name: "CaMeL Capability and Data-Flow Guard"
+parent_id: null
+category: "exfiltration"
+tier: 2
+threshold: 0.8
+description: "Reference design for capability-based control and explicit separation of trusted control flow from untrusted data flow"
+prompt: ""
+role: "non_detector"
+implementation_status: "reference"
+execution_stages:
+  - "tool_pre_call"
+  - "tool_post_call"
+  - "trajectory"
+references:
+  - title: "Defeating Prompt Injections by Design"
+    url: "https://arxiv.org/abs/2503.18813"
+    year: 2025
+runtime_requirements:
+  - "trusted-query control-flow extraction"
+  - "value-level provenance labels"
+  - "capability policies for sensitive sinks"
+affinity_score: 0
+created_at: "2026-08-28"
+generation: 0
+stats:
+  total_scans: 0
+  true_positives: 0
+  false_positives: 0
+  avg_latency_us: 0
+deps: []
+signatures: []

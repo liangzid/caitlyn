@@ -1,0 +1,31 @@
+id: "ab-struq-structured-query"
+name: "StruQ Structured Query Boundary"
+parent_id: null
+category: "injection"
+tier: 2
+threshold: 0.8
+description: "Reference entry for separating instructions and data through a secure formatter and a model trained to honor that structure"
+prompt: ""
+role: "non_detector"
+implementation_status: "reference"
+execution_stages:
+  - "prompt_construction"
+  - "model_training"
+references:
+  - title: "StruQ: Defending Against Prompt Injection with Structured Queries"
+    url: "https://arxiv.org/abs/2402.06363"
+    year: 2024
+runtime_requirements:
+  - "secure structured-query frontend"
+  - "StruQ-compatible trained model"
+  - "reserved-token escaping"
+affinity_score: 0
+created_at: "2026-08-28"
+generation: 0
+stats:
+  total_scans: 0
+  true_positives: 0
+  false_positives: 0
+  avg_latency_us: 0
+deps: []
+signatures: []

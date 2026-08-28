@@ -1,0 +1,31 @@
+id: "ab-isolategpt-runtime"
+name: "IsolateGPT Execution Isolation"
+parent_id: null
+category: "tool_misuse"
+tier: 2
+threshold: 0.8
+description: "Reference architecture for isolating third-party agent applications, data, and privileges behind mediated interfaces"
+prompt: ""
+role: "non_detector"
+implementation_status: "reference"
+execution_stages:
+  - "runtime_isolation"
+  - "tool_pre_call"
+references:
+  - title: "IsolateGPT: An Execution Isolation Architecture for LLM-Based Agentic Systems"
+    url: "https://arxiv.org/abs/2403.04960"
+    year: 2024
+runtime_requirements:
+  - "per-application isolated execution context"
+  - "mediated cross-application communication"
+  - "resource capability broker"
+affinity_score: 0
+created_at: "2026-08-28"
+generation: 0
+stats:
+  total_scans: 0
+  true_positives: 0
+  false_positives: 0
+  avg_latency_us: 0
+deps: []
+signatures: []

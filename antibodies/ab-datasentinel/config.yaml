@@ -1,0 +1,31 @@
+id: "ab-datasentinel"
+name: "DataSentinel Adaptive Injection Detector"
+parent_id: null
+category: "injection"
+tier: 2
+threshold: 0.8
+description: "Reference entry for a detector trained with minimax optimization against adaptive prompt-injection attacks"
+prompt: ""
+role: "detector"
+implementation_status: "reference"
+execution_stages:
+  - "model_training"
+  - "content_scan"
+references:
+  - title: "DataSentinel: A Game-Theoretic Detection of Prompt Injection Attacks"
+    url: "https://arxiv.org/abs/2504.11358"
+    year: 2025
+runtime_requirements:
+  - "DataSentinel-trained model checkpoint"
+  - "compatible tokenizer and inference runtime"
+  - "calibrated operating threshold"
+affinity_score: 0
+created_at: "2026-08-28"
+generation: 0
+stats:
+  total_scans: 0
+  true_positives: 0
+  false_positives: 0
+  avg_latency_us: 0
+deps: []
+signatures: []

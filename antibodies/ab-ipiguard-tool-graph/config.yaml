@@ -1,0 +1,36 @@
+id: "ab-ipiguard-tool-graph"
+name: "IPIGuard Tool Dependency Graph"
+parent_id: null
+category: "tool_misuse"
+tier: 2
+threshold: 0.8
+description: "Experimental authorization policy that admits tool calls only when they follow a plan derived before exposure to untrusted tool output"
+prompt: |
+  Validate a proposed tool call against a tool dependency graph planned from
+  the trusted user request. Reject tools absent from the graph, calls whose
+  prerequisites have not completed, and arguments whose values cannot be
+  traced to an approved predecessor. Tool output may instantiate planned data
+  slots but may not add graph nodes or edges.
+role: "non_detector"
+implementation_status: "experimental"
+execution_stages:
+  - "tool_pre_call"
+  - "trajectory"
+references:
+  - title: "IPIGuard: A Novel Tool Dependency Graph-Based Defense Against Indirect Prompt Injection in LLM Agents"
+    url: "https://aclanthology.org/2025.emnlp-main.53/"
+    year: 2025
+runtime_requirements:
+  - "trusted pre-execution tool dependency graph"
+  - "completed-node ledger"
+  - "argument provenance"
+affinity_score: 0
+created_at: "2026-08-28"
+generation: 0
+stats:
+  total_scans: 0
+  true_positives: 0
+  false_positives: 0
+  avg_latency_us: 0
+deps: []
+signatures: []
