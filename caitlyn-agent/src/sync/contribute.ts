@@ -72,9 +72,20 @@ function writeAntibodyConfigYaml(
       for (const [sk, sv] of Object.entries(config.stats)) {
         lines.push(`  ${sk}: ${sv}`);
       }
-    } else if (key === "deps") {
-      lines.push("deps:");
-      for (const d of config.deps) lines.push(`  - ${yamlEscape(d)}`);
+    } else if (key === "deps" || key === "execution_stages" || key === "runtime_requirements") {
+      lines.push(`${key}:`);
+      for (const item of value as string[]) lines.push(`  - ${yamlEscape(item)}`);
+    } else if (key === "references") {
+      if (config.references.length === 0) {
+        lines.push("references: []");
+        continue;
+      }
+      lines.push("references:");
+      for (const ref of config.references) {
+        lines.push(`  - title: ${yamlEscape(ref.title)}`);
+        lines.push(`    url: ${yamlEscape(ref.url)}`);
+        lines.push(`    year: ${ref.year}`);
+      }
     } else if (key === "signatures") {
       lines.push("signatures:");
       for (const sig of config.signatures) {

@@ -61,6 +61,10 @@ function makeAntibody(
       description: `Description for ${name}`,
       prompt,
       role: "detector",
+      implementation_status: "active",
+      execution_stages: ["content_scan"],
+      references: [],
+      runtime_requirements: [],
       affinity_score: 0.5,
       created_at: "2025-01-01",
       parent_id: null,
@@ -129,6 +133,19 @@ describe("selectMergedSkills", () => {
       .toEqual(["ab-det"]);
     expect(selectMergedSkills([detector, nonDetector], "knowledge").map((a) => a.config.id).sort())
       .toEqual(["ab-det", "ab-hard"]);
+  });
+
+  it("excludes experimental and reference skills from runtime prompts", () => {
+    const active = makeAntibody("ab-active", "Active", "readme", "Detect.", 1);
+    const experimental = makeAntibody("ab-experimental", "Experimental", "readme", "Research.", 1);
+    experimental.config.implementation_status = "experimental";
+    const reference = makeAntibody("ab-reference", "Reference", "readme", "Research.", 1);
+    reference.config.implementation_status = "reference";
+
+    expect(selectMergedSkills([active, experimental, reference], "knowledge").map((a) => a.config.id))
+      .toEqual(["ab-active"]);
+    expect(selectTier1Detectors([active, experimental, reference]).map((a) => a.config.id))
+      .toEqual(["ab-active"]);
   });
 });
 

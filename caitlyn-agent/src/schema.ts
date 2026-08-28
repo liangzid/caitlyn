@@ -15,11 +15,39 @@ export interface AntibodyStats {
 /** Execution role of an antibody in the defense pipeline. */
 export type AntibodyRole = "detector" | "non_detector";
 
+/** Deployment maturity of a defense skill. Only active skills run by default. */
+export type DefenseImplementationStatus = "active" | "experimental" | "reference";
+
+/** Runtime boundary at which a defense method operates. */
+export type DefenseExecutionStage =
+  | "content_scan"
+  | "prompt_construction"
+  | "tool_pre_call"
+  | "tool_post_call"
+  | "trajectory"
+  | "skill_admission"
+  | "model_training"
+  | "runtime_isolation"
+  | "memory_write";
+
+/** Public source used to derive or document a defense skill. */
+export interface DefenseReference {
+  title: string;
+  url: string;
+  year: number;
+}
+
 export interface AntibodyConfig {
   id: string;
   name: string;
   parent_id: string | null;
-  category: "injection" | "jailbreak" | "poisoning" | "exfiltration";
+  category:
+    | "injection"
+    | "jailbreak"
+    | "poisoning"
+    | "exfiltration"
+    | "unknown"
+    | "tool_misuse";
   tier: 0 | 1 | 2;
   threshold: number;
   description: string;
@@ -27,6 +55,14 @@ export interface AntibodyConfig {
   prompt: string;
   /** detector = participates in content scanning; non_detector = other role. */
   role: AntibodyRole;
+  /** active runs by default; experimental/reference entries stay inert. */
+  implementation_status: DefenseImplementationStatus;
+  /** Integration points required by the method. */
+  execution_stages: DefenseExecutionStage[];
+  /** Auditable paper or specification sources. */
+  references: DefenseReference[];
+  /** Capabilities still required for a faithful implementation. */
+  runtime_requirements: string[];
   affinity_score: number;
   created_at: string;
   generation: number;

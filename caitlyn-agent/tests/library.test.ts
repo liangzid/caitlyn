@@ -66,6 +66,10 @@ function makeAntibodyConfig(overrides: Partial<AntibodyConfig> = {}): AntibodyCo
     signatures: [],
     prompt: "",
     role: "detector",
+    implementation_status: "active",
+    execution_stages: ["content_scan"],
+    references: [],
+    runtime_requirements: [],
     stats: { total_scans: 0, true_positives: 0, false_positives: 0, avg_latency_us: 0 },
     ...overrides,
   };
@@ -106,6 +110,9 @@ describe("validateAntibodyConfig", () => {
     expect(config.tier).toBe(1);
     expect(config.prompt).toBe("");
     expect(config.role).toBe("detector");
+    expect(config.implementation_status).toBe("active");
+    expect(config.execution_stages).toEqual(["content_scan"]);
+    expect(config.references).toEqual([]);
   });
 
   it("parses prompt and role as first-class fields", () => {
@@ -152,6 +159,33 @@ describe("validateAntibodyConfig", () => {
     expect(nonDetector.role).toBe("non_detector");
 
     expect(() => validateAntibodyConfig({ ...raw, role: "watcher" })).toThrow("role");
+  });
+
+  it("parses defense maturity, execution stages, and references", () => {
+    const config = validateAntibodyConfig({
+      id: "ab-reference",
+      name: "Reference",
+      category: "tool_misuse",
+      tier: 2,
+      threshold: 0.6,
+      description: "Research reference",
+      role: "non_detector",
+      implementation_status: "reference",
+      execution_stages: ["tool_pre_call", "trajectory"],
+      references: [{ title: "Paper", url: "https://example.com/paper", year: 2026 }],
+      runtime_requirements: ["trusted user objective"],
+      affinity_score: 0,
+      created_at: "2026-08-28",
+      generation: 0,
+      stats: {},
+      deps: [],
+      signatures: [],
+    });
+
+    expect(config.implementation_status).toBe("reference");
+    expect(config.execution_stages).toEqual(["tool_pre_call", "trajectory"]);
+    expect(config.references[0]?.year).toBe(2026);
+    expect(config.runtime_requirements).toEqual(["trusted user objective"]);
   });
 
   it("rejects missing required fields", () => {
@@ -500,6 +534,10 @@ describe("saveAntibody round-trip", () => {
         tier: 1,
         prompt: "You are a detector.\nAnalyze carefully.",
         role: "detector",
+        implementation_status: "experimental",
+        execution_stages: ["content_scan"],
+        references: [{ title: "Source", url: "https://example.com", year: 2026 }],
+        runtime_requirements: ["evaluation"],
         signatures: [
           { pattern: "ignore previous", type: "exact", label: "ignore" },
         ],
@@ -512,6 +550,10 @@ describe("saveAntibody round-trip", () => {
       const loaded = loadAntibodies().find((a) => a.config.id === "ab-roundtrip");
       expect(loaded?.config.prompt).toBe("You are a detector.\nAnalyze carefully.");
       expect(loaded?.config.role).toBe("detector");
+      expect(loaded?.config.implementation_status).toBe("experimental");
+      expect(loaded?.config.execution_stages).toEqual(["content_scan"]);
+      expect(loaded?.config.references[0]?.title).toBe("Source");
+      expect(loaded?.config.runtime_requirements).toEqual(["evaluation"]);
       expect(loaded?.config.signatures).toEqual([
         { pattern: "ignore previous", type: "exact", label: "ignore" },
       ]);
@@ -522,5 +564,37 @@ describe("saveAntibody round-trip", () => {
         process.env.CAITLYN_LIBRARY_DIR = prev;
       }
     }
+  });
+
+  it("accepts a documented reference skill without runtime artifacts", () => {
+    const reference = makeAntibodyEntry({
+      id: "ab-paper",
+      role: "non_detector",
+      tier: 2,
+      implementation_status: "reference",
+      execution_stages: ["runtime_isolation"],
+      references: [{ title: "Paper", url: "https://example.com/paper", year: 2026 }],
+      runtime_requirements: ["isolated runtime"],
+    });
+
+    expect(checkLibraryIntegrity([reference])).toEqual([]);
+  });
+
+  it("rejects undocumented or incomplete reference skills", () => {
+    const reference = makeAntibodyEntry({
+      id: "ab-paper",
+      role: "non_detector",
+      tier: 2,
+      implementation_status: "reference",
+      execution_stages: ["runtime_isolation"],
+      references: [],
+      runtime_requirements: [],
+    });
+    reference.readme = "";
+
+    const issues = checkLibraryIntegrity([reference]).join("\n");
+    expect(issues).toContain("missing or empty README.md");
+    expect(issues).toContain("reference skill without a source");
+    expect(issues).toContain("reference skill without runtime_requirements");
   });
 });

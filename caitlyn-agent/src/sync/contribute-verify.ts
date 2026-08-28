@@ -30,6 +30,22 @@ export async function verifyDefenseForContribute(
   const hasPrompt = entry.config.prompt.trim().length > 0;
   const hasSignatures = entry.config.signatures.length > 0;
 
+  if (!entry.readme.trim()) {
+    errors.push("missing or empty README.md");
+  }
+  if (entry.config.execution_stages.length === 0) {
+    errors.push("execution_stages must not be empty");
+  }
+  if (entry.config.implementation_status === "reference") {
+    if (entry.config.references.length === 0) {
+      errors.push("reference skill without a source");
+    }
+    if (entry.config.runtime_requirements.length === 0) {
+      errors.push("reference skill without runtime_requirements");
+    }
+    return { ok: errors.length === 0, errors };
+  }
+
   if (entry.config.role === "detector") {
     if (entry.config.tier === 0 && !hasScript && !hasSignatures) {
       errors.push("tier 0 detector without detect.ts or signatures");

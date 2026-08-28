@@ -32,6 +32,7 @@ export function coerceValue(raw: unknown): unknown {
   if (v === "true") return true;
   if (v === "false") return false;
   if (v === "null") return null;
+  if (v === "[]") return [];
   return v;
 }
 

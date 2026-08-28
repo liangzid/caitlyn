@@ -27,6 +27,9 @@ import type {
   AntibodyIndex,
   AntibodyStats,
   AntibodyRole,
+  DefenseExecutionStage,
+  DefenseImplementationStatus,
+  DefenseReference,
   Verdict,
 } from "./schema.js";
 
@@ -150,7 +153,20 @@ function normalizeConfig(raw: Record<string, unknown>): Record<string, unknown> 
 }
 // ── Config Validation ──────────────────────────────────────────────
 const VALID_CATEGORIES = ["injection", "jailbreak", "poisoning", "exfiltration", "unknown", "tool_misuse"] as const;
+const VALID_ANTIGEN_CATEGORIES = ["injection", "jailbreak", "poisoning", "exfiltration"] as const;
 const VALID_TIERS = [0, 1, 2] as const;
+const VALID_IMPLEMENTATION_STATUSES = ["active", "experimental", "reference"] as const;
+const VALID_EXECUTION_STAGES = [
+  "content_scan",
+  "prompt_construction",
+  "tool_pre_call",
+  "tool_post_call",
+  "trajectory",
+  "skill_admission",
+  "model_training",
+  "runtime_isolation",
+  "memory_write",
+] as const;
 
 function assertString(v: unknown, field: string): string {
   if (typeof v === "string") return v;
@@ -190,6 +206,17 @@ function assertCategory(v: unknown, field: string): AntibodyConfig["category"] {
   throw new Error(`Invalid ${field}: "${s}". Must be one of: ${VALID_CATEGORIES.join(", ")}`);
 }
 
+/** Validate the narrower attack-corpus category vocabulary. */
+function assertAntigenCategory(v: unknown, field: string): AntigenConfig["category"] {
+  const category = assertString(v, field).toLowerCase();
+  if ((VALID_ANTIGEN_CATEGORIES as readonly string[]).includes(category)) {
+    return category as AntigenConfig["category"];
+  }
+  throw new Error(
+    `Invalid ${field}: "${category}". Must be one of: ${VALID_ANTIGEN_CATEGORIES.join(", ")}`,
+  );
+}
+
 function assertTier(v: unknown): 0 | 1 | 2 {
   const n = assertNumber(v, "tier");
   if (n === 0 || n === 1 || n === 2) return n;
@@ -201,6 +228,51 @@ function assertRole(v: unknown): AntibodyRole {
   const s = String(v);
   if (s === "detector" || s === "non_detector") return s;
   throw new Error(`Invalid role: "${s}". Must be detector or non_detector.`);
+}
+
+/** Parse deployment status while keeping older library entries active. */
+function assertImplementationStatus(v: unknown): DefenseImplementationStatus {
+  if (v === undefined || v === null) return "active";
+  const status = String(v);
+  if ((VALID_IMPLEMENTATION_STATUSES as readonly string[]).includes(status)) {
+    return status as DefenseImplementationStatus;
+  }
+  throw new Error(
+    `Invalid implementation_status: "${status}". Must be one of: ${VALID_IMPLEMENTATION_STATUSES.join(", ")}`,
+  );
+}
+
+/** Parse and validate every declared runtime integration point. */
+function assertExecutionStages(v: unknown, role: AntibodyRole): DefenseExecutionStage[] {
+  if (v === undefined || v === null) {
+    return [role === "detector" ? "content_scan" : "prompt_construction"];
+  }
+  const stages = assertStringArray(v);
+  for (const stage of stages) {
+    if (!(VALID_EXECUTION_STAGES as readonly string[]).includes(stage)) {
+      throw new Error(
+        `Invalid execution stage: "${stage}". Must be one of: ${VALID_EXECUTION_STAGES.join(", ")}`,
+      );
+    }
+  }
+  return stages as DefenseExecutionStage[];
+}
+
+/** Parse structured paper references without accepting incomplete citations. */
+function assertDefenseReferences(v: unknown): DefenseReference[] {
+  if (v === undefined || v === null) return [];
+  if (!Array.isArray(v)) throw new Error("Expected references to be a list");
+  return v.map((item, index) => {
+    if (item === null || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error(`Invalid reference at index ${index}`);
+    }
+    const ref = item as Record<string, unknown>;
+    return {
+      title: assertString(ref.title, `references[${index}].title`),
+      url: assertString(ref.url, `references[${index}].url`),
+      year: assertNumber(ref.year, `references[${index}].year`),
+    };
+  });
 }
 
 function defaultStats(raw: unknown): AntibodyStats {
@@ -221,6 +293,7 @@ function defaultStats(raw: unknown): AntibodyStats {
  * Throws descriptive errors for missing or invalid required fields.
  */
 export function validateAntibodyConfig(raw: Record<string, unknown>): AntibodyConfig {
+  const role = assertRole(raw.role);
   return {
     id: assertString(raw.id, "id"),
     name: assertString(raw.name, "name"),
@@ -232,7 +305,11 @@ export function validateAntibodyConfig(raw: Record<string, unknown>): AntibodyCo
     // The prompt is the executable knowledge for Tier 1/2 antibodies.
     // Keep it first-class so saves never drop it (this was previously dead data).
     prompt: typeof raw.prompt === "string" ? raw.prompt : "",
-    role: assertRole(raw.role),
+    role,
+    implementation_status: assertImplementationStatus(raw.implementation_status),
+    execution_stages: assertExecutionStages(raw.execution_stages, role),
+    references: assertDefenseReferences(raw.references),
+    runtime_requirements: assertStringArray(raw.runtime_requirements),
     affinity_score: typeof raw.affinity_score === "number" ? raw.affinity_score : 0,
     created_at: assertString(raw.created_at, "created_at"),
     generation: typeof raw.generation === "number" ? raw.generation : 0,
@@ -250,7 +327,7 @@ export function validateAntigenConfig(raw: Record<string, unknown>): AntigenConf
   return {
     id: assertString(raw.id, "id"),
     name: assertString(raw.name, "name"),
-    category: assertCategory(raw.category, "category"),
+    category: assertAntigenCategory(raw.category, "category"),
     injection_point: assertString(raw.injection_point, "injection_point"),
     target_agent: assertString(raw.target_agent, "target_agent"),
     attack_template: assertString(raw.attack_template, "attack_template"),
@@ -347,6 +424,12 @@ export function loadAntibodies(): AntibodyEntry[] {
       byId.set(ab.config.id, ab);
     }
     for (const ab of loadAntibodiesFromDir(antibodiesDir())) {
+      // Stats-only copy-on-write overrides created by older versions may not
+      // contain documentation. Preserve the shipped README for that case.
+      const shipped = byId.get(ab.config.id);
+      if (!ab.readme.trim() && shipped?.readme.trim()) {
+        ab.readme = shipped.readme;
+      }
       byId.set(ab.config.id, ab);
     }
     entries = [...byId.values()];
@@ -406,10 +489,21 @@ export function saveAntibody(entry: AntibodyEntry): void {
       for (const [sk, sv] of Object.entries(entry.config.stats)) {
         configLines.push(`  ${sk}: ${sv}`);
       }
-    } else if (key === "deps") {
-      configLines.push("deps:");
-      for (const d of entry.config.deps) {
+    } else if (key === "deps" || key === "execution_stages" || key === "runtime_requirements") {
+      configLines.push(`${key}:`);
+      for (const d of value as string[]) {
         configLines.push(`  - ${yamlEscape(d)}`);
+      }
+    } else if (key === "references") {
+      if (entry.config.references.length === 0) {
+        configLines.push("references: []");
+        continue;
+      }
+      configLines.push("references:");
+      for (const ref of entry.config.references) {
+        configLines.push(`  - title: ${yamlEscape(ref.title)}`);
+        configLines.push(`    url: ${yamlEscape(ref.url)}`);
+        configLines.push(`    year: ${ref.year}`);
       }
     } else if (key === "signatures") {
       // Signatures are objects; serialize as a YAML list so the config
@@ -655,6 +749,28 @@ export function checkLibraryIntegrity(entries: AntibodyEntry[]): string[] {
     const hasScript = Boolean(ab.scriptPath);
     const hasPrompt = ab.config.prompt.trim().length > 0;
     const hasSignatures = ab.config.signatures.length > 0;
+
+    if (!ab.readme.trim()) {
+      issues.push(`${ab.config.id}: missing or empty README.md`);
+    }
+    if (ab.config.execution_stages.length === 0) {
+      issues.push(`${ab.config.id}: execution_stages must not be empty`);
+    }
+    for (const ref of ab.config.references) {
+      if (!/^https:\/\//.test(ref.url)) {
+        issues.push(`${ab.config.id}: reference URL must use HTTPS (${ref.url})`);
+      }
+    }
+
+    if (ab.config.implementation_status === "reference") {
+      if (ab.config.references.length === 0) {
+        issues.push(`${ab.config.id}: reference skill without a source`);
+      }
+      if (ab.config.runtime_requirements.length === 0) {
+        issues.push(`${ab.config.id}: reference skill without runtime_requirements`);
+      }
+      continue;
+    }
 
     // Every signature in the library must compile, even for non-detector
     // roles: they are still consumed by the evolution pipeline as context.

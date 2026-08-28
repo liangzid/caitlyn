@@ -388,7 +388,10 @@ export async function runTier0(
   timeoutMs: number = 500,
 ): Promise<{ results: ScriptResult[]; malicious: boolean }> {
   const tier0Antibodies = antibodies.filter(
-    (ab) => ab.config.tier === 0 && ab.config.role === "detector",
+    (ab) =>
+      ab.config.implementation_status === "active" &&
+      ab.config.tier === 0 &&
+      ab.config.role === "detector",
   );
 
   if (tier0Antibodies.length === 0) {
@@ -645,6 +648,7 @@ export function selectTier1Detectors(
   const idSet = ids ? new Set(ids) : null;
   return antibodies.filter(
     (ab) =>
+      ab.config.implementation_status === "active" &&
       ab.config.role === "detector" &&
       ab.config.tier > 0 &&
       ab.config.prompt.trim().length > 0 &&
@@ -815,6 +819,7 @@ export function selectMergedSkills(
 ): AntibodyEntry[] {
   return antibodies.filter(
     (ab) =>
+      ab.config.implementation_status === "active" &&
       ab.config.tier > 0 &&
       ab.config.prompt.trim().length > 0 &&
       (scope === "knowledge" || ab.config.role === "detector"),
