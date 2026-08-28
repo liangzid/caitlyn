@@ -13,7 +13,7 @@ import {
   getProviders,
   getModels,
 } from "@earendil-works/pi-ai/compat";
-import type { Model } from "@earendil-works/pi-ai";
+import type { KnownProvider, Model } from "@earendil-works/pi-ai";
 import type { CaitlynAgentConfig } from "./config.js";
 
 // Register all built-in providers once at module load so streamSimple
@@ -88,7 +88,7 @@ const AICODEMIRROR_RELAY_MODELS = new Set([
 ]);
 
 function makeRelayPassthroughModel(
-  provider: string,
+  provider: KnownProvider,
   modelId: string,
 ): Model<any> {
   // Clone a catalog template so context limits, reasoning flags, and
