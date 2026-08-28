@@ -1,0 +1,28 @@
+#+title: Library and Repository Cleanup
+#+date: 2026-08-28
+
+* Scope
+- Separate the shipped library from the writable user library.
+- Prepare the project for installation as the =caitlyn= npm package.
+- Back up the complete dirty worktree before selective commits.
+
+* Repository boundary
+- Commit source code, project documentation, configuration, and curated library metadata.
+- Do not commit raw data, evaluation outputs, evaluation-only code, or large generated files.
+- Preserve excluded worktree content without modifying or deleting it.
+
+* Completed units
+- =6b0db17=: separate shipped and user libraries.
+- =e128fcf=: refine nested regular-expression detection.
+- =2b1aa01=: add the audited library contribution workflow.
+- =2821e8c=: normalize curated defense metadata.
+- =847a407=: prepare npm distribution and installation checks.
+
+* Backup
+- Snapshot directory: =/home/zi/backups/caitlyn/20260828-161213=
+- Full archive: =dirty-files.tar.zst=
+- Each completed commit also has an independent compressed patch and SHA-256 checksum.
+
+* Remaining state
+- Modified and untracked =AgentEval= evaluation material remains local and excluded from commits.
+- npm registry publication requires an authenticated npm account.
