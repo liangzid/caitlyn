@@ -1,0 +1,35 @@
+id: "ab-tool-minimize"
+name: "Tool Argument Minimizer"
+parent_id: null
+category: "exfiltration"
+tier: 2
+threshold: 0.75
+description: "Experimental pre-call minimizer for removing unnecessary privacy-sensitive data from tool arguments"
+prompt: |
+  Given a trusted task objective, a tool schema, and proposed arguments,
+  retain only values necessary for the tool to complete the authorized task.
+  Prefer field removal, then generalization, substitution, or truncation.
+  Preserve schema validity. Flag any sensitive value whose necessity cannot be
+  justified from the objective and schema.
+role: "non_detector"
+implementation_status: "experimental"
+execution_stages:
+  - "tool_pre_call"
+references:
+  - title: "ToolMinimize: Auditing and Rewriting LLM Agent Tool Calls to Minimize Privacy Exposure"
+    url: "https://arxiv.org/abs/2608.24957"
+    year: 2026
+runtime_requirements:
+  - "tool input schema"
+  - "trusted user objective"
+  - "adapter support for rewritten arguments"
+affinity_score: 0
+created_at: "2026-08-28"
+generation: 0
+stats:
+  total_scans: 0
+  true_positives: 0
+  false_positives: 0
+  avg_latency_us: 0
+deps: []
+signatures: []

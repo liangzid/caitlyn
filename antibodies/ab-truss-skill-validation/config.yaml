@@ -1,0 +1,37 @@
+id: "ab-truss-skill-validation"
+name: "TRUSS Skill Validation Pipeline"
+parent_id: null
+category: "poisoning"
+tier: 2
+threshold: 0.8
+description: "Experimental admission pipeline for checking generated skill claims, artifacts, sandbox behavior, side effects, and provenance"
+prompt: |
+  Audit the complete candidate skill rather than its description alone. Check
+  functional claims against cited sources, inspect every instruction and
+  executable artifact, identify requested capabilities and side effects, and
+  define shadow-execution tests. Reject a candidate whose behavior cannot be
+  traced to its declared purpose or whose violations cannot be attributed to a
+  specific artifact for repair.
+role: "non_detector"
+implementation_status: "experimental"
+execution_stages:
+  - "skill_admission"
+  - "runtime_isolation"
+references:
+  - title: "TRUSS: Towards Task-Reliable and User-Safe Automated Agent Skill Generation"
+    url: "https://arxiv.org/abs/2608.17588"
+    year: 2026
+runtime_requirements:
+  - "complete skill artifact inspection"
+  - "brokered shadow-execution environment"
+  - "provenance-preserving execution traces"
+affinity_score: 0
+created_at: "2026-08-28"
+generation: 0
+stats:
+  total_scans: 0
+  true_positives: 0
+  false_positives: 0
+  avg_latency_us: 0
+deps: []
+signatures: []

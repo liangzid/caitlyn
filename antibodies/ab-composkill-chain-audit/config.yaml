@@ -1,0 +1,36 @@
+id: "ab-composkill-chain-audit"
+name: "CompoSkill Chain Auditor"
+parent_id: null
+category: "poisoning"
+tier: 2
+threshold: 0.75
+description: "Experimental path-level auditor for dangerous capability and data-flow compositions across individually accepted skills"
+prompt: |
+  Build a directed composition graph from installed skills. Nodes declare
+  inputs, outputs, capabilities, side effects, and trust boundaries. Reject a
+  path when individually permitted outputs can become another skill's unsafe
+  input, when capabilities combine into an undeclared effect, or when a bridge
+  skill transfers sensitive data or authority across trust domains.
+role: "non_detector"
+implementation_status: "experimental"
+execution_stages:
+  - "skill_admission"
+  - "trajectory"
+references:
+  - title: "CompoSkill: Compositional Skill Chain Attacks from Individually Scanner-Passing LLM Agent Skills"
+    url: "https://arxiv.org/abs/2608.16246"
+    year: 2026
+runtime_requirements:
+  - "machine-readable skill capabilities"
+  - "skill input-output dependency graph"
+  - "path-level composition policy"
+affinity_score: 0
+created_at: "2026-08-28"
+generation: 0
+stats:
+  total_scans: 0
+  true_positives: 0
+  false_positives: 0
+  avg_latency_us: 0
+deps: []
+signatures: []
