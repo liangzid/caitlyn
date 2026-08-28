@@ -53,29 +53,14 @@ improve the defense library for future requests.
 
 ## System overview
 
-```mermaid
-flowchart LR
-    A[External content] --> B[Tier 0<br/>Executable skills]
-    B -->|High-confidence hit| C[Block or quarantine]
-    B -->|Uncertain| D[Tier 1<br/>LLM classifier]
-    D --> E[Agent context]
-    D -->|Miss or anomaly| F[System II<br/>Synthesis loop]
-    F --> G[Deterministic verifier]
-    G --> H[Independent reviewer]
-    H --> I[Shadow or active skill]
-    I --> J[(Defense library)]
-    J --> B
-    J --> D
+<p align="center">
+  <img src="docs/assets/readme/caitlyn-framework.png" width="1100" alt="CAITLYN framework with the shared defense library, System I runtime enforcement, protected agent, and System II defense evolution">
+</p>
 
-    classDef source fill:#101922,stroke:#607d8b,color:#f4f7fa
-    classDef runtime fill:#102d2a,stroke:#20a387,color:#f4f7fa
-    classDef synthesis fill:#2b2038,stroke:#8b6fcf,color:#f4f7fa
-    classDef stop fill:#3b2025,stroke:#d45d68,color:#f4f7fa
-    class A,E source
-    class B,D,J runtime
-    class F,G,H,I synthesis
-    class C stop
-```
+System I mediates untrusted content before it enters a protected agent. System
+II observes counterexamples, synthesizes and validates new skills, and writes
+accepted skills back to the shared defense library. The figure is rendered
+from the framework PDF used by the current paper manuscript.
 
 ### System I: runtime defense
 
@@ -114,7 +99,8 @@ downloaded.
 
 The values below come from the current paper manuscript and the corresponding
 artifacts committed under `AgentEval/`. Detection-only and end-to-end
-experiments answer different questions and are reported separately.
+experiments answer different questions and are reported separately. All plots
+in this section are rendered from the PDF figures used by the manuscript.
 
 ### Detection-only System I
 
@@ -131,7 +117,14 @@ two-call configuration. Tier 0 alone runs at approximately 0.01 seconds with
 zero provider cost, but provides substantially lower coverage.
 
 <p align="center">
-  <img src="AgentEval/results/detection_paper_clean_20260820/figures/detection_roc_pr.png" width="900" alt="Detection ROC and precision-recall curves across four datasets">
+  <img src="docs/assets/readme/detection-roc-pr.png" width="1000" alt="Detection ROC and precision-recall curves across four datasets">
+</p>
+
+The latency and provider-cost trade-off is shown separately so that detection
+quality is not conflated with runtime overhead.
+
+<p align="center">
+  <img src="docs/assets/readme/detection-pareto.png" width="1000" alt="Detection true-positive rate compared with latency and provider cost across four datasets">
 </p>
 
 ### End-to-end agent protection
@@ -164,7 +157,7 @@ Hermes, a reduction of approximately 40 percentage points for every evaluated
 agent.
 
 <p align="center">
-  <img src="AgentEval/figures/emerging200_real_asr_comparison_panels.png" width="900" alt="End-to-end Emerging benchmark results before and after defense synthesis">
+  <img src="docs/assets/readme/emerging-e2e-asr.png" width="1000" alt="End-to-end Emerging benchmark results before and after defense synthesis">
 </p>
 
 ### Lifelong and adaptive evaluation
@@ -176,7 +169,7 @@ strict verifier, illustrating why the order and granularity of counterexamples
 matter.
 
 <p align="center">
-  <img src="AgentEval/results/lifelong_paper_20260822/figures/lifelong_sequential.png" width="720" alt="Lifelong synthesis across nine Emerging attack families">
+  <img src="docs/assets/readme/lifelong-sequential.png" width="720" alt="Lifelong synthesis across nine Emerging attack families">
 </p>
 
 A skill-aware attacker bypassed 38 of 113 previously blocked Emerging cases
