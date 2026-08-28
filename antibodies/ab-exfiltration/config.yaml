@@ -1,41 +1,43 @@
-id: ab-exfiltration
-name: Exfiltration Detector
-description: Detects attempts to extract credentials, system prompts, conversation history, or sensitive data from agent context, including email, URL/webhook, paste/gist, and tool-based exfiltration channels
-category: exfiltration
-role: detector
+id: "ab-exfiltration"
+name: "Exfiltration Detector"
+parent_id: null
+category: "exfiltration"
 tier: 0
 threshold: 0.6
+description: "Detects attempts to extract credentials, system prompts, conversation history, or sensitive data from agent context, including email, URL/webhook, paste/gist, and tool-based exfiltration channels"
+prompt: ""
+role: "detector"
+affinity_score: 0
 created_at: "2026-08-10"
 generation: 0
-affinity_score: 0.0
-deps: []
 stats:
   total_scans: 0
   true_positives: 0
   false_positives: 0
   avg_latency_us: 0
+deps:
 signatures:
-- pattern: "(send|email|forward|share|post|upload|submit)\\b.{0,120}\\b(credentials|secrets|passwords|private keys|session tokens|api keys|system prompt|conversation|transcript|full context|all messages|message history|environment variables|the summary|this summary|all data|logs|files)\\b.{0,120}\\S+@\\S+"
-  type: regex
-  label: exfil-email-secrets
-- pattern: "(send|share|post|upload|submit)\\b.{0,80}\\b(the link|it via a public link)\\b.{0,80}\\S+@\\S+"
-  type: regex
-  label: exfil-email-link
-- pattern: "(send|email|forward|share|post|upload|submit)\\b.{0,100}\\b(external|public|collector|backup|archive)\\b.{0,80}\\S+@\\S+"
-  type: regex
-  label: exfil-email-external
-- pattern: "(post|upload|send|push|submit).{0,80}https?://\\S+"
-  type: regex
-  label: exfil-url
-- pattern: "(output|include|print|reveal|dump|list|export).{0,60}(all|every|any).{0,20}(credentials|api keys|tokens|secrets|passwords|private keys|session tokens|environment variables|pii)"
-  type: regex
-  label: exfil-secrets
-- pattern: "(output|include|print|reveal|dump|share|export).{0,60}(system prompt|system instructions|your instructions|full context|conversation (history|transcript)|message history|hidden metadata)"
-  type: regex
-  label: exfil-context
-- pattern: "(create|use|post|share).{0,40}(gist|pastebin|public paste|webhook).{0,60}(public|external|link|url)"
-  type: regex
-  label: exfil-paste
-- pattern: "(send_message|upload_file|create_gist|pastebin|webhook|clipboard|screenshot|rsync|scp).{0,120}(public|external|attacker|collector|backup|@\\S+|https?://\\S+)"
-  type: regex
-  label: exfil-tool
+  - pattern: "(send|email|forward|share|post|upload|submit)\\b.{0,120}\\b(credentials|secrets|passwords|private keys|session tokens|api keys|system prompt|conversation|transcript|full context|all messages|message history|environment variables|the summary|this summary|all data|logs|files)\\b.{0,120}\\S+@\\S+"
+    type: "regex"
+    label: "exfil-email-secrets"
+  - pattern: "(send|share|post|upload|submit)\\b.{0,80}\\b(the link|it via a public link)\\b.{0,80}\\S+@\\S+"
+    type: "regex"
+    label: "exfil-email-link"
+  - pattern: "(send|email|forward|share|post|upload|submit)\\b.{0,100}\\b(external|public|collector|backup|archive)\\b.{0,80}\\S+@\\S+"
+    type: "regex"
+    label: "exfil-email-external"
+  - pattern: "(post|upload|send|push|submit).{0,80}https?://\\S+"
+    type: "regex"
+    label: "exfil-url"
+  - pattern: "(output|include|print|reveal|dump|list|export).{0,60}(all|every|any).{0,20}(credentials|api keys|tokens|secrets|passwords|private keys|session tokens|environment variables|pii)"
+    type: "regex"
+    label: "exfil-secrets"
+  - pattern: "(output|include|print|reveal|dump|share|export).{0,60}(system prompt|system instructions|your instructions|full context|conversation (history|transcript)|message history|hidden metadata)"
+    type: "regex"
+    label: "exfil-context"
+  - pattern: "(create|use|post|share).{0,40}(gist|pastebin|public paste|webhook).{0,60}(public|external|link|url)"
+    type: "regex"
+    label: "exfil-paste"
+  - pattern: "(send_message|upload_file|create_gist|pastebin|webhook|clipboard|screenshot|rsync|scp).{0,120}(public|external|attacker|collector|backup|@\\S+|https?://\\S+)"
+    type: "regex"
+    label: "exfil-tool"

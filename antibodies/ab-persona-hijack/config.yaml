@@ -1,37 +1,39 @@
-id: ab-persona-hijack
-name: Persona Hijack Detector
-description: Detects role-play jailbreaks that hijack the agent into unrestricted personas (DAN/STAN/EVIL-GPT/Loki/debug-mode variants), based on the dir-inj-a2 missed family
-category: jailbreak
-role: detector
+id: "ab-persona-hijack"
+name: "Persona Hijack Detector"
+parent_id: null
+category: "jailbreak"
 tier: 0
 threshold: 0.6
+description: "Detects role-play jailbreaks that hijack the agent into unrestricted personas (DAN/STAN/EVIL-GPT/Loki/debug-mode variants), based on the dir-inj-a2 missed family"
+prompt: ""
+role: "detector"
+affinity_score: 0
 created_at: "2026-08-11"
 generation: 0
-affinity_score: 0.0
-deps:
-  - "node"
-  - "tsx"
 stats:
   total_scans: 0
   true_positives: 0
   false_positives: 0
   avg_latency_us: 0
+deps:
+  - "node"
+  - "tsx"
 signatures:
-- pattern: "(you are now|you are|pretend( you are| you're)|act as( if)?|role-play as|assume the persona of|respond as)\\b[^.!?\\n]{0,80}\\b(DAN|STAN|EVIL-GPT|Uncle Frank|Loki|no restrictions|no refusal|uncensored|without alignment|bypass(ed|ing)? all|safety checks? (bypassed|disabled)|never refuses?|never follows? rules|unethical|elevated privileges|red-team|debug mode|parallel universe|push boundaries|no ethical)"
-  type: regex
-  label: persona-unsafe
-- pattern: "as (DAN|STAN|EVIL-GPT|Loki|Uncle Frank),"
-  type: regex
-  label: persona-as
-- pattern: "(EVIL-GPT|UnfilteredGPT|Uncle Frank|Dr\\.? Frankensteins)"
-  type: regex
-  label: persona-name
-- pattern: "in (debug|red-team simulation|test) mode[^.!?\\n]{0,60}(bypass|disable|guardrail)"
-  type: regex
-  label: mode-bypass
-- pattern: "(without|with no) (alignment|ethical constraints?|restrictions?|limitations?|censorship)"
-  type: regex
-  label: no-constraints
-- pattern: "never (refuses?|warns?|hesitates?)"
-  type: regex
-  label: never-refuse
+  - pattern: "(you are now|you are|pretend( you are| you're)|act as( if)?|role-play as|assume the persona of|respond as)\\b[^.!?\\\n]{0,80}\\b(DAN|STAN|EVIL-GPT|Uncle Frank|Loki|no restrictions|no refusal|uncensored|without alignment|bypass(ed|ing)? all|safety checks? (bypassed|disabled)|never refuses?|never follows? rules|unethical|elevated privileges|red-team|debug mode|parallel universe|push boundaries|no ethical)"
+    type: "regex"
+    label: "persona-unsafe"
+  - pattern: "as (DAN|STAN|EVIL-GPT|Loki|Uncle Frank),"
+    type: "regex"
+    label: "persona-as"
+  - pattern: "(EVIL-GPT|UnfilteredGPT|Uncle Frank|Dr\\.? Frankensteins)"
+    type: "regex"
+    label: "persona-name"
+  - pattern: "in (debug|red-team simulation|test) mode[^.!?\\\n]{0,60}(bypass|disable|guardrail)"
+    type: "regex"
+    label: "mode-bypass"
+  - pattern: "(without|with no) (alignment|ethical constraints?|restrictions?|limitations?|censorship)"
+    type: "regex"
+    label: "no-constraints"
+  - pattern: "never (refuses?|warns?|hesitates?)"
+    type: "regex"
+    label: "never-refuse"

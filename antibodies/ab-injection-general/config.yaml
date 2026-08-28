@@ -5,14 +5,16 @@ category: "injection"
 tier: 0
 threshold: 0.6
 description: "Fast-path heuristic/regex-based detection of prompt injection attacks. Detects instruction override attempts,"
+prompt: ""
+role: "detector"
 affinity_score: 0
 created_at: "2026-07-25"
 generation: 0
 stats:
-  total_scans: 29
-  true_positives: 29
+  total_scans: 0
+  true_positives: 0
   false_positives: 0
-  avg_latency_us: 82517.24137931035
+  avg_latency_us: 0
 deps:
   - "node"
   - "tsx"

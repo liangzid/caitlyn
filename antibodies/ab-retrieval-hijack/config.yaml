@@ -1,43 +1,45 @@
-id: ab-retrieval-hijack
-name: Retrieval Hijack and Authority Spoof Detector
-description: Detects poisoned retrieved content, fake policy/memo authority, and supply-chain manifests (SKILL.md, pip/npm packages, MCP manifests) that hijack agent behavior (ind-inj-b4/b5 families)
-category: poisoning
-role: detector
+id: "ab-retrieval-hijack"
+name: "Retrieval Hijack and Authority Spoof Detector"
+parent_id: null
+category: "poisoning"
 tier: 0
 threshold: 0.6
+description: "Detects poisoned retrieved content, fake policy/memo authority, and supply-chain manifests (SKILL.md, pip/npm packages, MCP manifests) that hijack agent behavior (ind-inj-b4/b5 families)"
+prompt: ""
+role: "detector"
+affinity_score: 0
 created_at: "2026-08-11"
 generation: 0
-affinity_score: 0.0
-deps:
-  - "node"
-  - "tsx"
 stats:
   total_scans: 0
   true_positives: 0
   false_positives: 0
   avg_latency_us: 0
+deps:
+  - "node"
+  - "tsx"
 signatures:
-- pattern: "(according to|per)\\s+(company policy|policy (update|memo)|retrieved (document|policy|chunk)|document chunk|knowledge base|memory (store|injection)|vector db|RAG|wikipedia|memo|note)\\b"
-  type: regex
-  label: fake-authority
-- pattern: "(retrieved|poisoned|malicious|compromised)\\s+(document|policy|chunk|entry|wikipedia|package|pip package|npm package|MCP server|skill)\\b"
-  type: regex
-  label: poisoned-source
-- pattern: "(forward|email|send|archive|upload)[^.!?\\n]{0,60}(security-audit|incident-response|external-consulting|external-service|compliance-archive|rapid-alert)"
-  type: regex
-  label: policy-exfil
-- pattern: "(SKILL\\.md|postinstall|setup\\.py|manifest|package\\.json)[^.!?\\n]{0,100}\\b(override|instead|execute|forward|disable|curl|bash|rm -rf|os\\.system)\\b"
-  type: regex
-  label: supply-chain
-- pattern: "system override"
-  type: exact
-  label: system-override
-- pattern: "(safety filter|guardrails?)[^.!?\\n]{0,40}(permissive|disabled)"
-  type: regex
-  label: filter-permissive
-- pattern: "(whitelist(ed)? domains?|verified partners?)[^.!?\\n]{0,80}(full data access|receive)"
-  type: regex
-  label: whitelist-spoof
-- pattern: "(superadmin privileges|disregard normal auth)"
-  type: regex
-  label: privilege-spoof
+  - pattern: "(according to|per)\\s+(company policy|policy (update|memo)|retrieved (document|policy|chunk)|document chunk|knowledge base|memory (store|injection)|vector db|RAG|wikipedia|memo|note)\\b"
+    type: "regex"
+    label: "fake-authority"
+  - pattern: "(retrieved|poisoned|malicious|compromised)\\s+(document|policy|chunk|entry|wikipedia|package|pip package|npm package|MCP server|skill)\\b"
+    type: "regex"
+    label: "poisoned-source"
+  - pattern: "(forward|email|send|archive|upload)[^.!?\\\n]{0,60}(security-audit|incident-response|external-consulting|external-service|compliance-archive|rapid-alert)"
+    type: "regex"
+    label: "policy-exfil"
+  - pattern: "(SKILL\\.md|postinstall|setup\\.py|manifest|package\\.json)[^.!?\\\n]{0,100}\\b(override|instead|execute|forward|disable|curl|bash|rm -rf|os\\.system)\\b"
+    type: "regex"
+    label: "supply-chain"
+  - pattern: "system override"
+    type: "exact"
+    label: "system-override"
+  - pattern: "(safety filter|guardrails?)[^.!?\\\n]{0,40}(permissive|disabled)"
+    type: "regex"
+    label: "filter-permissive"
+  - pattern: "(whitelist(ed)? domains?|verified partners?)[^.!?\\\n]{0,80}(full data access|receive)"
+    type: "regex"
+    label: "whitelist-spoof"
+  - pattern: "(superadmin privileges|disregard normal auth)"
+    type: "regex"
+    label: "privilege-spoof"

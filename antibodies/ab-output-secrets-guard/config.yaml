@@ -1,38 +1,40 @@
-id: ab-output-secrets-guard
-name: Output Secrets Guard
-description: Detects common secret formats (PEM private keys, AWS/OpenAI/GitHub/Google API keys, JWTs) and key=value credential pairs in content, matching ProtectAI LLM Guard Secrets scanner and OWASP LLM02 guidance
-category: exfiltration
-role: detector
+id: "ab-output-secrets-guard"
+name: "Output Secrets Guard"
+parent_id: null
+category: "exfiltration"
 tier: 0
 threshold: 0.6
+description: "Detects common secret formats (PEM private keys, AWS/OpenAI/GitHub/Google API keys, JWTs) and key=value credential pairs in content, matching ProtectAI LLM Guard Secrets scanner and OWASP LLM02 guidance"
+prompt: ""
+role: "detector"
+affinity_score: 0
 created_at: "2026-08-11"
 generation: 0
-affinity_score: 0.0
-deps: []
 stats:
   total_scans: 0
   true_positives: 0
   false_positives: 0
   avg_latency_us: 0
+deps:
 signatures:
-- pattern: "-----BEGIN (RSA |EC |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY-----"
-  type: regex
-  label: pem-private-key
-- pattern: "\\bAKIA[0-9A-Z]{16}\\b"
-  type: regex
-  label: aws-access-key
-- pattern: "\\bsk-[A-Za-z0-9_-]{20,}\\b"
-  type: regex
-  label: openai-api-key
-- pattern: "\\beyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\b"
-  type: regex
-  label: jwt
-- pattern: "\\bgh[pousr]_[A-Za-z0-9]{30,}\\b"
-  type: regex
-  label: github-token
-- pattern: "\\bAIza[0-9A-Za-z_-]{30,}\\b"
-  type: regex
-  label: google-api-key
-- pattern: "\\b(api[_-]?key|secret|password)\\b\\s*[=:]\\s*[\"']?[A-Za-z0-9_\\-@.]{16,}[\"']?"
-  type: regex
-  label: credential-pair
+  - pattern: "-----BEGIN (RSA |EC |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY-----"
+    type: "regex"
+    label: "pem-private-key"
+  - pattern: "\\bAKIA[0-9A-Z]{16}\\b"
+    type: "regex"
+    label: "aws-access-key"
+  - pattern: "\\bsk-[A-Za-z0-9_-]{20,}\\b"
+    type: "regex"
+    label: "openai-api-key"
+  - pattern: "\\beyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\b"
+    type: "regex"
+    label: "jwt"
+  - pattern: "\\bgh[pousr]_[A-Za-z0-9]{30,}\\b"
+    type: "regex"
+    label: "github-token"
+  - pattern: "\\bAIza[0-9A-Za-z_-]{30,}\\b"
+    type: "regex"
+    label: "google-api-key"
+  - pattern: "\\b(api[_-]?key|secret|password)\\b\\s*[=:]\\s*[\"']?[A-Za-z0-9_\\-@.]{16,}[\"']?"
+    type: "regex"
+    label: "credential-pair"
