@@ -26,6 +26,10 @@ describe("loadScanningConfig", () => {
       dir,
       [
         "[scanning]",
+        'tier1_mode = "merged"',
+        'merged_scope = "detectors"',
+        "skip_tier0 = true",
+        "skip_tier1 = false",
         'escalation_policy = "aggressive"',
         'fast_detector_ids = "ab-a, ab-b,ab-c"',
         "weak_signal_threshold = 0.5",
@@ -38,6 +42,10 @@ describe("loadScanningConfig", () => {
     );
 
     const cfg = loadScanningConfig(file);
+    expect(cfg.tier1Mode).toBe("merged");
+    expect(cfg.mergedScope).toBe("detectors");
+    expect(cfg.skipTier0).toBe(true);
+    expect(cfg.skipTier1).toBe(false);
     expect(cfg.policy).toBe("aggressive");
     expect(cfg.fastDetectorIds).toEqual(["ab-a", "ab-b", "ab-c"]);
     expect(cfg.weakSignalThreshold).toBe(0.5);
@@ -53,6 +61,8 @@ describe("loadScanningConfig", () => {
       dir,
       [
         "[scanning]",
+        'tier1_mode = "batch"',
+        'merged_scope = "everything"',
         'escalation_policy = "sometimes"',
         'source_trust = "root"',
         "weak_signal_threshold = -1",
@@ -61,6 +71,8 @@ describe("loadScanningConfig", () => {
     );
 
     const cfg = loadScanningConfig(file);
+    expect(cfg.tier1Mode).toBe(SCANNING_DEFAULTS.tier1Mode);
+    expect(cfg.mergedScope).toBe(SCANNING_DEFAULTS.mergedScope);
     expect(cfg.policy).toBe(SCANNING_DEFAULTS.policy);
     expect(cfg.sourceTrust).toBe(SCANNING_DEFAULTS.sourceTrust);
     expect(cfg.weakSignalThreshold).toBe(SCANNING_DEFAULTS.weakSignalThreshold);

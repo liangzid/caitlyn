@@ -19,6 +19,8 @@ export interface CaitlynAgentConfig {
 
 export type EscalationPolicy = "safe" | "aggressive" | "off";
 export type SourceTrust = "high" | "medium" | "low";
+export type ScanningTier1Mode = "ensemble" | "merged" | "merged-pair";
+export type ScanningMergedScope = "detectors" | "knowledge";
 
 /**
  * Configuration for the Tier 1 escalation gate.
@@ -30,6 +32,14 @@ export type SourceTrust = "high" | "medium" | "low";
  * off: always run the full ensemble (previous behavior, for sweeps).
  */
 export interface ScanningConfig {
+  /** Tier 1 execution schema used after Tier 0 passes. */
+  tier1Mode: ScanningTier1Mode;
+  /** Skill scope used by the single-call merged schema. */
+  mergedScope: ScanningMergedScope;
+  /** Disable local Tier 0 detectors. Intended for research/custom setups. */
+  skipTier0: boolean;
+  /** Disable LLM-backed Tier 1 detection. */
+  skipTier1: boolean;
   policy: EscalationPolicy;
   fastDetectorIds: string[];
   weakSignalThreshold: number;
@@ -42,6 +52,10 @@ export interface ScanningConfig {
 }
 
 export const SCANNING_DEFAULTS: ScanningConfig = {
+  tier1Mode: "ensemble",
+  mergedScope: "knowledge",
+  skipTier0: false,
+  skipTier1: false,
   policy: "safe",
   fastDetectorIds: [
     "ab-classifier-injection",
@@ -197,7 +211,23 @@ export function loadConfig(): CaitlynAgentConfig {
  * Find config.toml by searching cwd and its ancestors (like git).
  * Returns the path if found, or the default cwd path otherwise.
  */
-function findConfigUpward(): string {
+export function getUserConfigPath(): string {
+  const caitlynHome = process.env.CAITLYN_HOME?.trim();
+  const base = caitlynHome
+    ? path.resolve(caitlynHome)
+    : path.join(os.homedir(), ".caitlyn");
+  return path.join(base, "config.toml");
+}
+
+/**
+ * Resolve the active config using explicit, project, then user-level scope.
+ * An explicit CAITLYN_CONFIG path is returned even when it does not exist so
+ * setup and diagnostics agree on the intended destination.
+ */
+export function findConfigUpward(): string {
+  const explicit = process.env.CAITLYN_CONFIG?.trim();
+  if (explicit) return path.resolve(explicit);
+
   let dir = process.cwd();
   for (let i = 0; i < 10; i++) {
     const candidate = path.join(dir, "config.toml");
@@ -210,7 +240,7 @@ function findConfigUpward(): string {
     if (parent === dir) break;
     dir = parent;
   }
-  return path.join(process.cwd(), "config.toml");
+  return getUserConfigPath();
 }
 
 // ── Evolution Config Loading ───────────────────────────────────────
@@ -266,6 +296,15 @@ const ESCALATION_POLICY_VALUES: readonly EscalationPolicy[] = [
   "off",
 ];
 const SOURCE_TRUST_VALUES: readonly SourceTrust[] = ["high", "medium", "low"];
+const TIER1_MODE_VALUES: readonly ScanningTier1Mode[] = [
+  "ensemble",
+  "merged",
+  "merged-pair",
+];
+const MERGED_SCOPE_VALUES: readonly ScanningMergedScope[] = [
+  "detectors",
+  "knowledge",
+];
 
 function parseStringList(
   raw: Record<string, string>,
@@ -291,6 +330,10 @@ export function loadScanningConfig(configPath?: string): ScanningConfig {
   const raw = readTomlSection(resolved, "scanning");
   const cfg: ScanningConfig = { ...SCANNING_DEFAULTS };
 
+  cfg.tier1Mode = parseEnum(raw, "tier1_mode", TIER1_MODE_VALUES, cfg.tier1Mode);
+  cfg.mergedScope = parseEnum(raw, "merged_scope", MERGED_SCOPE_VALUES, cfg.mergedScope);
+  cfg.skipTier0 = parseBoolean(raw, "skip_tier0", cfg.skipTier0);
+  cfg.skipTier1 = parseBoolean(raw, "skip_tier1", cfg.skipTier1);
   cfg.policy = parseEnum(raw, "escalation_policy", ESCALATION_POLICY_VALUES, cfg.policy);
   cfg.fastDetectorIds = parseStringList(raw, "fast_detector_ids", cfg.fastDetectorIds);
   cfg.weakSignalThreshold = parseNonNegativeNumber(
