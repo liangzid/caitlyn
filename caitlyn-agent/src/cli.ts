@@ -35,6 +35,7 @@ import { getProviders, getModels, resolveModel } from "./llm.js";
 import { scan, type LlmCallFn } from "./scanner.js";
 import { hybridScan } from "./hybrid-scanner.js";
 import { getCredentialEnv } from "./config/credentials.js";
+import { createConfiguredLlmCall } from "./llm-runtime.js";
 import {
   loadAntibodies,
   loadAntigens,
@@ -65,22 +66,7 @@ const args = process.argv.slice(2);
 const command = args[0];
 
 async function makeLlmCall(): Promise<LlmCallFn> {
-  const config = loadConfig();
-  const model = resolveModel(config);
-  const credentialEnv = getCredentialEnv(config.provider);
-  return async (systemPrompt: string, userPrompt: string) => {
-    const ctx = {
-      systemPrompt,
-      messages: [
-        { role: "user" as const, content: [{ type: "text" as const, text: userPrompt }], timestamp: Date.now() },
-      ],
-    };
-    const response = await complete(model, ctx, credentialEnv ? { env: credentialEnv } : undefined);
-    const textBlocks = response.content.filter(
-      (c): c is { type: "text"; text: string } => c.type === "text",
-    );
-    return textBlocks.map((c) => c.text).join("");
-  };
+  return createConfiguredLlmCall();
 }
 
 /**

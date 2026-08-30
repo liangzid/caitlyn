@@ -18,32 +18,67 @@ import { getProviders } from "../llm.js";
 
 // ── Config ────────────────────────────────────────────────────────
 
-const CAITLYN_DIR = path.join(os.homedir(), ".caitlyn");
-const AUTH_FILE = path.join(CAITLYN_DIR, "auth.json");
-
 /** Provider id → environment variable names used for API keys. */
 const PROVIDER_ENV_VARS: Record<string, string[]> = {
+  "ant-ling": ["ANT_LING_API_KEY"],
   openrouter: ["OPENROUTER_API_KEY"],
   openai: ["OPENAI_API_KEY"],
-  anthropic: ["ANTHROPIC_API_KEY"],
+  anthropic: ["ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY"],
+  "azure-openai-responses": ["AZURE_OPENAI_API_KEY"],
   deepseek: ["DEEPSEEK_API_KEY"],
   groq: ["GROQ_API_KEY"],
-  google: ["GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY"],
+  google: ["GEMINI_API_KEY"],
+  "google-vertex": ["GOOGLE_CLOUD_API_KEY"],
   mistral: ["MISTRAL_API_KEY"],
-  cohere: ["CO_API_KEY"],
+  huggingface: ["HF_TOKEN"],
   together: ["TOGETHER_API_KEY"],
   fireworks: ["FIREWORKS_API_KEY"],
   xai: ["XAI_API_KEY"],
   cerebras: ["CEREBRAS_API_KEY"],
   moonshot: ["MOONSHOT_API_KEY"],
+  moonshotai: ["MOONSHOT_API_KEY"],
+  "moonshotai-cn": ["MOONSHOT_API_KEY"],
+  "kimi-coding": ["KIMI_API_KEY"],
   opencode: ["OPENCODE_API_KEY"],
+  "opencode-go": ["OPENCODE_API_KEY"],
   minimax: ["MINIMAX_API_KEY"],
+  "minimax-cn": ["MINIMAX_CN_API_KEY"],
   nvidia: ["NVIDIA_API_KEY"],
-  "cloudflare-workers-ai": ["CLOUDFLARE_API_TOKEN"],
-  "amazon-bedrock": ["AWS_ACCESS_KEY_ID"],
-  "github-copilot": ["COPILOT_GITHUB_TOKEN", "GITHUB_TOKEN"],
+  "cloudflare-workers-ai": ["CLOUDFLARE_API_KEY"],
+  "cloudflare-ai-gateway": ["CLOUDFLARE_API_KEY"],
+  "amazon-bedrock": ["AWS_BEARER_TOKEN_BEDROCK"],
+  "github-copilot": ["COPILOT_GITHUB_TOKEN"],
   "vercel-ai-gateway": ["AI_GATEWAY_API_KEY"],
+  zai: ["ZAI_API_KEY"],
+  "zai-coding-cn": ["ZAI_CODING_CN_API_KEY"],
+  xiaomi: ["XIAOMI_API_KEY"],
+  "xiaomi-token-plan-cn": ["XIAOMI_TOKEN_PLAN_CN_API_KEY"],
+  "xiaomi-token-plan-ams": ["XIAOMI_TOKEN_PLAN_AMS_API_KEY"],
+  "xiaomi-token-plan-sgp": ["XIAOMI_TOKEN_PLAN_SGP_API_KEY"],
 };
+
+/** Resolve the private CAITLYN credential store at call time. */
+export function getAuthFilePath(): string {
+  const configuredHome = process.env.CAITLYN_HOME?.trim();
+  const caitlynDir = configuredHome
+    ? path.resolve(configuredHome)
+    : path.join(os.homedir(), ".caitlyn");
+  return path.join(caitlynDir, "auth.json");
+}
+
+/** Return the recognized API-key environment variables for a provider. */
+export function getProviderEnvVars(provider: string): readonly string[] {
+  return PROVIDER_ENV_VARS[provider] ?? [];
+}
+
+/** Build an isolated environment override for a newly entered API key. */
+export function buildCredentialEnv(
+  provider: string,
+  apiKey: string,
+): Record<string, string> | undefined {
+  const envVar = getProviderEnvVars(provider)[0];
+  return envVar ? { [envVar]: apiKey } : undefined;
+}
 
 // ── Auth Store ────────────────────────────────────────────────────
 
@@ -58,9 +93,10 @@ interface AuthStore {
 }
 
 function readAuthStore(): AuthStore {
+  const authFile = getAuthFilePath();
   try {
-    if (!fs.existsSync(AUTH_FILE)) return { providers: {} };
-    const raw = fs.readFileSync(AUTH_FILE, "utf-8");
+    if (!fs.existsSync(authFile)) return { providers: {} };
+    const raw = fs.readFileSync(authFile, "utf-8");
     return JSON.parse(raw);
   } catch {
     return { providers: {} };
@@ -68,11 +104,17 @@ function readAuthStore(): AuthStore {
 }
 
 function writeAuthStore(store: AuthStore): void {
-  fs.mkdirSync(path.dirname(AUTH_FILE), { recursive: true });
-  fs.writeFileSync(AUTH_FILE, JSON.stringify(store, null, 2), {
+  const authFile = getAuthFilePath();
+  const authDir = path.dirname(authFile);
+  const temporary = `${authFile}.tmp-${process.pid}`;
+  fs.mkdirSync(authDir, { recursive: true, mode: 0o700 });
+  fs.chmodSync(authDir, 0o700);
+  fs.writeFileSync(temporary, JSON.stringify(store, null, 2), {
     encoding: "utf-8",
     mode: 0o600,
   });
+  fs.renameSync(temporary, authFile);
+  fs.chmodSync(authFile, 0o600);
 }
 
 /** Get a persisted API key for a provider. */
@@ -125,8 +167,7 @@ export function checkProviderAuth(provider: string): {
 
 /** Heuristic check for environment API key. */
 function hasEnvApiKey(provider: string): boolean {
-  const vars = PROVIDER_ENV_VARS[provider];
-  if (!vars) return false;
+  const vars = getProviderEnvVars(provider);
   return vars.some((v) => process.env[v]);
 }
 
@@ -138,8 +179,8 @@ function hasEnvApiKey(provider: string): boolean {
 export function getCredentialEnv(
   provider: string,
 ): Record<string, string> | undefined {
-  const vars = PROVIDER_ENV_VARS[provider];
-  if (!vars) return undefined;
+  const vars = getProviderEnvVars(provider);
+  if (vars.length === 0) return undefined;
   if (vars.some((v) => process.env[v])) return undefined;
   const key = getPersistedApiKey(provider);
   if (!key) return undefined;

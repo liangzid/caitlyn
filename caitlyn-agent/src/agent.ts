@@ -5,7 +5,7 @@
  */
 
 import { Agent } from "@earendil-works/pi-agent-core";
-import { streamSimple, complete } from "@earendil-works/pi-ai/compat";
+import { streamSimple } from "@earendil-works/pi-ai/compat";
 import { loadConfig, type CaitlynAgentConfig } from "./config.js";
 import { resolveModel } from "./llm.js";
 import { CAITLYN_SYSTEM_PROMPT } from "./system-prompt.js";
@@ -13,6 +13,7 @@ import { createCaitlynTools } from "./tools.js";
 import type { LlmCallFn } from "./scanner.js";
 import type { Model } from "@earendil-works/pi-ai";
 import { getCredentialEnv } from "./config/credentials.js";
+import { createConfiguredLlmCall } from "./llm-runtime.js";
 
 export interface CaitlynAgentContext {
   agent: Agent;
@@ -27,23 +28,7 @@ export async function createCaitlynAgent(): Promise<CaitlynAgentContext> {
   const credentialEnv = getCredentialEnv(config.provider);
   console.log(`🤖 LLM: ${model.provider}/${model.id}`);
 
-  const llmCall: LlmCallFn = async (systemPrompt: string, userPrompt: string) => {
-    const ctx = {
-      systemPrompt,
-      messages: [
-        {
-          role: "user" as const,
-          content: [{ type: "text" as const, text: userPrompt }],
-          timestamp: Date.now(),
-        },
-      ],
-    };
-    const response = await complete(model, ctx, credentialEnv ? { env: credentialEnv } : undefined);
-    const textBlocks = response.content.filter(
-      (c): c is { type: "text"; text: string } => c.type === "text",
-    );
-    return textBlocks.map((c) => c.text).join("");
-  };
+  const llmCall: LlmCallFn = createConfiguredLlmCall(config);
 
   const tools = createCaitlynTools(llmCall);
 
@@ -53,7 +38,13 @@ export async function createCaitlynAgent(): Promise<CaitlynAgentContext> {
       tools,
       model,
     },
-    streamFn: streamSimple,
+    streamFn: (selectedModel, context, options) => streamSimple(
+      selectedModel,
+      context,
+      credentialEnv
+        ? { ...options, env: { ...options?.env, ...credentialEnv } }
+        : options,
+    ),
   });
 
   return { agent, config, model, llmCall };
