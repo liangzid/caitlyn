@@ -29,6 +29,9 @@ import {
 import { createUnavailableLlmCall } from "./scanner.js";
 import { appendStatsEvent } from "./evolution/stats-events.js";
 import type { VerdictPolicy } from "./guard/types.js";
+import { loadGuardRuntimeConfig } from "./config.js";
+import { loadScanningConfig } from "./config.js";
+import { createConfiguredLlmCall } from "./llm-runtime.js";
 
 interface HookInput {
   tool: string;
@@ -42,9 +45,6 @@ interface HookOutput {
   action: "allow" | "block" | "flag";
   reason: string;
 }
-
-/** Scan payload cap for hook input (defense against huge outputs). */
-const MAX_SCAN_BYTES = 64 * 1024;
 
 /** Post hooks flag malicious output; they cannot block a finished tool. */
 const POST_VERDICT_POLICY: VerdictPolicy = {
@@ -103,16 +103,30 @@ export async function decideHook(input: HookInput): Promise<HookDecision> {
     return { output: { action: "allow", reason: "no scannable content" }, exitCode: 0 };
   }
 
+  const runtime = loadGuardRuntimeConfig();
+  const scanning = loadScanningConfig();
+  const verdictPolicy: VerdictPolicy = input.post === true
+    ? POST_VERDICT_POLICY
+    : {
+        benign: "allow",
+        suspicious: runtime.suspiciousAction,
+        malicious: runtime.maliciousAction,
+      };
   const engine = new AgentHooksEngine(
     {
       ...DEFAULT_AGENT_HOOKS_CONFIG,
-      enabled: true,
-      max_scan_bytes: MAX_SCAN_BYTES,
-      scan_timeout_ms: 2000,
-      hook_timeout_ms: 2000,
-      verdict_policy: input.post === true ? POST_VERDICT_POLICY : undefined,
+      enabled: runtime.enabled,
+      before_enabled: runtime.beforeEnabled,
+      after_enabled: runtime.afterEnabled,
+      max_scan_bytes: runtime.maxScanBytes,
+      scan_timeout_ms: runtime.hookTimeoutMs,
+      hook_timeout_ms: runtime.hookTimeoutMs,
+      on_error: runtime.onError,
+      verdict_policy: verdictPolicy,
     } as AgentHooksConfig,
-    createUnavailableLlmCall("hook-bin: no LLM configured"),
+    scanning.skipTier1
+      ? createUnavailableLlmCall("hook-bin: Tier 1 disabled")
+      : createConfiguredLlmCall(),
   );
   const decision = await engine.processHook({
     hookPoint: input.post === true ? "after" : "before",

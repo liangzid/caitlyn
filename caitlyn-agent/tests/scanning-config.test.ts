@@ -30,6 +30,7 @@ describe("loadScanningConfig", () => {
         'merged_scope = "detectors"',
         "skip_tier0 = true",
         "skip_tier1 = false",
+        "tier0_timeout_ms = 750",
         'escalation_policy = "aggressive"',
         'fast_detector_ids = "ab-a, ab-b,ab-c"',
         "weak_signal_threshold = 0.5",
@@ -46,6 +47,7 @@ describe("loadScanningConfig", () => {
     expect(cfg.mergedScope).toBe("detectors");
     expect(cfg.skipTier0).toBe(true);
     expect(cfg.skipTier1).toBe(false);
+    expect(cfg.tier0TimeoutMs).toBe(750);
     expect(cfg.policy).toBe("aggressive");
     expect(cfg.fastDetectorIds).toEqual(["ab-a", "ab-b", "ab-c"]);
     expect(cfg.weakSignalThreshold).toBe(0.5);

@@ -20,6 +20,7 @@ export interface HybridScanOptions {
   mergedScope?: MergedScope;
   skipTier0?: boolean;
   skipTier1?: boolean;
+  tier0TimeoutMs?: number;
   sourceTrust?: SourceTrust;
   highRisk?: boolean;
   escalationPolicy?: EscalationPolicy;
@@ -48,6 +49,7 @@ export async function hybridScan(options: HybridScanOptions): Promise<HybridScan
     mergedScope: options.mergedScope ?? scanning.mergedScope,
     skipTier0: options.skipTier0 ?? scanning.skipTier0,
     skipTier1: options.skipTier1 ?? scanning.skipTier1,
+    tier0TimeoutMs: options.tier0TimeoutMs ?? scanning.tier0TimeoutMs,
     sourceTrust: options.sourceTrust ?? scanning.sourceTrust,
     highRisk: options.highRisk ?? scanning.highRisk,
     escalationPolicy: options.escalationPolicy ?? scanning.policy,

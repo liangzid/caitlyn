@@ -71,6 +71,18 @@ describe("decideHook", () => {
     expect(config.verdict_policy?.malicious).toBe("flag");
   });
 
+  it("uses the configured default policy for before hooks", async () => {
+    engineMock.processHook.mockResolvedValue({ action: "allow", reason: "ok" });
+    await decideHook({ tool: "bash", content: "hello" });
+    const config = engineMock.constructorCalls[0] as {
+      verdict_policy?: { suspicious?: string; malicious?: string };
+    };
+    expect(config.verdict_policy).toMatchObject({
+      suspicious: "flag",
+      malicious: "block",
+    });
+  });
+
   it("maps allow to exit 0", async () => {
     engineMock.processHook.mockResolvedValue({ action: "allow", reason: "ok" });
     const d = await decideHook({ tool: "web_search", content: "weather forecast" });

@@ -40,6 +40,8 @@ export interface ScanningConfig {
   skipTier0: boolean;
   /** Disable LLM-backed Tier 1 detection. */
   skipTier1: boolean;
+  /** Per-detector Tier 0 execution timeout in milliseconds. */
+  tier0TimeoutMs: number;
   policy: EscalationPolicy;
   fastDetectorIds: string[];
   weakSignalThreshold: number;
@@ -56,6 +58,7 @@ export const SCANNING_DEFAULTS: ScanningConfig = {
   mergedScope: "knowledge",
   skipTier0: false,
   skipTier1: false,
+  tier0TimeoutMs: 500,
   policy: "safe",
   fastDetectorIds: [
     "ab-classifier-injection",
@@ -67,6 +70,34 @@ export const SCANNING_DEFAULTS: ScanningConfig = {
   highRisk: false,
   tier1TimeoutMs: 15_000,
   maxParallelTier1: 10,
+};
+
+// ── Guard Runtime Config ──────────────────────────────────────────
+
+export type GuardVerdictAction = "allow" | "flag" | "block";
+export type GuardErrorAction = "allow" | "block";
+
+/** Runtime policy applied by caitlyn-hook around Agent tool calls. */
+export interface GuardRuntimeConfig {
+  enabled: boolean;
+  beforeEnabled: boolean;
+  afterEnabled: boolean;
+  hookTimeoutMs: number;
+  maxScanBytes: number;
+  onError: GuardErrorAction;
+  suspiciousAction: GuardVerdictAction;
+  maliciousAction: GuardVerdictAction;
+}
+
+export const GUARD_RUNTIME_DEFAULTS: GuardRuntimeConfig = {
+  enabled: true,
+  beforeEnabled: true,
+  afterEnabled: true,
+  hookTimeoutMs: 5_000,
+  maxScanBytes: 64 * 1024,
+  onError: "allow",
+  suspiciousAction: "flag",
+  maliciousAction: "block",
 };
 
 // ── Evolution (Immune System 2) Config ─────────────────────────────
@@ -305,6 +336,8 @@ const MERGED_SCOPE_VALUES: readonly ScanningMergedScope[] = [
   "detectors",
   "knowledge",
 ];
+const GUARD_ACTION_VALUES: readonly GuardVerdictAction[] = ["allow", "flag", "block"];
+const GUARD_ERROR_ACTION_VALUES: readonly GuardErrorAction[] = ["allow", "block"];
 
 function parseStringList(
   raw: Record<string, string>,
@@ -334,6 +367,7 @@ export function loadScanningConfig(configPath?: string): ScanningConfig {
   cfg.mergedScope = parseEnum(raw, "merged_scope", MERGED_SCOPE_VALUES, cfg.mergedScope);
   cfg.skipTier0 = parseBoolean(raw, "skip_tier0", cfg.skipTier0);
   cfg.skipTier1 = parseBoolean(raw, "skip_tier1", cfg.skipTier1);
+  cfg.tier0TimeoutMs = parsePositiveNumber(raw, "tier0_timeout_ms", cfg.tier0TimeoutMs);
   cfg.policy = parseEnum(raw, "escalation_policy", ESCALATION_POLICY_VALUES, cfg.policy);
   cfg.fastDetectorIds = parseStringList(raw, "fast_detector_ids", cfg.fastDetectorIds);
   cfg.weakSignalThreshold = parseNonNegativeNumber(
@@ -345,6 +379,34 @@ export function loadScanningConfig(configPath?: string): ScanningConfig {
   cfg.highRisk = parseBoolean(raw, "high_risk", cfg.highRisk);
   cfg.tier1TimeoutMs = parsePositiveNumber(raw, "tier1_timeout_ms", cfg.tier1TimeoutMs);
   cfg.maxParallelTier1 = parsePositiveNumber(raw, "max_parallel_tier1", cfg.maxParallelTier1);
+
+  return cfg;
+}
+
+/** Load hook behavior from the [guard] TOML section. */
+export function loadGuardRuntimeConfig(configPath?: string): GuardRuntimeConfig {
+  const resolved = configPath ?? findConfigUpward();
+  const raw = readTomlSection(resolved, "guard");
+  const cfg: GuardRuntimeConfig = { ...GUARD_RUNTIME_DEFAULTS };
+
+  cfg.enabled = parseBoolean(raw, "enabled", cfg.enabled);
+  cfg.beforeEnabled = parseBoolean(raw, "before_enabled", cfg.beforeEnabled);
+  cfg.afterEnabled = parseBoolean(raw, "after_enabled", cfg.afterEnabled);
+  cfg.hookTimeoutMs = parsePositiveNumber(raw, "hook_timeout_ms", cfg.hookTimeoutMs);
+  cfg.maxScanBytes = parsePositiveNumber(raw, "max_scan_bytes", cfg.maxScanBytes);
+  cfg.onError = parseEnum(raw, "on_error", GUARD_ERROR_ACTION_VALUES, cfg.onError);
+  cfg.suspiciousAction = parseEnum(
+    raw,
+    "suspicious_action",
+    GUARD_ACTION_VALUES,
+    cfg.suspiciousAction,
+  );
+  cfg.maliciousAction = parseEnum(
+    raw,
+    "malicious_action",
+    GUARD_ACTION_VALUES,
+    cfg.maliciousAction,
+  );
 
   return cfg;
 }
