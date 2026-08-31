@@ -20,9 +20,10 @@
  *   caitlyn vaccinate --redteam [category]  Run the active red-team drill
  *   caitlyn update [--check] [--yes]        Check GitHub release / apply npm update
  *   caitlyn contribute                      Pack local library into library/incoming bundle
+ *   caitlyn setup [--config <path>] [--no-connection-test]
+ *                                           Guided provider, Agent, and detection setup
  */
 
-import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { createInterface } from "node:readline";
@@ -31,10 +32,9 @@ import type { Agent } from "@earendil-works/pi-agent-core";
 import { startRepl } from "./repl.js";
 import { CaitlynTUI } from "./caitlyn-tui.js";
 import { loadConfig } from "./config.js";
-import { getProviders, getModels, resolveModel } from "./llm.js";
+import { getProviders, getModels } from "./llm.js";
 import { scan, type LlmCallFn } from "./scanner.js";
 import { hybridScan } from "./hybrid-scanner.js";
-import { getCredentialEnv } from "./config/credentials.js";
 import { createConfiguredLlmCall } from "./llm-runtime.js";
 import {
   loadAntibodies,
@@ -42,7 +42,6 @@ import {
   loadAntibodyIndex,
   buildAntibodyIndex,
 } from "./library.js";
-import { complete } from "@earendil-works/pi-ai/compat";
 import {
   getDashboard,
   getHistory,
@@ -61,6 +60,11 @@ import {
 } from "./commands/evolution.js";
 import { runUpdateCommand } from "./sync/update.js";
 import { runContributeCommand } from "./sync/contribute.js";
+import {
+  runSetupWizard,
+  SetupCancelledError,
+  TerminalSetupPrompts,
+} from "./setup/index.js";
 
 const args = process.argv.slice(2);
 const command = args[0];
@@ -455,95 +459,30 @@ memory_limit = 10000
       process.exit(0);
     }
     case "setup": {
-      console.log("🛡️  CAITLYN First-Run Setup");
-      console.log("═══════════════════════════\n");
-
-      // Step 1: Check dependencies
-      console.log("1️⃣  Checking dependencies...");
-      const nodeOk = spawnSync("node", ["--version"], { stdio: "pipe" });
-      const tsxOk = spawnSync("tsx", ["--version"], { stdio: "pipe" });
-      console.log(`   node: ${nodeOk.status === 0 ? "✅ " + nodeOk.stdout.toString().trim() : "❌ not found"}`);
-      console.log(`   tsx:  ${tsxOk.status === 0 ? "✅ " + tsxOk.stdout.toString().trim() : "❌ not found (optional, for antibody scripts)"}`);
-
-      // Step 2: Show configured LLM providers
-      console.log("\n2️⃣  LLM Provider status:");
-      const envCheck = [
-        ["OPENROUTER_API_KEY", "OpenRouter"],
-        ["GROQ_API_KEY", "Groq"],
-        ["ANTHROPIC_API_KEY", "Anthropic"],
-        ["OPENAI_API_KEY", "OpenAI"],
-        ["DEEPSEEK_API_KEY", "DeepSeek"],
-      ];
-      let anyConfigured = false;
-      for (const [envVar, name] of envCheck) {
-        const status = process.env[envVar] ? "✅ configured" : "❌ not set";
-        if (process.env[envVar]) anyConfigured = true;
-        console.log(`   ${name}: ${status}`);
+      const prompts = new TerminalSetupPrompts();
+      const configIndex = args.indexOf("--config");
+      const configPath = configIndex >= 0 ? args[configIndex + 1] : undefined;
+      if (configIndex >= 0 && !configPath) {
+        prompts.close();
+        console.error("Usage: caitlyn setup [--config <path>] [--no-connection-test]");
+        process.exit(2);
       }
-      if (!anyConfigured) {
-        console.log("\n   ⚠️  No LLM API keys found in environment. Set one of the above variables.");
-        console.log("   Tier 0 (script-based) scanning will still work without an LLM.");
-      }
-
-      // Step 3: Test LLM connection
-      console.log("\n3️⃣  Testing LLM connection...");
       try {
-        const config = loadConfig();
-        const model = resolveModel(config);
-        const ctx = {
-          systemPrompt: "You are a test. Reply with exactly the word 'OK'.",
-          messages: [
-            { role: "user" as const, content: [{ type: "text" as const, text: "Ping" }], timestamp: Date.now() },
-          ],
-        };
-        const response = await Promise.race([
-          complete(model, ctx),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("LLM ping timed out after 15s")), 15_000),
-          ),
-        ]);
-        const text = response.content
-          .filter((c): c is { type: "text"; text: string } => c.type === "text")
-          .map((c) => c.text)
-          .join("");
-        console.log(`   LLM response: "${text.trim()}" ✅`);
-      } catch (err) {
-        console.log(`   ❌ LLM unavailable: ${err instanceof Error ? err.message : String(err)}`);
-        console.log("   Tier 0 scanning will still work.");
-      }
-
-      // Step 4: Show library stats
-      console.log("\n4️⃣  Library:");
-      const antibodies = loadAntibodies();
-      const antigens = loadAntigens();
-      console.log(`   Antibodies: ${antibodies.length}`);
-      console.log(`   Antigens:   ${antigens.length}`);
-
-      // Step 5: Offer config generation
-      console.log("\n5️⃣  Config file:");
-      const configPath = path.resolve("config.toml");
-      if (fs.existsSync(configPath)) {
-        console.log(`   ✅ config.toml already exists at ${configPath}`);
-      } else {
-        const rl = createInterface({ input: process.stdin, output: process.stdout });
-        const answer = await new Promise<string>((resolve) => {
-          rl.question("   Generate default config.toml? [Y/n]: ", (a) => { rl.close(); resolve(a.trim().toLowerCase()); });
+        await runSetupWizard(prompts, {
+          configPath,
+          skipConnectionTest: args.includes("--no-connection-test"),
         });
-        if (answer === "" || answer === "y" || answer === "yes") {
-          const configContent = `# CAITLYN Agent Configuration
-provider = "openrouter"
-model = "deepseek/deepseek-chat"
-daemon_url = "http://127.0.0.1:9070"
-`;
-          fs.writeFileSync("config.toml", configContent, "utf-8");
-          console.log("✅ Generated config.toml");
-        } else {
-          console.log("   Skipped.");
+        prompts.close();
+        process.exit(0);
+      } catch (error) {
+        prompts.close();
+        if (error instanceof SetupCancelledError || (error instanceof Error && error.message.includes("not applied"))) {
+          console.log("Setup cancelled. No pending selections were applied.");
+          process.exit(0);
         }
+        console.error(`Setup failed: ${error instanceof Error ? error.message : String(error)}`);
+        process.exit(1);
       }
-
-      console.log("\n✅ Setup complete! Start with: caitlyn tui");
-      process.exit(0);
     }
     case "help":
     case "--help":
@@ -565,6 +504,8 @@ daemon_url = "http://127.0.0.1:9070"
       console.log("  uninstall [--dry-run] <a>  Remove CAITLYN hooks, restore backup");
       console.log("  providers                  List available LLM providers");
       console.log("  init                       Generate default config.toml");
+      console.log("  setup [--config p] [--no-connection-test]");
+      console.log("                             Guided provider, Agent, and detection setup");
       console.log("  vaccinate <pattern>        Submit vaccination pattern");
       console.log("  update [--check] [--yes]   Check GitHub release / npm update");
       console.log("  contribute                 Pack library into library/incoming bundle");

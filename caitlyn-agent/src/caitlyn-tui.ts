@@ -73,6 +73,11 @@ import {
   doLogin,
   showHelp,
 } from "./commands/handlers.js";
+import {
+  runSetupWizard,
+  SetupCancelledError,
+  TerminalSetupPrompts,
+} from "./setup/index.js";
 
 const noEmoji = process.env.CAITLYN_NO_EMOJI === "1";
 
@@ -723,6 +728,10 @@ export class CaitlynTUI {
         this.showSystemMessage("Settings: ~/.caitlyn/config.toml (edit manually)");
         break;
       }
+      case "/setup": {
+        await this.runGuidedSetup();
+        break;
+      }
 
       // ── Meta ────────────────────────────────────────────────
       case "/help": {
@@ -843,6 +852,36 @@ export class CaitlynTUI {
       antibodyCount: loadAntibodies().length,
     });
     this.footer.invalidate();
+  }
+
+  /** Pause the full-screen renderer and reuse the line-oriented setup flow. */
+  private async runGuidedSetup(): Promise<void> {
+    if (this.isResponding) {
+      this.showSystemMessage(`${C.yellow}Finish or abort the current response before setup.${C.reset}`);
+      return;
+    }
+
+    this.editor.disableSubmit = true;
+    this.tui.stop();
+    const prompts = new TerminalSetupPrompts();
+    let completionMessage = "Setup cancelled. No pending selections were applied.";
+    try {
+      const result = await runSetupWizard(prompts);
+      completionMessage =
+        `Setup saved to ${result.configPath}. Restart CAITLYN to load the new provider and model. ` +
+        "Detection policy changes are read from the saved configuration on subsequent scans.";
+    } catch (error) {
+      if (!(error instanceof SetupCancelledError)
+        && !(error instanceof Error && error.message.includes("not applied"))) {
+        completionMessage = `Setup failed: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    } finally {
+      prompts.close();
+      this.tui.start();
+      this.editor.disableSubmit = false;
+      this.tui.setFocus(this.editor);
+      this.showSystemMessage(completionMessage);
+    }
   }
 
   // ── Run / Stop ──────────────────────────────────────────────

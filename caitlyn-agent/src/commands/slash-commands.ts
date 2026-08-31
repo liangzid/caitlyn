@@ -179,6 +179,10 @@ export const CAITLYN_COMMANDS: CaitlynCommand[] = [
     name: "settings",
     description: "Open settings",
   },
+  {
+    name: "setup",
+    description: "Run guided provider, Agent, and detection setup",
+  },
 
   // ── Meta ────────────────────────────────────────────────────────
   {

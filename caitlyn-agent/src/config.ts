@@ -219,23 +219,33 @@ function readTomlSection(filePath: string, section: string): Record<string, stri
   return result;
 }
 
-export function loadConfig(): CaitlynAgentConfig {
+export function loadConfig(configPath?: string): CaitlynAgentConfig {
   // 1. Check environment variables first
   const provider = process.env.CAITLYN_PROVIDER;
   const model = process.env.CAITLYN_MODEL;
 
   // 2. Fall back to config.toml [llm] section — search cwd and ancestors
   if (!provider || !model) {
-    const configPath = findConfigUpward();
-    const llm = readTomlSection(configPath, "llm");
+    const resolvedConfigPath = configPath ?? findConfigUpward();
+    const llm = readTomlSection(resolvedConfigPath, "llm");
     return {
       provider: provider ?? llm["provider"] ?? "openrouter",
-      model: model ?? llm["model"] ?? "deepseek/deepseek-chat",
-      smallModel: llm["small_model"] ?? model ?? llm["model"] ?? "deepseek/deepseek-chat",
+      model: model ?? llm["model"] ?? "deepseek/deepseek-v4-flash",
+      smallModel: llm["small_model"] ?? model ?? llm["model"] ?? "deepseek/deepseek-v4-flash",
     };
   }
 
   return { provider, model, smallModel: model };
+}
+
+/** Load only the [llm] file values, ignoring environment overrides. */
+export function loadConfigFile(configPath: string): CaitlynAgentConfig {
+  const llm = readTomlSection(configPath, "llm");
+  return {
+    provider: llm["provider"] ?? "openrouter",
+    model: llm["model"] ?? "deepseek/deepseek-v4-flash",
+    smallModel: llm["small_model"] ?? llm["model"] ?? "deepseek/deepseek-v4-flash",
+  };
 }
 
 /**
