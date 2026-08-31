@@ -1,0 +1,23 @@
+#+title: CAITLYN 0.3.0 Release
+#+date: 2026-08-31
+
+* Scope
+- Ship the guided first-run setup for provider choice, API credentials,
+  detected Agent integrations, and detection depth.
+- Persist those choices only after final confirmation, then load them
+  through the existing runtime configuration readers.
+
+* Release boundary
+- Version: 0.3.0.
+- Existing evaluation outputs, datasets, and unrelated dirty files remain
+  outside the release commits.
+- Experimental and reference defenses remain disabled by default.
+
+* Required verification
+- [X] TypeScript check and complete test suite: 458 tests across 44 files.
+- [X] Guided setup unit tests: config merge, workflow, and non-TTY pipes.
+
+* Published artifacts
+- GitHub Release: to be filled after publication.
+- Publish workflow: to be filled after publication.
+- npm package: caitlyn@0.3.0.

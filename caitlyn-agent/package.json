@@ -1,6 +1,6 @@
 {
   "name": "caitlyn",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "CAITLYN Security Guardian Agent — interactive defense agent for LLM agent protection",
   "type": "module",
   "bin": {
