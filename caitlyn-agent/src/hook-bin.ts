@@ -29,8 +29,8 @@ import {
 import { createUnavailableLlmCall } from "./scanner.js";
 import { appendStatsEvent } from "./evolution/stats-events.js";
 import type { VerdictPolicy } from "./guard/types.js";
-import { loadGuardRuntimeConfig } from "./config.js";
-import { loadScanningConfig } from "./config.js";
+import { loadConfig, loadGuardRuntimeConfig, loadScanningConfig } from "./config.js";
+import { checkProviderAuth } from "./config/credentials.js";
 import { createConfiguredLlmCall } from "./llm-runtime.js";
 
 interface HookInput {
@@ -124,9 +124,7 @@ export async function decideHook(input: HookInput): Promise<HookDecision> {
       on_error: runtime.onError,
       verdict_policy: verdictPolicy,
     } as AgentHooksConfig,
-    scanning.skipTier1
-      ? createUnavailableLlmCall("hook-bin: Tier 1 disabled")
-      : createConfiguredLlmCall(),
+    createHookLlmCall(scanning.skipTier1),
   );
   const decision = await engine.processHook({
     hookPoint: input.post === true ? "after" : "before",
@@ -139,6 +137,21 @@ export async function decideHook(input: HookInput): Promise<HookDecision> {
     output: { action: decision.action, reason: decision.reason },
     exitCode: decision.action === "block" ? 1 : 0,
   };
+}
+
+/**
+ * Use a live LLM only when Tier 1 is enabled and credentials exist.
+ * KEYPOINT: empty operator homes must degrade to Tier 0 instead of treating
+ * an unauthenticated Tier 1 parse as suspicious.
+ */
+function createHookLlmCall(skipTier1: boolean): ReturnType<typeof createConfiguredLlmCall> {
+  if (skipTier1) return createUnavailableLlmCall("hook-bin: Tier 1 disabled");
+  const config = loadConfig();
+  const auth = checkProviderAuth(config.provider);
+  if (!auth.runtime && !auth.persisted && !auth.env) {
+    return createUnavailableLlmCall("hook-bin: no provider credentials");
+  }
+  return createConfiguredLlmCall(config);
 }
 
 function buildContent(input: HookInput): string {

@@ -100,13 +100,20 @@ function verifyInstalledPackage(installRoot, statsDirectory, expectedCounts) {
     throw new Error(`Installed CLI did not load the bundled library:\n${cliOutput}`);
   }
 
+  const isolatedHome = path.join(path.dirname(statsDirectory), "home");
+  fs.mkdirSync(isolatedHome, { recursive: true });
   const hookOutput = run(
     process.execPath,
     [path.join(installedRoot, "dist", "hook-bin.js")],
     {
       cwd: installRoot,
       input: JSON.stringify({ tool: "read_file", content: "ordinary project notes" }),
-      env: { ...process.env, CAITLYN_STATS_DIR: statsDirectory },
+      env: {
+        PATH: process.env.PATH,
+        HOME: isolatedHome,
+        CAITLYN_HOME: isolatedHome,
+        CAITLYN_STATS_DIR: statsDirectory,
+      },
     },
   );
   const hookDecision = JSON.parse(hookOutput);
