@@ -212,6 +212,10 @@ The global installation is recommended for the interactive terminal and agent
 hooks. The local installation is useful when an application imports the
 scanner API and pins CAITLYN in its own `package.json`.
 
+After installation, `caitlyn setup` walks through provider choice, API key
+entry, detected Agents, and detection depth. Nothing is written until the
+final confirmation. The same flow is available as `/setup` in the TUI.
+
 ### Build from source
 
 ```bash
@@ -311,6 +315,7 @@ Supported adapters currently include:
 | `./caitlyn dashboard` | Show runtime defense statistics |
 | `./caitlyn history [N]` | Show recent scan history |
 | `./caitlyn detect` | Detect supported agents on the machine |
+| `./caitlyn setup` | Guided provider, Agent, and detection setup |
 | `./caitlyn install <agent>` | Install an agent integration |
 | `./caitlyn uninstall <agent>` | Remove an integration and restore its backup |
 | `./caitlyn daemon start\|stop\|status` | Manage the local scanning daemon |

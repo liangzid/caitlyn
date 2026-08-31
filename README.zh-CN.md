@@ -156,6 +156,8 @@ npx caitlyn status
 
 全局安装适合使用交互式终端和智能体 hook。项目内安装适合通过程序调用扫描 API，并在自身的 `package.json` 中固定 CAITLYN 版本。
 
+安装完成后，`caitlyn setup` 会逐步询问 provider、API key、已检测到的智能体，以及 detection 深度。最终确认前不会写入配置。TUI 中的 `/setup` 使用同一流程。
+
 ### 从源码构建
 
 ```bash
@@ -241,6 +243,7 @@ export CAITLYN_MODEL="deepseek-v4-flash"
 | `./caitlyn dashboard` | 显示运行时防御统计 |
 | `./caitlyn history [N]` | 显示最近的扫描历史 |
 | `./caitlyn detect` | 检测本机受支持的智能体 |
+| `./caitlyn setup` | 引导配置 provider、智能体集成与 detection 层级 |
 | `./caitlyn install <agent>` | 安装智能体集成 |
 | `./caitlyn uninstall <agent>` | 移除集成并恢复备份 |
 | `./caitlyn daemon start\|stop\|status` | 管理本地扫描 daemon |

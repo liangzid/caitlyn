@@ -1,0 +1,17 @@
+* Guided setup wizard — continuation of Codex session 01a04730
+** Session recovered
+- Path: ~/.codex/sessions/2026/08/28/rollout-2026-08-28T15-05-56-01a04730-801c-7b10-bc2c-54d843853496.jsonl
+- Last user goal: implement flexible first-run TUI/CLI setup, test, then release from multiple commits
+- Codex stopped 2026-08-30 07:03Z with HTTP 429 while fixing piped readline EOF
+
+** Already on master before this continuation
+- 12c3647 feat(guard): load detailed detection policy
+- 4def45e fix(auth): share persisted provider credentials
+- c84b9a7 feat(config): persist detection execution mode
+
+** Completed in this continuation
+- Line-queue prompts for TTY and pipe
+- Setup tests including burst-pipe answers
+- Help, package README, and bilingual root README mention caitlyn setup
+- TypeScript check and 11 setup tests pass
+- Release 0.3.0 not published; waiting for 团长 to confirm commits and npm/GitHub release

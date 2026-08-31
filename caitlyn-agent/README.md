@@ -31,7 +31,15 @@ npx caitlyn status
 ```
 
 Tier 0 scanning works without an API key. Tier 1 and defense synthesis require
-a supported model provider, for example:
+a supported model provider. The guided setup writes provider, Agent, and
+detection settings only after a final confirmation:
+
+```bash
+caitlyn setup
+```
+
+`caitlyn setup --no-connection-test` skips the live API probe. `/setup` in the
+TUI runs the same flow. Alternatively, export a provider key:
 
 ```bash
 export OPENROUTER_API_KEY="your-key"
@@ -58,6 +66,7 @@ Pi Coding Agent. Configuration changes are backed up before installation.
 | `caitlyn scan <content>` | Scan content |
 | `caitlyn status` | Inspect the defense and attack libraries |
 | `caitlyn detect` | Detect supported agents |
+| `caitlyn setup` | Guided provider, Agent, and detection setup |
 | `caitlyn install <agent>` | Install an agent integration |
 | `caitlyn uninstall <agent>` | Remove an integration and restore its backup |
 | `caitlyn daemon start\|stop\|status` | Manage the local daemon |
