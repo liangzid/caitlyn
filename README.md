@@ -10,6 +10,7 @@ Agent-agnostic middleware that inspects untrusted content at runtime and turns
 new prompt-injection failures into verified, reusable defense skills.
 
 [Project website](https://xiaoyuxu1.github.io/Caitlyn-project/) ·
+[Preprint Paper](https://arxiv.org/abs/2608.27990) .
 [Quick start](#quick-start) ·
 [Evaluation](#evaluation) ·
 [中文说明](README.zh-CN.md)
