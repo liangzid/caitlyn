@@ -1,9 +1,0 @@
-{
-  "skipped": true,
-  "reason": "empty_must_detect",
-  "clusterId": "lifelong:operational_command",
-  "approved": [],
-  "rounds": 0,
-  "tokensUsed": 0,
-  "termination": "skipped"
-}

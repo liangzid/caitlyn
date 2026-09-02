@@ -10,3 +10,6 @@ caitlyn-agent/*.tgz
 cost_log.jsonl
 memory_bank.jsonl
 *~undo-tree~
+
+# AgentEval generated experiment outputs (regenerate locally; not versioned)
+AgentEval/results/
