@@ -1,0 +1,16 @@
+#+title: CAITLYN 0.3.1 Release
+#+date: 2026-09-02
+
+* Scope
+- Fix TUI startup logo right-border alignment with visibleWidth-based padding.
+- Add README callout for missing defense implementations and move paper credits
+  into an Acknowledgments section.
+- Stop tracking AgentEval generated results; ignore AgentEval/results/ locally.
+
+* Release boundary
+- Version: 0.3.1.
+- AgentEval experiment outputs remain regenerable artifacts outside git.
+
+* Published artifacts
+- GitHub Release: pending tag v0.3.1
+- npm package: caitlyn@0.3.1
