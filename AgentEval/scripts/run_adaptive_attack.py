@@ -52,6 +52,7 @@ from agent_eval.security.lifelong_dag import (
 )
 
 DEFAULT_EMERGING = REPO_ROOT / "valsets" / "emerging_challenge" / "emerging200.jsonl"
+# Full e2e JSON is generated under results/; CI uses tests/fixtures instead.
 DEFAULT_BEFORE = (
     AGENT_EVAL
     / "results"

@@ -25,11 +25,8 @@ from agent_eval.security.lifelong_dag import match_active_dag_signature
 
 ROOT = Path(__file__).resolve().parents[2]
 AGENT_EVAL = ROOT / "AgentEval"
-BEFORE = (
-    AGENT_EVAL
-    / "results"
-    / "emerging200_real_openclaw_caitlyn_evolved_after_pruned_promptfiltered.json"
-)
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+BEFORE = FIXTURES / "openclaw_evolved_e2e_summary.json"
 SKILLS = AGENT_EVAL / "paper_artifacts" / "emerging_benchmark" / "evolved_antibodies_nodes.json"
 EMERGING = ROOT / "valsets" / "emerging_challenge" / "emerging200.jsonl"
 

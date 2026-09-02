@@ -12,5 +12,6 @@
 - AgentEval experiment outputs remain regenerable artifacts outside git.
 
 * Published artifacts
-- GitHub Release: pending tag v0.3.1
-- npm package: caitlyn@0.3.1
+- GitHub Release: https://github.com/liangzid/caitlyn/releases/tag/v0.3.1
+- Publish workflow: https://github.com/liangzid/caitlyn/actions/runs/33582291610
+- npm package: caitlyn@0.3.1, with latest pointing to 0.3.1
