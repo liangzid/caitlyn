@@ -140,24 +140,25 @@ function buildLogo(): string {
   const total = artLines.length + 2 + 1 + LOGO_TAGLINES.length + 1 + 2; // art + spacers + taglines + rule
   let idx = 0;
   const vColor = () => gradColorAt(LOGO_RAMP, idx++ / (total - 1));
-  const line = (content: string, contentW: number) => {
+  const line = (content: string) => {
     const c = vColor();
+    const contentW = visibleWidth(content);
     return `${fg(c)}║${C.reset}${content}${fg(c)}${" ".repeat(Math.max(0, innerW - contentW))}║${C.reset}`;
   };
 
   const out: string[] = [];
   out.push(`${fg(gradColorAt(LOGO_RAMP, 0))}╔${C.reset}${gradLines("═".repeat(innerW), LOGO_RAMP, false)}${fg(gradColorAt(LOGO_RAMP, 0))}╗${C.reset}`);
   idx = 0;
-  out.push(line("", 0));
+  out.push(line(""));
   for (const a of artLines) {
-    out.push(line(` ${gradText(a, PAL.cyan, PAL.magenta, true)} `, artW + 2));
+    out.push(line(` ${gradText(a, PAL.cyan, PAL.magenta, true)} `));
   }
-  out.push(line("", 0));
+  out.push(line(""));
   out.push(`${fg(vColor())}╠${C.reset}${gradLines("═".repeat(innerW), LOGO_RAMP, false)}${fg(vColor())}╣${C.reset}`);
   for (const tag of LOGO_TAGLINES) {
-    out.push(line(` ${paint(tag.text, tag.color, undefined, false)} `, [...tag.text].length + 2));
+    out.push(line(` ${paint(tag.text, tag.color, undefined, false)} `));
   }
-  out.push(line(` ${expansion.content} `, expansion.width + 2));
+  out.push(line(` ${expansion.content} `));
   out.push(`${fg(gradColorAt(LOGO_RAMP, 1))}╚${C.reset}${gradLines("═".repeat(innerW), LOGO_RAMP, false)}${fg(gradColorAt(LOGO_RAMP, 1))}╝${C.reset}`);
   return out.join("\n");
 }
