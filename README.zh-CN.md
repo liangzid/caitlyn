@@ -27,6 +27,10 @@ CAITLYN 保护大语言模型智能体消费网页、文件、搜索结果、API
 
 本仓库包含可运行的 TypeScript 中间件、39 个防御技能条目、6 个攻击条目、终端界面、智能体集成、System II 合成引擎，以及论文实验使用的 Python 评测框架。
 
+## 帮助我们覆盖更多防御方法
+
+如果你从事智能体注入防御研究，而某项方法尚未被 CAITLYN 收录，请[提交 issue](https://github.com/liangzid/caitlyn/issues)，附上论文标题、发表场所、链接，以及对威胁模型与部署场景的简要说明。若你能提供参考实现、可复现代码或最小集成示例，将更有助于我们评估与集成。我们会审阅这些请求，并在方法符合运行时模型时将其纳入防御技能库。
+
 ## 为什么选择 CAITLYN
 
 静态规则速度快，但对变化后的攻击较为脆弱。完整的 LLM 判别器能够理解上下文，却会增加延迟和 token 成本。离线重训练也难以及时适应部署后出现的新攻击。CAITLYN 将这些职责拆分为两个相互协作的系统：
@@ -401,9 +405,22 @@ uv run pytest -q
 - 当前合成结果验证的是特定 Emerging 攻击家族，不能据此推断对所有未来注入技术的完整覆盖。
 - 仓库测试避免付费推理，因此不能取代配置真实模型服务与 Docker 的集成测试。
 
-## 引用工作
+## 引用
 
-下列外部工作被当前防御技能库或评测套件直接采用。`active` 表示 CAITLYN 会执行相应实现，或在运行时分类器中使用该方法的知识，但不代表完整复现了需要独立训练的模型或专用架构。`experimental` 与 `reference` 条目默认关闭，其含义见防御技能库章节。
+```bibtex
+@misc{liang2026caitlyn,
+  title  = {CAITLYN: Can LLM Agents Autonomously Synthesize Defenses against Emerging Injection Attacks?},
+  author = {Liang, Zi and Xu, Xiaoyu and Wang, Yanyun and Du, Minxin and Ye, Qingqing and Hu, Haibo},
+  year   = {2026},
+  note   = {Project paper}
+}
+```
+
+## 致谢
+
+我们感谢下列外部工作的作者。相关论文、基准与开源实现为本仓库中的防御技能与评测套件提供了重要参考。
+
+`active` 表示 CAITLYN 会执行相应实现，或在运行时分类器中使用该方法的知识，但不代表完整复现了需要独立训练的模型或专用架构。`experimental` 与 `reference` 条目默认关闭，其含义见防御技能库章节。
 
 ### Active 技能采用的防御基础
 
@@ -448,17 +465,6 @@ uv run pytest -q
 | SafeClawBench | 工具智能体语义与沙箱危害评测 | [arXiv:2606.18356](https://arxiv.org/abs/2606.18356) |
 | AgentDefense-Bench | Model Context Protocol 安全评测 | [代码仓库](https://github.com/arunsanna/AgentDefense-Bench) |
 | InjecAgent | 间接提示注入语料来源 | [Findings of ACL 2024](https://aclanthology.org/2024.findings-acl.624/) |
-
-## 引用
-
-```bibtex
-@misc{liang2026caitlyn,
-  title  = {CAITLYN: Can LLM Agents Autonomously Synthesize Defenses against Emerging Injection Attacks?},
-  author = {Liang, Zi and Xu, Xiaoyu and Wang, Yanyun and Du, Minxin and Ye, Qingqing and Hu, Haibo},
-  year   = {2026},
-  note   = {Project paper}
-}
-```
 
 ## 许可证
 
