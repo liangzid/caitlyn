@@ -35,6 +35,15 @@ entries, six attack entries, a terminal interface, agent integrations, the
 System II synthesis engine, and the Python evaluation framework used for the
 paper experiments.
 
+## Help us cover more defenses
+
+If you work on agent injection defenses and a method is not yet represented in
+CAITLYN, please [open an issue](https://github.com/liangzid/caitlyn/issues) with
+the paper title, venue, link, and a short description of the threat model and
+deployment context. Reference implementations, reproducible code, or a minimal
+integration sketch are especially helpful. We review such reports and integrate
+suitable methods into the defense library when they fit the runtime model.
+
 ## Why CAITLYN
 
 Static rules are fast but brittle. Full LLM judges understand context but add
@@ -504,14 +513,28 @@ and pull requests.
 - Repository tests avoid paid inference and therefore do not replace a live
   provider and Docker integration run.
 
-## Referenced work
+## Citation
 
-The following external work is directly represented by a shipped defense skill
-or by the evaluation suite. An `active` relation means that CAITLYN executes an
-implementation or includes the method as runtime classifier knowledge. It does
-not imply a complete reproduction of a separately trained model or architecture.
-`Experimental` and `reference` entries remain disabled by default, as described
-in the defense-library section.
+```bibtex
+@misc{liang2026caitlyn,
+  title  = {CAITLYN: Can LLM Agents Autonomously Synthesize Defenses against Emerging Injection Attacks?},
+  author = {Liang, Zi and Xu, Xiaoyu and Wang, Yanyun and Du, Minxin and Ye, Qingqing and Hu, Haibo},
+  year   = {2026},
+  note   = {Project paper}
+}
+```
+
+## Acknowledgments
+
+We thank the authors of the external work cited below. Their papers, benchmarks,
+and open implementations inform the shipped defense skills and the evaluation
+suite in this repository.
+
+An `active` relation means that CAITLYN executes an implementation or includes
+the method as runtime classifier knowledge. It does not imply a complete
+reproduction of a separately trained model or architecture. `Experimental` and
+`reference` entries remain disabled by default, as described in the defense-library
+section.
 
 ### Defense foundations used by active skills
 
@@ -556,17 +579,6 @@ in the defense-library section.
 | SafeClawBench | Tool-agent semantic and sandbox-harm evaluation | [arXiv:2606.18356](https://arxiv.org/abs/2606.18356) |
 | AgentDefense-Bench | Model Context Protocol security evaluation | [Repository](https://github.com/arunsanna/AgentDefense-Bench) |
 | InjecAgent | Indirect prompt-injection corpus source | [Findings of ACL 2024](https://aclanthology.org/2024.findings-acl.624/) |
-
-## Citation
-
-```bibtex
-@misc{liang2026caitlyn,
-  title  = {CAITLYN: Can LLM Agents Autonomously Synthesize Defenses against Emerging Injection Attacks?},
-  author = {Liang, Zi and Xu, Xiaoyu and Wang, Yanyun and Du, Minxin and Ye, Qingqing and Hu, Haibo},
-  year   = {2026},
-  note   = {Project paper}
-}
-```
 
 ## License
 
