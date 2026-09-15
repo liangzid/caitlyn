@@ -177,9 +177,10 @@ const OPENCLAW_PLUGIN_SOURCE = `/**
  * Registers before_tool_call/after_tool_call hooks. Delegates to caitlyn-hook.
  */
 import { spawnSync } from "node:child_process";
+const IS_WIN = process.platform === "win32";
 function scan(tool, content) {
   try {
-    const r = spawnSync("caitlyn-hook", [], { input: JSON.stringify({ tool, content }), timeout: 5000, encoding: "utf-8" });
+    const r = spawnSync("caitlyn-hook", [], { input: JSON.stringify({ tool, content }), timeout: 5000, encoding: "utf-8", shell: IS_WIN });
     if (r.error || r.status === null) return { action: "allow", reason: "hook unavailable" };
     const o = JSON.parse(r.stdout.trim());
     return { action: o.action, reason: o.reason || "scanned by CAITLYN" };

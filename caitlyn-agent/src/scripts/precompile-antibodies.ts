@@ -46,10 +46,13 @@ function precompileDir(dir: string): void {
       files: ["detect.ts"],
     }, null, 2), "utf-8");
 
-    const result = spawnSync(TSC, ["-p", tsconfig], {
+    // Windows: .bin/tsc is a sh script; the executable shim is tsc.cmd
+    const tscBin = process.platform === "win32" ? `${TSC}.cmd` : TSC;
+    const result = spawnSync(tscBin, ["-p", tsconfig], {
       cwd: dir,
       timeout: 30_000,
       env: { ...process.env },
+      shell: process.platform === "win32",
     });
 
     try { fs.unlinkSync(tsconfig); } catch { /* ok */ }
@@ -58,7 +61,7 @@ function precompileDir(dir: string): void {
       fs.renameSync(jsOut, mjsOut);
       console.log(`  ✅ ${path.relative(PROJECT_ROOT, fullPath)} → detect.mjs`);
     } else {
-      const err = result.stderr.toString().trim().slice(0, 300);
+      const err = (result.stderr ?? "").toString().trim().slice(0, 300);
       console.log(`  ⚠️  ${path.relative(PROJECT_ROOT, fullPath)} — ${err || `exit code ${result.status}`}`);
     }
   }
