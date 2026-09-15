@@ -21,6 +21,8 @@ function scanContent(tool: string, content: string): HookDecision {
       input,
       timeout: 5000,
       encoding: "utf-8",
+      // Windows cannot spawn .cmd shims without a shell (CVE-2024-27980).
+      shell: process.platform === "win32",
     });
     if (result.error || result.status === null) {
       return { action: "allow", reason: "hook binary unavailable" };
