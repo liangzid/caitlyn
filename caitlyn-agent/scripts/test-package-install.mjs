@@ -76,7 +76,7 @@ function verifyPackageContents(packResult) {
     }
   }
   const defenseSkillCount = [...paths].filter((filePath) =>
-    /^defenseSkills\/[^/]+\/config\.yaml$/.test(filePath),
+    /^skills\/[^/]+\/config\.yaml$/.test(filePath),
   ).length;
   const attackCount = [...paths].filter((filePath) =>
     /^attacks\/[^/]+\/config\.yaml$/.test(filePath),
