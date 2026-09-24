@@ -1,0 +1,11 @@
+#+title: CAITLYN 0.4.1 Release
+#+date: 2026-09-24
+
+* Scope
+- Fix template references that the rename left as the unbound name =skills=.
+- =tsc= now passes. v0.4.0 was tagged, but npm publish stopped at that type error.
+
+* Release boundary
+- Version: 0.4.1.
+- Git tag: v0.4.1.
+- GitHub Release: https://github.com/liangzid/caitlyn/releases/tag/v0.4.1
