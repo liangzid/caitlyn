@@ -298,7 +298,7 @@ async function main() {
       const defenseSkills = loadDefenseSkills();
       const attacks = loadAttacks();
       const index = loadDefenseSkillIndex() ?? buildDefenseSkillIndex(defenseSkills);
-      console.log(`🛡️  CAITLYN: ${skills.length} defense skills (${index.roots.length} roots), ${attacks.length} attacks`);
+      console.log(`🛡️  CAITLYN: ${defenseSkills.length} defense skills (${index.roots.length} roots), ${attacks.length} attacks`);
       for (const rootId of index.roots) {
         const ab = defenseSkills.find((a) => a.config.id === rootId);
         if (ab) console.log(`   📁 ${rootId} [${ab.config.category}] tier=${ab.config.tier}`);

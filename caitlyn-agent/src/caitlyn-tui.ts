@@ -918,7 +918,7 @@ export class CaitlynTUI {
     const agentChip = this.agent
       ? badge("● READY", PAL.ok, PAL.okBg)
       : badge("○ OFFLINE", PAL.warn, PAL.warnBg);
-    const abChip = badge(`${skills.length} Defense skills`, PAL.cyan, PAL.cyanBg);
+    const abChip = badge(`${defenseSkills.length} Defense skills`, PAL.cyan, PAL.cyanBg);
     const evoChip = badge("EVOLUTION ONLINE", PAL.violet, PAL.violetBg);
     const quote = randomDefenseQuote();
 

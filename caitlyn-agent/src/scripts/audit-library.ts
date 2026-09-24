@@ -21,6 +21,6 @@ if (issues.length > 0) {
 }
 
 console.log(
-  `✓ defense skill library integrity OK (${skills.length} defense skills, ` +
-    `${skills.filter((a) => a.config.role === "detector").length} detectors)`,
+  `✓ defense skill library integrity OK (${defenseSkills.length} defense skills, ` +
+    `${defenseSkills.filter((a) => a.config.role === "detector").length} detectors)`,
 );
