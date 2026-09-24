@@ -5,11 +5,11 @@
 * 项目概述
 
 CAITLYN (Continuous Agents for Injection Threats via Lifelong Yielding Nexus) 是一个面向 LLM Agent
-的、类生物免疫系统的自适应防御中间件。
+的、自适应防御系统的自适应防御中间件。
 
 核心定位：AI Agent 的"电脑管家" —— 保护计算机上所有运行中的 agent 免于注入
 (injection)、投毒(poisoning)、越狱(jailbreak)等攻击，并具备通过成本感知触发
-自主进化（vaccination）的能力。
+自主进化（synthesis）的能力。
 
 * 架构：单层 TypeScript
 
@@ -21,17 +21,17 @@ CAITLYN (Continuous Agents for Injection Threats via Lifelong Yielding Nexus) �
 系统分两层：
 
 1. *核心层* (caitlyn-agent/src/) —— 防御引擎 + 交互界面，全部 TypeScript
-   - 防御引擎：evolution/ (SHM, Affinity, Pipeline, CostMonitor, MemoryBank)
+   - 防御引擎：evolution/ (directed revision, Match score, Pipeline, CostMonitor, MemoryBank)
    - 扫描引擎：hybrid-scanner (Tier 0 脚本 + Tier 1 LLM)
    - 交互界面：TUI (pi-tui) + CLI + REPL
-   - 工具集：10 tools (scan, status, dashboard, history, vaccinate, 抗体/抗原管理等)
+   - 工具集：10 tools (scan, status, dashboard, history, synthesize, 防御技能/攻击管理等)
 2. *防护层* (caitlyn-guard) —— MCP Proxy / FS Watcher / Agent Hooks / Sandbox
    - 状态：未开发
 
 ** 为什么从 Rust 迁移到 TypeScript
 
 - 降低维护负担：两套语言 (Rust + TS) 意味着两套类型定义、两套测试、两套 build
-- 统一 evolution 引擎：原先 SHM/Affinity 在 Rust 中，但 LLM 调用和 prompt 构建在 TS 中更便捷
+- 统一 evolution 引擎：原先 directed revision/Match score 在 Rust 中，但 LLM 调用和 prompt 构建在 TS 中更便捷
 - 消除 daemon 依赖：caitlynd 作为独立进程增加了部署复杂度；现在 agent 直接内嵌所有能力
 - 迁移提交：e352889 (2026-07-27)
 
@@ -41,20 +41,20 @@ CAITLYN (Continuous Agents for Injection Threats via Lifelong Yielding Nexus) �
 
 | 模块                    | 实现 | 测试 | 备注                                  |
 |-------------------------+------+------+---------------------------------------|
-| 核心数据模型 (schema)   |  ✓  |  ✓  | Antibody, Antigen, Memory, Scan       |
+| 核心数据模型 (schema)   |  ✓  |  ✓  | Defense skill, Attack, Memory, Scan       |
 | AntibodyPool (library)  |  ✓  |  ✓  | 内存缓存 + 磁盘持久化 + 索引            |
 | MemoryBank              |  ✓  |  ✓  | exact/regex 签名匹配 (TS)              |
 | Hybrid Scanner          |  ✓  |  ✓  | Tier 0 (precompiled .mjs) + Tier 1 (LLM) |
-| CostMonitor             |  ✓  |  ✓  | pattern 追踪 + vaccination trigger    |
-| SHM Engine              |  ✓  |  ✓  | LLM 语义变异, adaptive temperature     |
+| CostMonitor             |  ✓  |  ✓  | pattern 追踪 + synthesis trigger    |
+| directed revision Engine              |  ✓  |  ✓  | LLM 语义变异, adaptive temperature     |
 | AffinityMaturation      |  ✓  |  ✓  | precision/recall 评分, must-detect     |
-| VaccinationPipeline     |  ✓  |  ✓  | SHM → Affinity → Selection → Persist  |
+| SynthesisPipeline     |  ✓  |  ✓  | directed revision → Match score → Selection → Persist  |
 | ValidationSet Loader    |  ✓  |  ✓  | JSONL attack/benign 样本加载          |
 | LLM Provider            |  ✓  |  -  | pi-ai (DeepSeek/OpenRouter, 可扩展)    |
 | 存储层 (SQLite)         |  ✓  |  -  | 5 tables + FTS5, YAML 持久化 (db 仍存在) |
 | 配置系统                |  ✓  |  -  | TOML + env vars                       |
-| Builtin Antibodies      |  ✓  |  -  | 20 antibodies in antibodies/           |
-| Antigens                |  ✓  |  -  | 6 antigens in antigens/               |
+| Builtin Defense skills      |  ✓  |  -  | 20 defense skills in skills/           |
+| Attacks                |  ✓  |  -  | 6 attacks in attacks/               |
 | Validation Dataset      |  ✓  |  ✓  | 23,616 attacks + 1,054 raw + 68 benign|
 | caitlyn-agent TUI       |  ✓  |  ✓  | Full-screen pi-tui + 10 tools         |
 | caitlyn-agent CLI/REPL  |  ✓  |  -  | CLI commands + REPL mode              |
@@ -66,52 +66,52 @@ CAITLYN (Continuous Agents for Injection Threats via Lifelong Yielding Nexus) �
 
 - 源文件：30 个 TypeScript 文件 (~6,450 行)
 - 9 个测试文件 (~3,500 行, 226 测试用例)
-- 20 个 antibody YAML 目录（含 config.yaml + detect.ts + README.md）
-- 6 个 antigen 目录
+- 20 个 defense skill YAML 目录（含 config.yaml + detect.ts + README.md）
+- 6 个 attack 目录
 - 验证集：24,738 条样本 (23,616 attacks + 1,054 raw payloads + 68 benign)
 - 知识库：24 篇标注论文 + 244 attack payloads (5 类)
 
 ** 实现细节
 
 *** schema.ts (~150 lines)
-- Antibody: 防御技能数据模型，包含 prompt/tier/threshold/stats/status
-- Antigen: 逃逸攻击样本
+- Defense skill: 防御技能数据模型，包含 prompt/tier/threshold/stats/status
+- Attack: 逃逸攻击样本
 - MemoryEntry: 快路径签名（exact/regex/semantic）
-- ScanResult: 扫描结果（verdict + confidence + antibody_results）
+- ScanResult: 扫描结果（verdict + confidence + defense_skill_results）
 - 枚举：DefenseTier (Specialized/General), AttackCategory, AntibodyStatus, Verdict
 
 *** library.ts (~450 lines)
 - AntibodyPool: 内存缓存 + 磁盘 YAML 持久化
 - 操作：add, remove, get, getActive, list, suppress, retire, activate, updateStats
-- 索引管理：buildAntibodyIndex, saveAntibodyIndex, loadAntibodyIndex
-- persistVaccinatedAntibody: vaccination 结果持久化
+- 索引管理：buildDefenseSkillIndex, saveDefenseSkillIndex, loadDefenseSkillIndex
+- persistSynthesizedDefenseSkill: synthesis 结果持久化
 
 *** evolution/memory-bank.ts (~200 lines)
 - MemoryBank: exact/regex 签名匹配
 - check(content): 遍历签名，命中即返回
-- 签名来源：antibody config.yaml 的 signatures 字段
+- 签名来源：defense skill config.yaml 的 signatures 字段
 
 *** evolution/cost-monitor.ts (~250 lines)
 - CostRecord: pattern_hash, call_count, total_latency/tokens, success/failure rate
-- shouldVaccinate: 检查 latency/token 阈值 + 最小样本数 + 成功率
+- shouldSynthesize: 检查 latency/token 阈值 + 最小样本数 + 成功率
 - computePatternHash: 归一化 → SHA256
 
 *** evolution/shm-engine.ts (~250 lines)
 - ShmEngine: adaptive temperature (0.3–0.95)
 - mutate(): LLM 生成 N 个语义变体
 - 8 种 mutation 操作（定义在 system prompt 中）
-- parseVariants: 从 LLM JSON 输出解析为 Antibody 结构
+- parseVariants: 从 LLM JSON 输出解析为 Defense skill 结构
 
-*** evolution/affinity.ts (~150 lines)
+*** evolution/match score.ts (~150 lines)
 - AffinityMaturation: 验证集评分
 - evaluate(must_detect, should_detect, must_not_detect)
 - 评分公式：recall × 0.7 + precision × 0.3 - FP_rate × 0.2
 - must_detect 硬约束：原始攻击未检出 → 直接淘汰
 
 *** evolution/pipeline.ts (~250 lines)
-- VaccinationPipeline: 编排 SHM → Affinity → Clonal Selection
-- vaccinate(pattern_hash): 完整接种流程
-- 结果自动持久化到抗体库
+- SynthesisPipeline: 编排 directed revision → Match score → candidate selection
+- synthesize(pattern_hash): 完整合成流程
+- 结果自动持久化到防御技能库
 
 *** evolution/validation-set.ts (~60 lines)
 - ValidationDataset: 从 JSONL 加载 must_detect/should_detect/must_not_detect
@@ -119,8 +119,8 @@ CAITLYN (Continuous Agents for Injection Threats via Lifelong Yielding Nexus) �
 
 *** hybrid-scanner.ts (~200 lines)
 - 纯本地扫描（Tier 0 + Tier 1），不再依赖 caitlynd daemon
-- Tier 0: 预编译 .mjs 脚本并行执行（precompile-antibodies.ts）
-- Tier 1: LLM antibody evaluation
+- Tier 0: 预编译 .mjs 脚本并行执行（precompile-skills.ts）
+- Tier 1: LLM defense skill evaluation
 - 结果聚合：weighted vote
 
 *** llm.ts / config.ts (~150 lines)
@@ -130,20 +130,20 @@ CAITLYN (Continuous Agents for Injection Threats via Lifelong Yielding Nexus) �
 
 *** caitlyn-tui.ts (~800 lines)
 - Full-screen TUI (pi-tui): header, chat view, input, status bar
-- 10 tools: scan, status, dashboard, history, list_antibodies, etc.
-- /vaccinate 斜杠命令（in-process pipeline）
+- 10 tools: scan, status, dashboard, history, list_defense_skills, etc.
+- /synthesize 斜杠命令（in-process pipeline）
 - Scrollable overlays, glass-morphism UI
 - Esc/Ctrl+C 优雅退出
 
 *** tools.ts (~450 lines)
 - 10 tool definitions registered with pi Agent harness
 - caitlyn_scan, caitlyn_status, caitlyn_dashboard, caitlyn_history
-- list_antibodies, get_antibody, add_antigen, evaluate_antibody
-- caitlyn_vaccinate (real pipeline integration)
+- list_defense_skills, get_defense_skill, add_attack, evaluate_defense_skill
+- caitlyn_synthesize (real pipeline integration)
 
 *** yaml-parser.ts (~200 lines)
 - 自研 YAML 解析器（已修复 multi-line strings, list-of-objects, 任意嵌套）
-- 用于解析 antibody config.yaml
+- 用于解析 defense skill config.yaml
 
 *** session/session-manager.ts (~480 lines)
 - Agent session 管理：消息持久化 (JSONL), compaction, context building
@@ -166,7 +166,7 @@ CAITLYN (Continuous Agents for Injection Threats via Lifelong Yielding Nexus) �
 |---+---------------------------+----------------------------+--------|
 | 1 | evolution/memory-bank     | memory-bank.test.ts        | 15     |
 | 2 | evolution/cost-monitor    | cost-monitor.test.ts       | 26     |
-| 3 | evolution (SHM/Aff/Pipe)  | evolution.test.ts          | 42     |
+| 3 | evolution (directed revision/Aff/Pipe)  | evolution.test.ts          | 42     |
 | 4 | scanner (hybrid)          | scanner.test.ts            | 24     |
 | 5 | library (AntibodyPool)    | library.test.ts            | 25     |
 | 6 | history                   | history.test.ts            | 21     |
@@ -181,10 +181,10 @@ CAITLYN (Continuous Agents for Injection Threats via Lifelong Yielding Nexus) �
 | # | 测试场景                           | 涉及模块                               |
 |---+------------------------------------+----------------------------------------|
 | 1 | 完整扫描流程 (memory hit)          | memory-bank + scanner                 |
-| 2 | 完整扫描流程 (antibody detection)  | library + scanner + llm (mock)        |
-| 3 | Vaccination 完整流程               | cost-monitor → pipeline → shm → affinity |
+| 2 | 完整扫描流程 (defense skill detection)  | library + scanner + llm (mock)        |
+| 3 | Synthesis 完整流程               | cost-monitor → pipeline → shm → match score |
 | 4 | 存储层持久化循环                   | library → YAML → reload               |
-| 5 | 抗体 suppress/retire/activate     | library + scanner                     |
+| 5 | 防御技能 suppress/retire/activate     | library + scanner                     |
 | 6 | 并发扫描                           | scanner + library (多线程)             |
 
 状态：未实现。
@@ -196,14 +196,14 @@ CAITLYN (Continuous Agents for Injection Threats via Lifelong Yielding Nexus) �
 研究问题 (RQs)：
 1. *检测率*：CAITLYN 对已知攻击模板的检出率 vs baselines
 2. *泛化能力*：CAITLYN 对未见过的攻击变体的检出率
-3. *成本降低*：接种前后 latency/token 对比（within-subject design）
+3. *成本降低*：合成前后 latency/token 对比（within-subject design）
 4. *误报率*：对 benign 样本的误报率
 
 Baselines（定义于 AgentEval/）：
 - Regex-Guard：纯正则匹配
 - LLM-Judge：单次 LLM 调用判定
 - LLM-Judge+Fewshot：带 few-shot examples
-- CAITLYN w/o Evolution：关闭进化，仅使用 builtin antibodies
+- CAITLYN w/o Evolution：关闭进化，仅使用 builtin defense skills
 - CAITLYN Full：完整系统
 
 测试数据集（已有）：
@@ -239,8 +239,8 @@ Baselines（定义于 AgentEval/）：
 1. *语言*：纯 TypeScript —— 2026-07-27 从 Rust+TS 双语言迁移为统一 TS
 2. *进化触发*：成本驱动（cost-based），非外部标签 —— 更真实、自治
 3. *部署*：Single-process agent（嵌入式），不再需要 daemon 进程
-4. *分层防御*：Tier 0 (memory/precompiled scripts) → Tier 1 (LLM antibodies)
-5. *Adaptive temperature*：SHM 温度根据接种成功率自适应
+4. *分层防御*：Tier 0 (memory/precompiled scripts) → Tier 1 (LLM defense skills)
+5. *Adaptive temperature*：directed revision 温度根据合成成功率自适应
 6. *交互层*：基于 pi-agent-core + pi-tui，非 fork pi coding-agent
 7. *评测框架*：AgentEval (Python)，Docker-based agent 调用 + Fake MCP Server
 

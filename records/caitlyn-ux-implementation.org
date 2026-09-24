@@ -7,7 +7,7 @@ All changes verified: TypeScript 0 errors, Rust 0 warnings, 26/26 tests pass.
 - Graceful LLM failure: scanner.ts Tier 1 wrapped in try/catch with Tier 0 fallback
 - TUI crash recovery: unhandledRejection + uncaughtException handlers show error banner
 - Input validation: empty/long content rejected in TUI and CLI
-- File system resilience: antibody/antigen directory missing → warn not crash; bad config → skip with warning
+- File system resilience: defense skill/attack directory missing → warn not crash; bad config → skip with warning
 
 ** P1 — Daemon UX (4/4)
 - Auto-detect daemon on TUI start with status indicators
@@ -28,7 +28,7 @@ All changes verified: TypeScript 0 errors, Rust 0 warnings, 26/26 tests pass.
 ** P3 — Better Error Messages (3/4)
 ✓ LLM error translation: 401→API key, 402→quota, 429→rate limit, connection→network, timeout→overloaded, 503→unavailable
 ✓ Missing dependency check at CLI startup
-✓ Config validation: antibody config type guards validate required fields
+✓ Config validation: defense skill config type guards validate required fields
 — Scan timeout enforcement (Tier 0 scripts already have 500ms timeout; overall scan timeout implicit)
 
 ** P4 — First-Run Experience (4/4)
@@ -38,15 +38,15 @@ All changes verified: TypeScript 0 errors, Rust 0 warnings, 26/26 tests pass.
 ✓ caitlyn init generates config.toml with comments
 
 ** P5 — Feature Gaps (6/6)
-✓ Antibody CRUD from TUI (/antibody list/add/remove)
-✓ Antigen view from TUI (/antigen <id>)
+✓ Defense skill CRUD from TUI (/defense-skill list/add/remove)
+✓ Attack view from TUI (/attack <id>)
 ✓ Export scan history (caitlyn history --export json)
 ✓ Clear history (caitlyn history --clear)
-✓ caitlyn vaccinate CLI
-✓ Vaccination from TUI (/vaccinate <pattern>)
+✓ caitlyn synthesize CLI
+✓ Synthesis from TUI (/synthesize <pattern>)
 
 ** P6 — Code Quality (6/6)
-✓ Replaced as unknown as AntibodyConfig casts with validateAntibodyConfig/AntigenConfig
+✓ Replaced as unknown as AntibodyConfig casts with validateDefenseSkillConfig/AntigenConfig
 ✓ Extracted parseYaml to yaml-parser.ts
 ✓ 26 unit tests for parseYaml and normalizeConfig
 ✓ Rust dead code fixed: 4 warnings resolved in mcp.rs
@@ -73,7 +73,7 @@ All changes verified: TypeScript 0 errors, Rust 0 warnings, 26/26 tests pass.
 Remaining P8 items are stretch-goal visual enhancements:
 - Color scheme palette, header bar, chat area styling, input area styling
 - Slash-command autocomplete, argument suggestions, context-sensitive help, history recall
-- Verdict reveal animation, vaccination progress animation, notification toasts
+- Verdict reveal animation, synthesis progress animation, notification toasts
 - Resize handling, overlay panels, split-pane mode
 
 ** Key Files Changed

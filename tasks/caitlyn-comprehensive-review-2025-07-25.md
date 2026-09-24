@@ -1,6 +1,6 @@
 # CAITLYN Comprehensive Code Review & TODO
 
-2025-07-25 — Full-system audit across TypeScript agent, Rust daemon, antibody/antigen library, YAML parser, TUI, eval framework.
+2025-07-25 — Full-system audit across TypeScript agent, Rust daemon, defense skill/attack library, YAML parser, TUI, eval framework.
 
 **Update 2026-07-28**: Rust → TypeScript 架构迁移后，所有 Rust issues (H7-H13) 自动解决。
 C1-C3, M1-M3, M10, H4 已修复。剩余 ~20 issues 待处理。
@@ -12,17 +12,17 @@ C1-C3, M1-M3, M10, H4 已修复。剩余 ~20 issues 待处理。
 
 **Fix applied**: Ctrl+C 先关闭 overlay，无 overlay 时调用 process.exit()。Esc 键退出 overlay。commit: 9bad5bf, dc2ac33.
 
-### C2. list_antibodies Shows Empty (index.json Poisoning) ✅ FIXED
+### C2. list_defense_skills Shows Empty (index.json Poisoning) ✅ FIXED
 
 **Files**: `caitlyn-agent/src/library.ts`, `caitlyn-agent/src/tools.ts`
 
 **Fix applied**: 启动时检查 index.roots.length === 0 → 自动 rebuild + persist。commit: 91c13e9.
 
-### C3. Antibody Index Never Persisted ✅ FIXED
+### C3. Defense skill Index Never Persisted ✅ FIXED
 
 **Files**: `caitlyn-agent/src/library.ts`
 
-**Fix applied**: saveAntibodyIndex() 现在在 build 时和 save 后自动调用。commit: 91c13e9.
+**Fix applied**: saveDefenseSkillIndex() 现在在 build 时和 save 后自动调用。commit: 91c13e9.
 
 ### C4. Scanner: `spawn()` Error Crashes Process
 
@@ -82,28 +82,28 @@ If the child process dies before `write()` completes, the error is silently swal
 ### M3. YAML Parser: Only 1 Nesting Level ✅ FIXED
 
 **Fix applied**: commit b0e0854 — 支持任意深度嵌套。
-### M4. Antibody Cache TTL = 5 Seconds
+### M4. Defense skill Cache TTL = 5 Seconds
 
 **File**: `caitlyn-agent/src/library.ts:175`
 
 The 5-second cache means:
-- If a vaccination creates a new antibody, it will not be visible for up to 5 seconds
+- If a synthesis creates a new defense skill, it will not be visible for up to 5 seconds
 - Every 5 seconds, the entire directory is re-scanned (O(n) `readdirSync` + `statSync` + `readFileSync`)
-- Cache is invalidated on `saveAntibody()` but NOT on external changes
+- Cache is invalidated on `saveDefenseSkill()` but NOT on external changes
 
 **Fix**: Increase TTL to 30-60s for production, or use `fs.watch` for directory monitoring.
 
-### M5. saveAntibody() Uses Wrong Antibodies Directory
+### M5. saveDefenseSkill() Uses Wrong Defense skills Directory
 
 **File**: `caitlyn-agent/src/tools.ts:415`
 
 ```ts
-const AB_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "antibodies");
+const AB_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "skills");
 ```
 
-When running from `dist/` (compiled), this resolves to `caitlyn-agent/antibodies/` — correct. But when running via `tsx` (dev mode), `import.meta.url` points to `src/tools.ts`, so this resolves to `caitlyn-agent/antibodies/` — also coincidentally correct. However, this is fragile: the `library.ts` already exports `ANTIBODIES_DIR` based on `PROJECT_ROOT`. The vaccination path should use the same constant.
+When running from `dist/` (compiled), this resolves to `caitlyn-agent/skills/` — correct. But when running via `tsx` (dev mode), `import.meta.url` points to `src/tools.ts`, so this resolves to `caitlyn-agent/skills/` — also coincidentally correct. However, this is fragile: the `library.ts` already exports `DEFENSE_SKILLS_DIR` based on `PROJECT_ROOT`. The synthesis path should use the same constant.
 
-**Also**: After saving, `saveAntibody()` invalidates `_cachedAntibodies` but does NOT rebuild/persist the antibody index. The new antibody is invisible in `list_antibodies` until the index is manually rebuilt.
+**Also**: After saving, `saveDefenseSkill()` invalidates `_cachedDefenseSkills` but does NOT rebuild/persist the defense skill index. The new defense skill is invisible in `list_defense_skills` until the index is manually rebuilt.
 
 ### M6. TUI stop() Called Twice Destroys State
 
@@ -138,32 +138,32 @@ Any I/O or parse error → returns `[]`. A corrupted `scan_history.json` file si
 
 ## 🟡 MODERATE: Half-Implemented & Performance
 
-### H1. caitlyn_vaccinate Tool: Requires Antibodies Dir Write Access
+### H1. caitlyn_synthesize Tool: Requires Defense skills Dir Write Access
 
 **File**: `caitlyn-agent/src/tools.ts:370-452`
 
-The tool generates an antibody variant via LLM and saves it. But:
+The tool generates a defense skill variant via LLM and saves it. But:
 - No validation that the generated detect logic is syntactically valid
-- No `detect.ts` script is generated — the antibody is Tier 1 only (`scriptPath: null`)
-- The persisted antibody has `affinity_score: 0` with no evaluation
+- No `detect.ts` script is generated — the defense skill is Tier 1 only (`scriptPath: null`)
+- The persisted defense skill has `match_score: 0` with no evaluation
 - Index is not rebuilt after save
 
-### H2. caitlyn_vaccinate Tool: No Evaluation Step
+### H2. caitlyn_synthesize Tool: No Evaluation Step
 
 **File**: `caitlyn-agent/src/tools.ts:370-452`
 
-The `caitlyn_vaccinate` tool generates a candidate but never evaluates it against antigens (TP/FP/FN). The `evaluate_antibody` tool exists but is separate. The vaccination flow should chain: generate → evaluate → report → save.
+The `caitlyn_synthesize` tool generates a candidate but never evaluates it against attacks (TP/FP/FN). The `evaluate_defense_skill` tool exists but is separate. The synthesis flow should chain: generate → evaluate → report → save.
 
 ### H3. Performance: Every Tool Call Reloads from Disk
 
 **File**: `caitlyn-agent/src/tools.ts:118-119`
 
-`caitlyn_scan` calls `loadAntibodies()` + `loadAntigens()` on every invocation. With 20+ antibodies, this means `readdirSync` + `statSync` × 20 + `readFileSync(config.yaml)` × 20 + `readFileSync(README.md)` × 20. With a 5-second cache, this happens at most once per 5 seconds, but it's still O(n) I/O per window.
+`caitlyn_scan` calls `loadDefenseSkills()` + `loadAttacks()` on every invocation. With 20+ defense skills, this means `readdirSync` + `statSync` × 20 + `readFileSync(config.yaml)` × 20 + `readFileSync(README.md)` × 20. With a 5-second cache, this happens at most once per 5 seconds, but it's still O(n) I/O per window.
 
 **Fix**: Use a file watcher or longer cache TTL. Pre-build the index at startup.
 ### H4. Performance: `npx tsx` Overhead ~500ms per Script ✅ FIXED
 
-**Fix applied**: commit 2d5a9de, 3d9dafb — detect.ts 预编译为 .mjs, scripts/precompile-antibodies.ts.
+**Fix applied**: commit 2d5a9de, 3d9dafb — detect.ts 预编译为 .mjs, scripts/precompile-skills.ts.
 
 
 ### H5. Scan Content Passed via stdin → OS Pipe Buffer Limit
@@ -181,7 +181,7 @@ Content is written to child process stdin. The pipe buffer is OS-limited (~64KB 
 `saveHistory()` rewrites the entire file on every scan log. With 1000+ entries, this is O(n) I/O per scan.
 
 **Fix**: Append-only JSONL format (one JSON object per line, same as sessions).
-### ~~H7. Rust: `vaccinate()` in lib.rs Not Actually Persisting~~ ✅ RESOLVED (Rust deleted)
+### ~~H7. Rust: `synthesize()` in lib.rs Not Actually Persisting~~ ✅ RESOLVED (Rust deleted)
 
 ~~**File**: `src/lib.rs:137-168`~~ — src/ 已删除。TS evolution/pipeline.ts 正确持久化。
 
@@ -207,7 +207,7 @@ Content is written to child process stdin. The pipe buffer is OS-limited (~64KB 
 
 ### ~~H13. Rust: Synchronous File I/O in Async Functions~~ ✅ RESOLVED (Rust deleted)
 
-~~**File**: `src/storage/antibody_store.rs:9-25`~~ — src/ 已删除。TS 中所有文件 I/O 为异步。
+~~**File**: `src/storage/defense_skill_store.rs:9-25`~~ — src/ 已删除。TS 中所有文件 I/O 为异步。
 
 ---
 
@@ -283,7 +283,7 @@ The `complete(model, ctx)` call has no timeout. If the API is unreachable, the s
 
 **File**: `caitlyn-agent/src/config.ts:12-17`
 
-The agent's `loadConfig()` only reads `CAITLYN_PROVIDER` and `CAITLYN_MODEL` env vars. The `config.toml` scanning/vaccination/memory settings are only read by the Rust daemon.
+The agent's `loadConfig()` only reads `CAITLYN_PROVIDER` and `CAITLYN_MODEL` env vars. The `config.toml` scanning/synthesis/memory settings are only read by the Rust daemon.
 
 ### P13. Rust: `config.rs` `gRPC_port` Field Defined but Unused
 
@@ -315,11 +315,11 @@ The `jsonrpc` field should be validated (must be `"2.0"`), not suppressed.
 
 `main()` returns `anyhow::Result` while the library uses `CaitlynResult`. The `anyhow::Error` → `CaitlynError` conversion exists but loses context.
 
-### P18. Agent Cannot Check Antigen Count Easily
+### P18. Agent Cannot Check Attack Count Easily
 
 **File**: `caitlyn-agent/src/tools.ts:157-178`
 
-`list_antigens` works but there's no `dashboard` integration for antigen stats. The TUI footer shows antibody count but not antigen count.
+`list_attacks` works but there's no `dashboard` integration for attack stats. The TUI footer shows defense skill count but not attack count.
 
 ---
 
@@ -341,7 +341,7 @@ The MCP testing uses a simplified mock, not the real `src/server/mcp.rs` impleme
 
 **File**: `tests/integration/`
 
-The directory exists but contains no tests. Cross-subsystem testing (agent + daemon, scanner + antibodies, vaccination end-to-end) is not covered.
+The directory exists but contains no tests. Cross-subsystem testing (agent + daemon, scanner + defense skills, synthesis end-to-end) is not covered.
 
 ---
 
@@ -362,14 +362,14 @@ The directory exists but contains no tests. Cross-subsystem testing (agent + dae
 
 | # | Issue | Symptom | Fix Complexity |
 |---|-------|---------|---------------|
-| 1 | **C2: index.json empty → antibodies invisible** | `list_antibodies` shows nothing | Trivial (1 line) |
+| 1 | **C2: index.json empty → defense skills invisible** | `list_defense_skills` shows nothing | Trivial (1 line) |
 | 2 | **C1: Agent cannot exit** | Process hangs after `/quit` | Small (3 lines) |
-| 3 | **C3: Index never persisted** | Antibodies disappear after restart | Small |
-| 4 | **M1: YAML multi-line truncated** | Antibody prompt field silently broken | Medium (rewrite parser) |
-| 5 | **M5: saveAntibody wrong path + no index update** | Vaccinated antibodies invisible | Small |
+| 3 | **C3: Index never persisted** | Defense skills disappear after restart | Small |
+| 4 | **M1: YAML multi-line truncated** | Defense skill prompt field silently broken | Medium (rewrite parser) |
+| 5 | **M5: saveDefenseSkill wrong path + no index update** | Synthesized defense skills invisible | Small |
 | 6 | **C6: History race condition** | Scan entries silently lost | Medium |
 | 7 | **C7: Session file corruption** | Chat history lost on crash | Small (append-only) |
-| 8 | **H7: Rust vaccinate() doesn't persist** | Core value proposition broken | Medium |
+| 8 | **H7: Rust synthesize() doesn't persist** | Core value proposition broken | Medium |
 | 9 | **H10: Rust fail-open on parse errors** | Security: attacks bypass on LLM error | Small |
 | 10 | **H11: Rust hardcoded DeepSeek** | Non-DeepSeek config is ignored | Small |
 
@@ -377,11 +377,11 @@ The directory exists but contains no tests. Cross-subsystem testing (agent + dae
 
 ## 🔧 Recommended Implementation Order
 
-1. **Fix C2 + C3** (index) — unblocks `list_antibodies` and status commands
+1. **Fix C2 + C3** (index) — unblocks `list_defense_skills` and status commands
 2. **Fix C1** (exit) — makes the agent usable
-3. **Fix M5 + C3** (vaccination save path + index rebuild) — enables vaccination
+3. **Fix M5 + C3** (synthesis save path + index rebuild) — enables synthesis
 4. **Fix C7** (append-only sessions) — prevent data loss
-5. **Fix H7** (Rust vaccinate persist) — core feature works
+5. **Fix H7** (Rust synthesize persist) — core feature works
 6. **Fix M1/M2/M3** (YAML parser) — unblocks proper config parsing
 7. **Fix C6** (history race) — prevent scan log loss
 8. **Fix H10** (fail-open → fail-closed) — security hardening

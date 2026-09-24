@@ -6,7 +6,7 @@
  *   caitlyn tui               Full-screen Terminal UI (default)
  *   caitlyn repl              Basic readline REPL
  *   caitlyn scan <content>    Quick security scan
- *   caitlyn status            Show antibody/antigen library status
+ *   caitlyn status            Show defense skill/attack library status
  *   caitlyn dashboard         Show defense stats dashboard
  *   caitlyn history [N]       Show recent scan history
  *   caitlyn history --export json [path]   Export scan history to file
@@ -14,10 +14,10 @@
  *   caitlyn detect            Scan system for supported agents
  *   caitlyn install <agent>   Inject CAITLYN hooks into an agent's config
  *   caitlyn providers         List available LLM providers
- *   caitlyn vaccinate <pattern>  Submit vaccination pattern to daemon
- *   caitlyn vaccinate --approve <id>  Explicitly activate a candidate
- *   caitlyn vaccinate --status       Show the evolution DAG
- *   caitlyn vaccinate --redteam [category]  Run the active red-team drill
+ *   caitlyn synthesize <pattern>  Submit synthesis pattern to daemon
+ *   caitlyn synthesize --approve <id>  Explicitly activate a candidate
+ *   caitlyn synthesize --status       Show the evolution DAG
+ *   caitlyn synthesize --redteam [category]  Run the active red-team drill
  *   caitlyn update [--check] [--yes]        Check GitHub release / apply npm update
  *   caitlyn contribute                      Pack local library into library/incoming bundle
  *   caitlyn setup [--config <path>] [--no-connection-test]
@@ -37,10 +37,10 @@ import { scan, type LlmCallFn } from "./scanner.js";
 import { hybridScan } from "./hybrid-scanner.js";
 import { createConfiguredLlmCall } from "./llm-runtime.js";
 import {
-  loadAntibodies,
-  loadAntigens,
-  loadAntibodyIndex,
-  buildAntibodyIndex,
+  loadDefenseSkills,
+  loadAttacks,
+  loadDefenseSkillIndex,
+  buildDefenseSkillIndex,
 } from "./library.js";
 import {
   getDashboard,
@@ -53,9 +53,9 @@ import { detectAgents, installAgent, uninstallAgent, isHookInstalled, getWatchDi
 import { isDaemonRunning, startDaemon, stopDaemon, daemonStatus } from "./daemon/index.js";
 import { isDaemonAvailable, daemonScan, getDaemonStatus, daemonWatch, getWatchInfo } from "./daemon/index.js";
 import {
-  approveAntibody,
+  approveDefenseSkill,
   printEvolutionStatus,
-  runVaccination,
+  runSynthesis,
   runRedTeamCommand,
 } from "./commands/evolution.js";
 import { runUpdateCommand } from "./sync/update.js";
@@ -128,7 +128,7 @@ async function main() {
           const ds = await getDaemonStatus();
           if (ds) {
             console.log(`   Uptime: ${Math.round(ds.uptime_ms / 1000)}s`);
-            console.log(`   Antibodies: ${ds.antibodies_loaded} | Scans: ${ds.scans_total}`);
+            console.log(`   Defense skills: ${ds.defense_skills_loaded} | Scans: ${ds.scans_total}`);
             if (ds.watch_dirs.length > 0) console.log(`   Watching: ${ds.watch_dirs.join(", ")}`);
           }
         } else {
@@ -212,15 +212,15 @@ async function main() {
       }
       process.exit(0);
     }
-    case "vaccinate": {
+    case "synthesize": {
       const sub = args[1];
       if (sub === "--approve") {
         const id = args[2];
         if (!id) {
-          console.log("Usage: caitlyn vaccinate --approve <antibody-id>");
+          console.log("Usage: caitlyn synthesize --approve <defense-skill-id>");
           process.exit(1);
         }
-        approveAntibody(id);
+        approveDefenseSkill(id);
         process.exit(0);
       }
       if (sub === "--status") {
@@ -237,13 +237,13 @@ async function main() {
         process.exit(0);
       }
       if (!sub) {
-        console.log("Usage: caitlyn vaccinate <pattern>");
+        console.log("Usage: caitlyn synthesize <pattern>");
         process.exit(1);
       }
       try {
-        await runVaccination(sub);
+        await runSynthesis(sub);
       } catch (err) {
-        console.error(`❌ Vaccination failed: ${err instanceof Error ? err.message : String(err)}`);
+        console.error(`❌ Synthesis failed: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
       }
       process.exit(0);
@@ -269,7 +269,7 @@ async function main() {
           console.log(`${emoji} ${daemonResult.verdict.toUpperCase()} (${(daemonResult.confidence * 100).toFixed(1)}%) [daemon]`);
           console.log(`   Latency: ${(daemonResult.total_latency_us / 1000).toFixed(1)}ms | Tokens: ${daemonResult.total_tokens}`);
           for (const m of daemonResult.script_results.filter((r) => r.verdict === "malicious")) {
-            console.log(`     - ${m.antibody_id}: ${m.reason ?? "no reason"}`);
+            console.log(`     - ${m.defense_skill_id}: ${m.reason ?? "no reason"}`);
           }
           process.exit(daemonResult.verdict === "malicious" ? 1 : 0);
         }
@@ -286,7 +286,7 @@ async function main() {
         console.log(`${emoji} ${result.verdict.toUpperCase()} (${(result.confidence * 100).toFixed(1)}%) [${result.backend}]`);
         console.log(`   Latency: ${(result.total_latency_us / 1000).toFixed(1)}ms | Tokens: ${result.total_tokens}`);
         for (const m of result.script_results.filter((r) => r.verdict === "malicious")) {
-          console.log(`     - ${m.antibody_id}: ${m.reason ?? "no reason"}`);
+          console.log(`     - ${m.defense_skill_id}: ${m.reason ?? "no reason"}`);
         }
         process.exit(result.verdict === "malicious" ? 1 : 0);
       } catch (err) {
@@ -295,16 +295,16 @@ async function main() {
       }
     }
     case "status": {
-      const antibodies = loadAntibodies();
-      const antigens = loadAntigens();
-      const index = loadAntibodyIndex() ?? buildAntibodyIndex(antibodies);
-      console.log(`🛡️  CAITLYN: ${antibodies.length} antibodies (${index.roots.length} roots), ${antigens.length} antigens`);
+      const defenseSkills = loadDefenseSkills();
+      const attacks = loadAttacks();
+      const index = loadDefenseSkillIndex() ?? buildDefenseSkillIndex(defenseSkills);
+      console.log(`🛡️  CAITLYN: ${skills.length} defense skills (${index.roots.length} roots), ${attacks.length} attacks`);
       for (const rootId of index.roots) {
-        const ab = antibodies.find((a) => a.config.id === rootId);
+        const ab = defenseSkills.find((a) => a.config.id === rootId);
         if (ab) console.log(`   📁 ${rootId} [${ab.config.category}] tier=${ab.config.tier}`);
       }
       const byCat: Record<string, number> = {};
-      for (const ag of antigens) byCat[ag.config.category] = (byCat[ag.config.category] || 0) + 1;
+      for (const ag of attacks) byCat[ag.config.category] = (byCat[ag.config.category] || 0) + 1;
       for (const [cat, count] of Object.entries(byCat)) console.log(`   - ${cat}: ${count}`);
       process.exit(0);
     }
@@ -393,9 +393,9 @@ async function main() {
       console.log(`Tier 0 Hits:      ${stats.tier0_hits}`);
       console.log(`Tier 1 Hits:      ${stats.tier1_hits}`);
       console.log(`Last Scan:        ${stats.last_scan_at ?? "N/A"}`);
-      if (stats.top_antibodies.length > 0) {
-        console.log("Top Antibodies:");
-        for (const a of stats.top_antibodies) console.log(`  ${a.id}: ${a.hits} hits`);
+      if (stats.top_defense_skills.length > 0) {
+        console.log("Top Defense skills:");
+        for (const a of stats.top_defense_skills) console.log(`  ${a.id}: ${a.hits} hits`);
       }
       process.exit(0);
     }
@@ -494,7 +494,7 @@ memory_limit = 10000
       console.log("Commands:");
       console.log("  tui                        Full-screen Terminal UI (default)");
       console.log("  scan <content>             Quick security scan");
-      console.log("  status                     Show antibody/antigen library status");
+      console.log("  status                     Show defense skill/attack library status");
       console.log("  dashboard                  Show defense stats dashboard");
       console.log("  history [N]                Show recent scan history (default 20)");
       console.log("  history --export json [p]  Export scan history to file");
@@ -506,7 +506,7 @@ memory_limit = 10000
       console.log("  init                       Generate default config.toml");
       console.log("  setup [--config p] [--no-connection-test]");
       console.log("                             Guided provider, Agent, and detection setup");
-      console.log("  vaccinate <pattern>        Submit vaccination pattern");
+      console.log("  synthesize <pattern>        Submit synthesis pattern");
       console.log("  update [--check] [--yes]   Check GitHub release / npm update");
       console.log("  contribute                 Pack library into library/incoming bundle");
       console.log("  help                       Show this help");
@@ -523,7 +523,7 @@ memory_limit = 10000
     }
     default: {
       console.log(`Unknown command: ${command}`);
-      console.log("Usage: caitlyn [tui|repl|scan|status|dashboard|history|detect|install|uninstall|providers|init|setup|vaccinate|update|contribute]");
+      console.log("Usage: caitlyn [tui|repl|scan|status|dashboard|history|detect|install|uninstall|providers|init|setup|synthesize|update|contribute]");
       process.exit(1);
     }
   }

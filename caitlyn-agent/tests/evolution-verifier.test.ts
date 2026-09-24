@@ -1,6 +1,6 @@
 /**
  * Tests for the deterministic verification sandbox: exact/regex matching,
- * antigen coverage, false-positive counting, dangerous regex rejection,
+ * attack coverage, false-positive counting, dangerous regex rejection,
  * child-process timeout, invalid regexes, and benign sample capping.
  */
 import { describe, it, expect } from "vitest";

@@ -1,14 +1,14 @@
 /**
- * CAITLYN Evolution — Antibody DAG Types
+ * CAITLYN Evolution — Defense skill DAG Types
  *
- * The immune System 2 antibody library: nodes carry lineage (parentIds),
+ * The System 2 defense skill library: nodes carry lineage (parentIds),
  * runtime evidence, and a derived score used for retirement decisions.
  */
 
 export type NodeStatus = "active" | "candidate" | "shadow" | "dormant" | "archived";
 
-export interface AntibodyEvidence {
-  /** 作为 active 抗体被扫描命中的次数。 */
+export interface DefenseSkillEvidence {
+  /** 作为 active 防御技能被扫描命中的次数。 */
   hits: number;
   /** 误报次数（评审/反馈确认）。 */
   falsePositives: number;
@@ -22,27 +22,27 @@ export interface AntibodyEvidence {
   shadowConfirmedHits: number;
 }
 
-export interface AntibodySignature {
+export interface DefenseSkillSignature {
   pattern: string;
   type: string;
   label: string;
 }
 
-export interface AntibodyNode {
+export interface DefenseSkillNode {
   id: string;
   name: string;
   description: string;
   category: string;
   tier: number;
   status: NodeStatus;
-  /** DAG 血缘：直接父节点 id 列表（可为空 = 根抗体）。 */
+  /** DAG 血缘：直接父节点 id 列表（可为空 = 根防御技能）。 */
   parentIds: string[];
   createdAt: string;
   /** 进入当前状态的时间（ISO）；dormant 时表示进入 dormant 的时间。 */
   statusChangedAt: string;
   generation: number;
-  signatures: AntibodySignature[];
-  evidence: AntibodyEvidence;
+  signatures: DefenseSkillSignature[];
+  evidence: DefenseSkillEvidence;
   /** 最近一次评审结论（accept/revise/reject）。 */
   lastReviewVerdict: string | null;
 }
@@ -56,7 +56,7 @@ export interface DagScorePolicy {
   retireInactiveDays: number;
 }
 
-export function createEmptyEvidence(): AntibodyEvidence {
+export function createEmptyEvidence(): DefenseSkillEvidence {
   return {
     hits: 0,
     falsePositives: 0,

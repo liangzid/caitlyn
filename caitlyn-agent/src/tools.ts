@@ -2,21 +2,21 @@
  * CAITLYN Agent — Tool Definitions
  *
  * 11 tools registered with the pi Agent harness:
- *   caitlyn_scan, list_antibodies, list_antigens, read_antibody,
- *   read_antigen, evaluate_antibody, run_detect_script,
- *   scan_history, dashboard, detect_agents, caitlyn_vaccinate
+ *   caitlyn_scan, list_defense_skills, list_attacks, read_defense_skill,
+ *   read_attack, evaluate_defense_skill, run_detect_script,
+ *   scan_history, dashboard, detect_agents, caitlyn_synthesize
  */
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static } from "@earendil-works/pi-ai";
-import { loadAntibodies, loadAntigens, loadAntibodyIndex, buildAntibodyIndex, saveAntibodyIndex, saveAntibody } from "./library.js";
+import { loadDefenseSkills, loadAttacks, loadDefenseSkillIndex, buildDefenseSkillIndex, saveDefenseSkillIndex, saveDefenseSkill } from "./library.js";
 import { scan, runTier0, type LlmCallFn } from "./scanner.js";
 import { getDashboard, getHistory, loadHistory } from "./history.js";
-import type { AntibodyEntry, AntibodyConfig } from "./schema.js";
+import type { DefenseSkillEntry, DefenseSkillConfig } from "./schema.js";
 import * as path from "node:path";
 import { loadEvolutionConfig } from "./config.js";
 import { EvolutionEngine } from "./evolution/engine.js";
-import { buildClusterId, extractAntigenFeatures } from "./evolution/features.js";
+import { buildClusterId, extractAttackFeatures } from "./evolution/features.js";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -33,28 +33,28 @@ const ScanParams = Type.Object({
   content: Type.String({ description: "Content to scan for attacks" }),
 });
 
-const ListAntibodiesParams = Type.Object({
+const ListDefenseSkillsParams = Type.Object({
   filter: Type.Optional(Type.String({ description: "Filter by category or id substring" })),
 });
 
-const ListAntigensParams = Type.Object({
+const ListAttacksParams = Type.Object({
   filter: Type.Optional(Type.String({ description: "Filter by category or id substring" })),
 });
 
-const ReadAntibodyParams = Type.Object({
-  id: Type.String({ description: "Antibody ID" }),
+const ReadDefenseSkillParams = Type.Object({
+  id: Type.String({ description: "Defense skill ID" }),
 });
 
-const ReadAntigenParams = Type.Object({
-  id: Type.String({ description: "Antigen ID" }),
+const ReadAttackParams = Type.Object({
+  id: Type.String({ description: "Attack ID" }),
 });
 
-const EvaluateAntibodyParams = Type.Object({
-  id: Type.String({ description: "Antibody ID to evaluate" }),
+const EvaluateDefenseSkillParams = Type.Object({
+  id: Type.String({ description: "Defense skill ID to evaluate" }),
 });
 
 const RunDetectParams = Type.Object({
-  id: Type.String({ description: "Antibody ID" }),
+  id: Type.String({ description: "Defense skill ID" }),
   sample: Type.String({ description: "Sample content to test against" }),
 });
 
@@ -63,7 +63,7 @@ const RunDetectParams = Type.Object({
 function formatTree(
   nodeId: string,
   index: any,
-  antibodies: AntibodyEntry[],
+  defenseSkills: DefenseSkillEntry[],
   filter: string | undefined,
   lines: string[],
   depth: number,
@@ -78,7 +78,7 @@ function formatTree(
 
   const node = index.trees[nodeId];
   if (!node) return;
-  const ab = antibodies.find((a) => a.config.id === nodeId);
+  const ab = defenseSkills.find((a) => a.config.id === nodeId);
   if (!ab) return;
 
   const id = ab.config.id;
@@ -88,7 +88,7 @@ function formatTree(
 
   if (filter && !id.includes(filter) && !cat.includes(filter)) {
     for (const childId of node.children) {
-      formatTree(childId, index, antibodies, filter, lines, depth + 1, visited);
+      formatTree(childId, index, defenseSkills, filter, lines, depth + 1, visited);
     }
     return;
   }
@@ -101,7 +101,7 @@ function formatTree(
   );
 
   for (const childId of node.children) {
-    formatTree(childId, index, antibodies, filter, lines, depth + 1, visited);
+    formatTree(childId, index, defenseSkills, filter, lines, depth + 1, visited);
   }
 }
 
@@ -117,9 +117,9 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
         "Scan external content for attacks using Tier 0 script sandboxes + Tier 1 LLM classifier.",
       parameters: ScanParams,
       async execute(_toolCallId, params: any) {
-        const antibodies = loadAntibodies();
-        const antigens = loadAntigens();
-        const result = await scan({ antibodies, antigens, content: params.content, llmCall });
+        const defenseSkills = loadDefenseSkills();
+        const attacks = loadAttacks();
+        const result = await scan({ defenseSkills, attacks, content: params.content, llmCall });
         const summary = JSON.stringify(
           {
             verdict: result.verdict,
@@ -128,7 +128,7 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
             latency_us: result.total_latency_us,
             script_matches: result.script_results
               .filter((r) => r.verdict === "malicious")
-              .map((r) => ({ antibody: r.antibody_id, confidence: r.confidence, reason: r.reason })),
+              .map((r) => ({ defenseSkill: r.defense_skill_id, confidence: r.confidence, reason: r.reason })),
           },
           null,
           2,
@@ -137,43 +137,43 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
       },
     },
 
-    // ── 2. list_antibodies ──
+    // ── 2. list_defense_skills ──
     {
-      name: "list_antibodies",
-      label: "List Antibodies",
-      description: "List all antibodies in the forest with aggregated stats.",
-      parameters: ListAntibodiesParams,
+      name: "list_defense_skills",
+      label: "List Defense skills",
+      description: "List all defense skills in the forest with aggregated stats.",
+      parameters: ListDefenseSkillsParams,
       async execute(_toolCallId, params: any) {
-        const antibodies = loadAntibodies();
-        let index = loadAntibodyIndex() ?? buildAntibodyIndex(antibodies);
+        const defenseSkills = loadDefenseSkills();
+        let index = loadDefenseSkillIndex() ?? buildDefenseSkillIndex(defenseSkills);
         // If the persisted index is stale (roots/trees no longer resolve),
         // rebuild it from the real forest and persist the healed index.
         const rootsResolve = (idx: typeof index) =>
-          idx.roots.some((rid) => antibodies.some((a) => a.config.id === rid));
+          idx.roots.some((rid) => defenseSkills.some((a) => a.config.id === rid));
         if (!rootsResolve(index)) {
-          index = buildAntibodyIndex(antibodies);
-          saveAntibodyIndex(index);
+          index = buildDefenseSkillIndex(defenseSkills);
+          saveDefenseSkillIndex(index);
         }
         const filter = (params.filter as string | undefined)?.toLowerCase();
         const lines: string[] = [];
         for (const rootId of index.roots) {
-          formatTree(rootId, index, antibodies, filter, lines, 0);
+          formatTree(rootId, index, defenseSkills, filter, lines, 0);
         }
-        return textResult(lines.join("\n") || "(no antibodies)");
+        return textResult(lines.join("\n") || "(no defense skills)");
       },
     },
 
-    // ── 3. list_antigens ──
+    // ── 3. list_attacks ──
     {
-      name: "list_antigens",
-      label: "List Antigens",
-      description: "List all attack samples in the antigen library.",
-      parameters: ListAntigensParams,
+      name: "list_attacks",
+      label: "List Attacks",
+      description: "List all attack samples in the attack library.",
+      parameters: ListAttacksParams,
       async execute(_toolCallId, params: any) {
-        const antigens = loadAntigens();
+        const attacks = loadAttacks();
         const filter = (params.filter as string | undefined)?.toLowerCase();
         const lines: string[] = [];
-        for (const ag of antigens) {
+        for (const ag of attacks) {
           const id = ag.config.id;
           const cat = ag.config.category;
           const tmpl = ag.config.attack_template;
@@ -183,20 +183,20 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
             : "";
           lines.push(`${id} (${cat}, ${tmpl})${escapes}`);
         }
-        return textResult(lines.join("\n") || "(no antigens)");
+        return textResult(lines.join("\n") || "(no attacks)");
       },
     },
 
-    // ── 4. read_antibody ──
+    // ── 4. read_defense_skill ──
     {
-      name: "read_antibody",
-      label: "Read Antibody",
-      description: "Read an antibody's full detection logic and stats.",
-      parameters: ReadAntibodyParams,
+      name: "read_defense_skill",
+      label: "Read Defense skill",
+      description: "Read a defense skill's full detection logic and stats.",
+      parameters: ReadDefenseSkillParams,
       async execute(_toolCallId, params: any) {
-        const antibodies = loadAntibodies();
-        const ab = antibodies.find((a) => a.config.id === params.id);
-        if (!ab) return textResult(`Antibody "${params.id}" not found.`);
+        const defenseSkills = loadDefenseSkills();
+        const ab = defenseSkills.find((a) => a.config.id === params.id);
+        if (!ab) return textResult(`Defense skill "${params.id}" not found.`);
         const info = [
           `# ${ab.config.name}`,
           `ID: ${ab.config.id}`,
@@ -213,16 +213,16 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
       },
     },
 
-    // ── 5. read_antigen ──
+    // ── 5. read_attack ──
     {
-      name: "read_antigen",
-      label: "Read Antigen",
-      description: "Read an antigen's full description and payload.",
-      parameters: ReadAntigenParams,
+      name: "read_attack",
+      label: "Read Attack",
+      description: "Read an attack's full description and payload.",
+      parameters: ReadAttackParams,
       async execute(_toolCallId, params: any) {
-        const antigens = loadAntigens();
-        const ag = antigens.find((a) => a.config.id === params.id);
-        if (!ag) return textResult(`Antigen "${params.id}" not found.`);
+        const attacks = loadAttacks();
+        const ag = attacks.find((a) => a.config.id === params.id);
+        if (!ag) return textResult(`Attack "${params.id}" not found.`);
         const info = [
           `# ${ag.config.name}`,
           `ID: ${ag.config.id}`,
@@ -242,28 +242,28 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
       },
     },
 
-    // ── 6. evaluate_antibody ──
+    // ── 6. evaluate_defense_skill ──
     {
-      name: "evaluate_antibody",
-      label: "Evaluate Antibody",
-      description: "Evaluate an antibody against all antigens to compute TP/FP/FN.",
-      parameters: EvaluateAntibodyParams,
+      name: "evaluate_defense_skill",
+      label: "Evaluate Defense skill",
+      description: "Evaluate a defense skill against all attacks to compute TP/FP/FN.",
+      parameters: EvaluateDefenseSkillParams,
       async execute(_toolCallId, params: any) {
-        const antibodies = loadAntibodies();
-        const antigens = loadAntigens();
-        const ab = antibodies.find((a) => a.config.id === params.id);
-        if (!ab) return textResult(`Antibody "${params.id}" not found.`);
-        if (!ab.scriptPath) return textResult(`Antibody "${params.id}" has no detect script (Tier 1 only).`);
+        const defenseSkills = loadDefenseSkills();
+        const attacks = loadAttacks();
+        const ab = defenseSkills.find((a) => a.config.id === params.id);
+        if (!ab) return textResult(`Defense skill "${params.id}" not found.`);
+        if (!ab.scriptPath) return textResult(`Defense skill "${params.id}" has no detect script (Tier 1 only).`);
 
         let tp = 0, fp = 0, fn = 0;
-        const antigenResults: string[] = [];
+        const attackResults: string[] = [];
 
-        for (const ag of antigens) {
+        for (const ag of attacks) {
           const { results } = await runTier0([ab], ag.payload);
-          const abResult = results.find((r) => r.antibody_id === ab.config.id);
+          const abResult = results.find((r) => r.defense_skill_id === ab.config.id);
           if (abResult) {
             const detected = abResult.verdict === "malicious";
-            antigenResults.push(
+            attackResults.push(
               `  ${ag.config.id}: ${detected ? "DETECTED" : "MISSED"} (conf=${abResult.confidence.toFixed(2)})`,
             );
             if (detected) tp++; else fn++;
@@ -277,7 +277,7 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
         ];
         for (const ben of benignSamples) {
           const { results } = await runTier0([ab], ben);
-          const abResult = results.find((r) => r.antibody_id === ab.config.id);
+          const abResult = results.find((r) => r.defense_skill_id === ab.config.id);
           if (abResult?.verdict === "malicious") fp++;
         }
 
@@ -289,8 +289,8 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
           `TP: ${tp} | FP: ${fp} | FN: ${fn}`,
           `Precision: ${precision} | Recall: ${recall}`,
           "",
-          "Per-antigen results:",
-          ...antigenResults,
+          "Per-attack results:",
+          ...attackResults,
         ];
         return textResult(report.join("\n"));
       },
@@ -300,16 +300,16 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
     {
       name: "run_detect_script",
       label: "Run Detect Script",
-      description: "Run a single antibody's detect script on a test sample for debugging.",
+      description: "Run a single defense skill's detect script on a test sample for debugging.",
       parameters: RunDetectParams,
       async execute(_toolCallId, params: any) {
-        const antibodies = loadAntibodies();
-        const ab = antibodies.find((a) => a.config.id === params.id);
-        if (!ab) return textResult(`Antibody "${params.id}" not found.`);
-        if (!ab.scriptPath) return textResult(`Antibody "${params.id}" has no detect script.`);
+        const defenseSkills = loadDefenseSkills();
+        const ab = defenseSkills.find((a) => a.config.id === params.id);
+        if (!ab) return textResult(`Defense skill "${params.id}" not found.`);
+        if (!ab.scriptPath) return textResult(`Defense skill "${params.id}" has no detect script.`);
 
         const { results } = await runTier0([ab], params.sample as string);
-        const abResult = results.find((r) => r.antibody_id === ab.config.id);
+        const abResult = results.find((r) => r.defense_skill_id === ab.config.id);
 
         if (!abResult) return textResult("No result from script.");
         return textResult(JSON.stringify(
@@ -323,7 +323,7 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
     {
       name: "scan_history",
       label: "Scan History",
-      description: "View recent scan history: verdicts, latencies, antibody matches.",
+      description: "View recent scan history: verdicts, latencies, defense skill matches.",
       parameters: Type.Object({
         limit: Type.Optional(Type.Number({ description: "Number of entries (default: 20)" })),
       }),
@@ -333,7 +333,7 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
         if (entries.length === 0) return textResult("No scan history yet.");
         const lines = entries.map((e) => {
           const emoji = e.verdict === "malicious" ? "🚨" : "✅";
-          const ab = e.antibody_hits.length > 0 ? ` [${e.antibody_hits.join(", ")}]` : "";
+          const ab = e.defense_skill_hits.length > 0 ? ` [${e.defense_skill_hits.join(", ")}]` : "";
           return `${emoji} ${e.timestamp.slice(0, 19)} | ${e.verdict.toUpperCase()} (${(e.confidence * 100).toFixed(0)}%) | T${e.tier} | ${(e.total_latency_us / 1000).toFixed(1)}ms${ab} | ${e.content_preview}`;
         });
         return textResult(lines.join("\n"));
@@ -344,13 +344,13 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
     {
       name: "dashboard",
       label: "Cost Dashboard",
-      description: "Aggregated defense statistics: total scans, detection rate, latency, token costs, top antibodies.",
+      description: "Aggregated defense statistics: total scans, detection rate, latency, token costs, top defense skills.",
       parameters: Type.Object({}),
       async execute(_toolCallId, _params: any) {
         const stats = getDashboard();
         if (stats.total_scans === 0) return textResult("📊 No scan data yet. Run caitlyn_scan to collect stats.");
-        const topAb = stats.top_antibodies.length > 0
-          ? stats.top_antibodies.map((a) => `  ${a.id}: ${a.hits} hits`).join("\n")
+        const topAb = stats.top_defense_skills.length > 0
+          ? stats.top_defense_skills.map((a) => `  ${a.id}: ${a.hits} hits`).join("\n")
           : "  (none)";
         const report = [
           "📊 CAITLYN Defense Dashboard",
@@ -370,7 +370,7 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
           "",
           `Last Scan:        ${stats.last_scan_at ?? "N/A"}`,
           "",
-          "Top Antibodies:",
+          "Top Defense skills:",
           topAb,
         ];
         return textResult(report.join("\n"));
@@ -409,11 +409,11 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
       },
     },
 
-    // ── 11. caitlyn_vaccinate ──
+    // ── 11. caitlyn_synthesize ──
     {
-      name: "caitlyn_vaccinate",
-      label: "Trigger Vaccination",
-      description: "Evolve new antibodies via the immune System 2 loop (LLM synthesis + deterministic verification + independent review).",
+      name: "caitlyn_synthesize",
+      label: "Trigger Synthesis",
+      description: "Evolve new defense skills via the System 2 loop (LLM synthesis + deterministic verification + independent review).",
       parameters: Type.Object({
         pattern: Type.String({ description: "Threat pattern or attack description to evolve defense against" }),
       }),
@@ -431,11 +431,11 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
           .map((h) => h.content_preview);
         const outcome = await engine.run({
           clusterId,
-          target: `agent-requested vaccination for cluster ${clusterId}`,
+          target: `agent-requested synthesis for cluster ${clusterId}`,
           profile: {
             clusterId,
             category: "unknown",
-            features: extractAntigenFeatures([params.pattern]),
+            features: extractAttackFeatures([params.pattern]),
             sampleCount: 1,
           },
           mustDetect: [params.pattern],
@@ -445,8 +445,8 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
         const { loop } = outcome;
         if (loop.approved.length === 0) {
           return textResult(
-            `Vaccination loop finished: ${loop.termination} (${loop.rounds} rounds, ` +
-            `~${loop.tokensUsed} tokens). No antibody accepted.`,
+            `Synthesis loop finished: ${loop.termination} (${loop.rounds} rounds, ` +
+            `~${loop.tokensUsed} tokens). No defense skill accepted.`,
           );
         }
         const lines = loop.approved.map(
@@ -457,7 +457,7 @@ export function createCaitlynTools(llmCall: LlmCallFn): AgentTool[] {
             ? `\nShadow observation started: ${outcome.shadowStarted.join(", ")}`
             : "";
         return textResult(
-          `💉 Vaccination complete — ${loop.approved.length} antibody(ies):\n` +
+          `Synthesis complete — ${loop.approved.length} defense skill(s):\n` +
           `${lines.join("\n")}${shadowNote}`,
         );
       },

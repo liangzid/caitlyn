@@ -1,10 +1,10 @@
-#+TITLE: Tier1 分级触发实现 + 全抗体正确性审计
+#+TITLE: Tier1 分级触发实现 + 全防御技能正确性审计
 #+AUTHOR: Zi Liang (团长) + Agent
 #+DATE: 2026-08-10
 
 * 背景
 
-团长确认上一轮方案："实现分级触发，并对所有 antibodies 的正确性 double
+团长确认上一轮方案："实现分级触发，并对所有 defense skills 的正确性 double
 check，确保 caitlyn 可用"。本记录覆盖两部分：分级触发落地，以及
 318 条良性 + 244 条攻击的真实数据审计与修复。
 
@@ -39,26 +39,26 @@ check，确保 caitlyn 可用"。本记录覆盖两部分：分级触发落地�
 | safe+Tier0 漏网攻击 | 3 | malicious 0.98（fast 子集拦截） |
 | safe+弱信号（HTML 注入） | 9 | malicious 1.0（full） |
 
-* 全抗体正确性审计（真实数据）
+* 全防御技能正确性审计（真实数据）
 
 ** 审计手段
 
 - checkLibraryIntegrity 增强：所有签名必须可编译（regex），重复 id、
   重复 runtime 签名、tier0 无实现、tier1/2 无 prompt 均报错。
-- schema 往返测试：saveAntibody 保留 prompt/role/signatures（新增）。
+- schema 往返测试：saveDefenseSkill 保留 prompt/role/signatures（新增）。
 - 318 条良性（agent_tasks 68 + agentdefense 250）× Tier 0 FP 统计。
 - 244 条知识库攻击 × Tier 0 红队。
 
 ** 发现并修复
 
-1. ab-entropy-anomaly 误报源：
+1. entropy-anomaly 误报源：
    - substring-repeat 把缩进空格当重复串（AgentDojo 样本前导空格）。
    - high-unique-char-ratio 对普通英文短句误报（良性 p50=0.43）。
    - 但旧 unique-char 启发式确实独力捕获约 14 条攻击（符号密集载荷）。
    修复：改为数据校准的格式异常启发式（符号密度 >0.10；或全大写+符号），
    char-run 排除空白，substring-repeat 要求字母开头单元（排除银行账号
    数字串）。
-2. ab-exfiltration 误报：send ... to <email> 把"给妻子发邮件订酒店"
+2. exfiltration 误报：send ... to <email> 把"给妻子发邮件订酒店"
    当外泄。修复：要求敏感内容词/公开链接/外部收件人词与发送动词共现。
 
 ** 审计前后数字（Tier 0）
@@ -74,7 +74,7 @@ check，确保 caitlyn 可用"。本记录覆盖两部分：分级触发落地�
 
 * 验证
 
-- tsc --noEmit 通过；npm run audit:library：21 抗体 16 detectors 0 issue。
+- tsc --noEmit 通过；npm run audit:library：21 防御技能 16 detectors 0 issue。
 - 全量测试 396 passed（33 文件）。
 - 真实 LLM 分级冒烟四条路径全部符合预期。
 

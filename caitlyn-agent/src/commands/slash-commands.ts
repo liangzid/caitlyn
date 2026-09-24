@@ -7,7 +7,7 @@
 
 import { CombinedAutocompleteProvider } from "@earendil-works/pi-tui";
 import type { SlashCommand, AutocompleteItem } from "@earendil-works/pi-tui";
-import { loadAntibodies, loadAntigens } from "../library.js";
+import { loadDefenseSkills, loadAttacks } from "../library.js";
 import { getProviders, getModels } from "../llm.js";
 
 export interface CaitlynCommand {
@@ -33,7 +33,7 @@ export const CAITLYN_COMMANDS: CaitlynCommand[] = [
   },
   {
     name: "status",
-    description: "Show antibody/antigen library",
+    description: "Show defense skill/attack library",
   },
   {
     name: "dashboard",
@@ -49,16 +49,16 @@ export const CAITLYN_COMMANDS: CaitlynCommand[] = [
     description: "Agent protection & watch status",
   },
 
-  // ── Antibody Management ─────────────────────────────────────────
+  // ── Defense skill Management ─────────────────────────────────────────
   {
-    name: "antibody",
-    description: "Manage antibodies",
+    name: "defense-skill",
+    description: "Manage defense skills",
     argumentHint: "list|add|remove <id>",
     getArgumentCompletions(prefix: string): AutocompleteItem[] | null {
-      const antibodies = loadAntibodies();
+      const defenseSkills = loadDefenseSkills();
       if (prefix.startsWith("add ")) return null;
       if (prefix.startsWith("remove ")) {
-        return antibodies.map((a) => ({
+        return defenseSkills.map((a) => ({
           value: a.config.id,
           label: a.config.name ?? a.config.id,
         }));
@@ -71,20 +71,20 @@ export const CAITLYN_COMMANDS: CaitlynCommand[] = [
     },
   },
   {
-    name: "antigen",
-    description: "Show antigen details",
+    name: "attack",
+    description: "Show attack details",
     argumentHint: "<id>",
     getArgumentCompletions(): AutocompleteItem[] | null {
-      const antigens = loadAntigens();
-      return antigens.map((a) => ({
+      const attacks = loadAttacks();
+      return attacks.map((a) => ({
         value: a.config.id,
         label: a.config.name ?? a.config.id,
       }));
     },
   },
   {
-    name: "vaccinate",
-    description: "Evolve antibody",
+    name: "synthesize",
+    description: "Evolve defense skill",
     argumentHint: "<pattern>",
   },
 

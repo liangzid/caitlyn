@@ -401,7 +401,7 @@ def scan_one(
                 "confidence": verdict.confidence,
                 "score": verdict.confidence,
                 "reasoning": verdict.reasoning,
-                "matched_antibodies": verdict.matched_antibodies,
+                "matched_defense_skills": verdict.matched_defense_skills,
             }
             record["cost"] = {
                 "latency_ms": verdict.latency_ms,

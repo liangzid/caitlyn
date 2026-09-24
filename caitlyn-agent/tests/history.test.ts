@@ -90,7 +90,7 @@ describe("loadHistory", () => {
         tier: 1,
         total_latency_us: 500,
         total_tokens: 200,
-        antibody_hits: [],
+        defense_skill_hits: [],
         source: "test",
       },
     ];
@@ -122,7 +122,7 @@ describe("loadHistory", () => {
       tier: 0,
       total_latency_us: 100,
       total_tokens: 50,
-      antibody_hits: ["ab-1"],
+      defense_skill_hits: ["ab-1"],
       source: "test",
     };
     const entry2: ScanLogEntry = {
@@ -134,7 +134,7 @@ describe("loadHistory", () => {
       tier: 1,
       total_latency_us: 200,
       total_tokens: 80,
-      antibody_hits: [],
+      defense_skill_hits: [],
       source: "test",
     };
 
@@ -167,7 +167,7 @@ describe("logScan", () => {
       tier: 0,
       script_results: [
         {
-          antibody_id: "ab-test",
+          defense_skill_id: "test",
           verdict: "malicious",
           confidence: 0.85,
           reason: "Found injection",
@@ -185,7 +185,7 @@ describe("logScan", () => {
     expect(entries).toHaveLength(1);
     expect(entries[0].verdict).toBe("malicious");
     expect(entries[0].tier).toBe(0);
-    expect(entries[0].antibody_hits).toContain("ab-test");
+    expect(entries[0].defense_skill_hits).toContain("test");
     expect(entries[0].source).toBe("caitlyn-agent");
     expect(entries[0].content_preview.length).toBeLessThanOrEqual(120);
     expect(entries[0].timestamp).toBeTruthy();
@@ -199,13 +199,13 @@ describe("logScan", () => {
     expect(entries[0].content_preview.length).toBe(120);
   });
 
-  it("only includes malicious script results in antibody_hits", async () => {
+  it("only includes malicious script results in defense_skill_hits", async () => {
     resetHistoryFile();
 
     const result = makeScanResult({
       script_results: [
         {
-          antibody_id: "ab-benign",
+          defense_skill_id: "benign",
           verdict: "benign",
           confidence: 0.9,
           reason: "Looks safe",
@@ -213,7 +213,7 @@ describe("logScan", () => {
           error: null,
         },
         {
-          antibody_id: "ab-malicious",
+          defense_skill_id: "malicious",
           verdict: "malicious",
           confidence: 0.95,
           reason: "Found attack",
@@ -221,7 +221,7 @@ describe("logScan", () => {
           error: null,
         },
         {
-          antibody_id: "ab-suspicious",
+          defense_skill_id: "suspicious",
           verdict: "suspicious",
           confidence: 0.6,
           reason: "Unusual",
@@ -234,7 +234,7 @@ describe("logScan", () => {
     await logScan(result, "test content");
 
     const entries = loadHistory();
-    expect(entries[0].antibody_hits).toEqual(["ab-malicious"]);
+    expect(entries[0].defense_skill_hits).toEqual(["malicious"]);
   });
 
   it("uses default source when not specified", async () => {
@@ -315,7 +315,7 @@ describe("getDashboard", () => {
       tier0_hits: 0,
       tier1_hits: 0,
       last_scan_at: null,
-      top_antibodies: [],
+      top_defense_skills: [],
     });
   });
 
@@ -328,7 +328,7 @@ describe("getDashboard", () => {
         total_latency_us: 1000,
         total_tokens: 100,
         script_results: [
-          { antibody_id: "ab-a", verdict: "malicious", confidence: 0.9, reason: "hit", latency_us: 500, error: null },
+          { defense_skill_id: "a", verdict: "malicious", confidence: 0.9, reason: "hit", latency_us: 500, error: null },
         ],
       }),
       "attack content 1",
@@ -354,8 +354,8 @@ describe("getDashboard", () => {
         total_latency_us: 3000,
         total_tokens: 150,
         script_results: [
-          { antibody_id: "ab-a", verdict: "malicious", confidence: 0.8, reason: "hit again", latency_us: 700, error: null },
-          { antibody_id: "ab-b", verdict: "malicious", confidence: 0.85, reason: "also hit", latency_us: 600, error: null },
+          { defense_skill_id: "a", verdict: "malicious", confidence: 0.8, reason: "hit again", latency_us: 700, error: null },
+          { defense_skill_id: "b", verdict: "malicious", confidence: 0.85, reason: "also hit", latency_us: 600, error: null },
         ],
       }),
       "attack content 2",
@@ -384,11 +384,11 @@ describe("getDashboard", () => {
     expect(stats.avg_latency_ms).toBeCloseTo(1.625, 3);
     expect(stats.tier0_hits).toBe(2);
     expect(stats.tier1_hits).toBe(0);
-    expect(stats.top_antibodies).toHaveLength(2);
-    expect(stats.top_antibodies[0].id).toBe("ab-a");
-    expect(stats.top_antibodies[0].hits).toBe(2);
-    expect(stats.top_antibodies[1].id).toBe("ab-b");
-    expect(stats.top_antibodies[1].hits).toBe(1);
+    expect(stats.top_defense_skills).toHaveLength(2);
+    expect(stats.top_defense_skills[0].id).toBe("a");
+    expect(stats.top_defense_skills[0].hits).toBe(2);
+    expect(stats.top_defense_skills[1].id).toBe("b");
+    expect(stats.top_defense_skills[1].hits).toBe(1);
     expect(stats.last_scan_at).toBeTruthy();
   });
 

@@ -8,7 +8,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { LlmCallFn } from "../src/scanner.js";
-import { AntibodyDagStore } from "../src/evolution/dag-store.js";
+import { DefenseSkillDagStore } from "../src/evolution/dag-store.js";
 import { createEmptyEvidence } from "../src/evolution/dag-types.js";
 import { EvolutionLoop, type EvolutionLoopConfig } from "../src/evolution/loop.js";
 import { LessonsStore } from "../src/evolution/lessons-store.js";
@@ -26,7 +26,7 @@ function makeConfig(overrides: Partial<EvolutionLoopConfig> = {}): EvolutionLoop
     dagContext: "meta",
     lessonsPerCluster: 10,
     consistencyRecheck: false,
-    shmFallback: true,
+    reviseFallback: true,
     autonomy: "auto",
     hasSamples: true,
     maxBenignFalsePositives: 1,
@@ -65,7 +65,7 @@ function recordingLlm(
 
 const GOOD_CANDIDATE = JSON.stringify([
   {
-    id: "ab-new-1",
+    id: "new-1",
     name: "Injection General",
     description: "detects injection preamble",
     category: "injection",
@@ -87,12 +87,12 @@ const ACCEPT_REVIEW = JSON.stringify({
 
 describe("EvolutionLoop", () => {
   let dir: string;
-  let dag: AntibodyDagStore;
+  let dag: DefenseSkillDagStore;
   let lessons: LessonsStore;
 
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-loop-"));
-    dag = new AntibodyDagStore(dir, {
+    dag = new DefenseSkillDagStore(dir, {
       activeCap: 256,
       fpPenaltyWeight: 5,
       scoreDecayDays: 90,
@@ -133,7 +133,7 @@ describe("EvolutionLoop", () => {
     expect(result.lessonsWritten).toBe(1);
     expect(result.rounds).toBe(1);
 
-    const node = dag.getNode("ab-new-1");
+    const node = dag.getNode("new-1");
     expect(node).not.toBeNull();
     expect(node!.status).toBe("active");
     expect(node!.evidence).toEqual(createEmptyEvidence());
@@ -147,7 +147,7 @@ describe("EvolutionLoop", () => {
         generatorLlm: queuedLlm(
           JSON.stringify([
             {
-              id: "ab-miss",
+              id: "miss",
               name: "Miss",
               description: "misses half the cluster",
               category: "injection",
@@ -165,7 +165,7 @@ describe("EvolutionLoop", () => {
 
     expect(result.approved).toEqual([]);
     expect(result.termination).toBe("max_rounds");
-    expect(dag.getNode("ab-miss")).toBeNull();
+    expect(dag.getNode("miss")).toBeNull();
     const written = lessons.list();
     expect(written).toHaveLength(1);
     expect(written[0].source).toBe("verification");
@@ -181,7 +181,7 @@ describe("EvolutionLoop", () => {
           generatorPrompts,
           JSON.stringify([
             {
-              id: "ab-r1",
+              id: "r1",
               name: "First",
               description: "first attempt",
               category: "injection",
@@ -222,14 +222,14 @@ describe("EvolutionLoop", () => {
           JSON.stringify({
             verdict: "reject",
             reason: "duplicate",
-            suggestion: "overlaps with ab-existing",
-            duplicateOf: "ab-existing",
+            suggestion: "overlaps with existing",
+            duplicateOf: "existing",
           }),
           JSON.stringify({
             verdict: "reject",
             reason: "duplicate",
-            suggestion: "overlaps with ab-existing",
-            duplicateOf: "ab-existing",
+            suggestion: "overlaps with existing",
+            duplicateOf: "existing",
           }),
         ),
       }),
@@ -286,7 +286,7 @@ describe("EvolutionLoop", () => {
     const result = await loop.run(makeParams());
 
     expect(result.approved).toHaveLength(1);
-    expect(dag.getNode("ab-new-1")!.status).toBe("candidate");
+    expect(dag.getNode("new-1")!.status).toBe("candidate");
   });
 
   it("fails fast when the generator call fails", async () => {
@@ -333,7 +333,7 @@ describe("EvolutionLoop", () => {
 
   it("filters unknown parent ids and computes generation from real parents", async () => {
     dag.addNode({
-      id: "ab-root",
+      id: "root",
       name: "Root",
       description: "root",
       category: "injection",
@@ -352,12 +352,12 @@ describe("EvolutionLoop", () => {
         generatorLlm: queuedLlm(
           JSON.stringify([
             {
-              id: "ab-child",
+              id: "child",
               name: "Child",
               description: "child",
               category: "injection",
               tier: 0,
-              parentIds: ["ab-root", "ab-ghost"],
+              parentIds: ["root", "ghost"],
               signatures: [{ pattern: "ignore all previous instructions", type: "exact", label: "p" }],
               rationale: "x",
             },
@@ -369,13 +369,13 @@ describe("EvolutionLoop", () => {
     const result = await loop.run(makeParams());
 
     expect(result.approved).toHaveLength(1);
-    const node = dag.getNode("ab-child")!;
-    expect(node.parentIds).toEqual(["ab-root"]);
+    const node = dag.getNode("child")!;
+    expect(node.parentIds).toEqual(["root"]);
     expect(node.generation).toBe(3);
   });
 
   it("does not evict a positive low-score node without descendant coverage", async () => {
-    dag = new AntibodyDagStore(dir, {
+    dag = new DefenseSkillDagStore(dir, {
       activeCap: 1,
       fpPenaltyWeight: 5,
       scoreDecayDays: 90,
@@ -384,7 +384,7 @@ describe("EvolutionLoop", () => {
     });
     dag.load();
     dag.addNode({
-      id: "ab-existing",
+      id: "existing",
       name: "Existing",
       description: "existing",
       category: "injection",
@@ -407,8 +407,8 @@ describe("EvolutionLoop", () => {
     );
     await loop.run({ ...makeParams(), dag });
 
-    expect(dag.getNode("ab-existing")!.status).toBe("active");
-    expect(dag.getNode("ab-new-1")!.status).toBe("active");
+    expect(dag.getNode("existing")!.status).toBe("active");
+    expect(dag.getNode("new-1")!.status).toBe("active");
   });
 
   it("approves an accept candidate when the consistency recheck agrees", async () => {
@@ -445,13 +445,13 @@ describe("EvolutionLoop", () => {
     const result = await loop.run(makeParams());
 
     expect(result.approved).toEqual([]);
-    expect(dag.getNode("ab-new-1")).toBeNull();
+    expect(dag.getNode("new-1")).toBeNull();
     const written = lessons.list();
     expect(written).toHaveLength(2);
     expect(written[1].reviewSuggestion).toContain("inconsistent re-review");
   });
 
-  it("injects the SHM fallback target after a revise round", async () => {
+  it("injects the revise fallback target after a revise round", async () => {
     const generatorPrompts: string[] = [];
     const loop = new EvolutionLoop(
       makeConfig({
@@ -460,7 +460,7 @@ describe("EvolutionLoop", () => {
           generatorPrompts,
           JSON.stringify([
             {
-              id: "ab-r1",
+              id: "r1",
               name: "First Attempt",
               description: "initial candidate",
               category: "injection",
@@ -486,22 +486,22 @@ describe("EvolutionLoop", () => {
     const result = await loop.run(makeParams());
 
     expect(result.approved).toHaveLength(1);
-    expect(generatorPrompts[1]).toContain("定向微调（SHM fallback）");
+    expect(generatorPrompts[1]).toContain("定向微调（revise fallback）");
     expect(generatorPrompts[1]).toContain("widen the pattern");
     expect(generatorPrompts[1]).toContain("First Attempt");
   });
 
-  it("does not inject the SHM target when disabled", async () => {
+  it("does not inject the directed revision target when disabled", async () => {
     const generatorPrompts: string[] = [];
     const loop = new EvolutionLoop(
       makeConfig({
-        shmFallback: false,
+        reviseFallback: false,
         maxRounds: 2,
         generatorLlm: recordingLlm(
           generatorPrompts,
           JSON.stringify([
             {
-              id: "ab-r1",
+              id: "r1",
               name: "First Attempt",
               description: "initial candidate",
               category: "injection",
@@ -526,6 +526,6 @@ describe("EvolutionLoop", () => {
     );
     await loop.run(makeParams());
 
-    expect(generatorPrompts[1]).not.toContain("定向微调（SHM fallback）");
+    expect(generatorPrompts[1]).not.toContain("定向微调（revise fallback）");
   });
 });

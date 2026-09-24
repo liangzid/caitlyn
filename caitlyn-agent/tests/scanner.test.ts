@@ -7,7 +7,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 // Isolate HOME and stub recordScanFeedback so scan() integration tests
-// never touch real ~/.caitlyn state or rewrite antibody configs.
+// never touch real ~/.caitlyn state or rewrite defense skill configs.
 const { testHomeId } = vi.hoisted(() => ({
   testHomeId: "caitlyn-scanner-home-" + Date.now().toString(36),
 }));
@@ -25,7 +25,7 @@ vi.mock("../src/library.js", async (importOriginal) => {
 
 import {
   aggregateTier1,
-  buildAntibodyPrompt,
+  buildDefenseSkillPrompt,
   buildMergedTier1Prompt,
   estimateScanTokens,
   estimateTokens,
@@ -40,17 +40,17 @@ import {
   selectTier1Detectors,
   selectMergedSkills,
 } from "../src/scanner.js";
-import type { AntibodyEntry, AntigenEntry } from "../src/schema.js";
+import type { DefenseSkillEntry, AttackEntry } from "../src/schema.js";
 
 // ── Test Helpers ────────────────────────────────────────────────────
 
-function makeAntibody(
+function makeDefenseSkill(
   id: string,
   name: string,
   readme: string,
   prompt = "",
   tier: 0 | 1 | 2 = 1,
-): AntibodyEntry {
+): DefenseSkillEntry {
   return {
     config: {
       id,
@@ -65,7 +65,7 @@ function makeAntibody(
       execution_stages: ["content_scan"],
       references: [],
       runtime_requirements: [],
-      affinity_score: 0.5,
+      match_score: 0.5,
       created_at: "2025-01-01",
       parent_id: null,
       generation: 0,
@@ -75,11 +75,11 @@ function makeAntibody(
     },
     readme,
     scriptPath: null,
-    folderPath: `/fake/antibodies/${id}`,
+    folderPath: `/fake/skills/${id}`,
   };
 }
 
-function makeAntigen(id: string, name: string, payload: string): AntigenEntry {
+function makeAttack(id: string, name: string, payload: string): AttackEntry {
   return {
     config: {
       id,
@@ -92,23 +92,23 @@ function makeAntigen(id: string, name: string, payload: string): AntigenEntry {
       parent_id: null,
       escapes: ["base64"],
     },
-    readme: `Antigen ${id} readme`,
+    readme: `Attack ${id} readme`,
     payload,
-    folderPath: `/fake/antigens/${id}`,
+    folderPath: `/fake/attacks/${id}`,
   };
 }
 
-// ── buildAntibodyPrompt Tests ──────────────────────────────────────
+// ── buildDefenseSkillPrompt Tests ──────────────────────────────────────
 
-describe("buildAntibodyPrompt", () => {
-  it("embeds the antibody's own prompt as executable knowledge", () => {
-    const ab = makeAntibody(
+describe("buildDefenseSkillPrompt", () => {
+  it("embeds the defense skill's own prompt as executable knowledge", () => {
+    const ab = makeDefenseSkill(
       "ab-1",
       "SQL Injection Detector",
       "readme",
       "Analyze the content for SQL injection.",
     );
-    const { systemPrompt, userPrompt } = buildAntibodyPrompt(ab, "hello world");
+    const { systemPrompt, userPrompt } = buildDefenseSkillPrompt(ab, "hello world");
 
     expect(systemPrompt).toContain("(ab-1)");
     expect(systemPrompt).toContain("SQL Injection Detector");
@@ -125,34 +125,34 @@ describe("buildAntibodyPrompt", () => {
 
 describe("selectMergedSkills", () => {
   it("includes non-detector knowledge only in knowledge scope", () => {
-    const detector = makeAntibody("ab-det", "Det", "readme", "Detect.", 1);
-    const nonDetector = makeAntibody("ab-hard", "Hard", "readme", "Harden.", 1);
+    const detector = makeDefenseSkill("det", "Det", "readme", "Detect.", 1);
+    const nonDetector = makeDefenseSkill("hard", "Hard", "readme", "Harden.", 1);
     nonDetector.config.role = "non_detector";
 
     expect(selectMergedSkills([detector, nonDetector], "detectors").map((a) => a.config.id))
-      .toEqual(["ab-det"]);
+      .toEqual(["det"]);
     expect(selectMergedSkills([detector, nonDetector], "knowledge").map((a) => a.config.id).sort())
-      .toEqual(["ab-det", "ab-hard"]);
+      .toEqual(["det", "hard"]);
   });
 
   it("excludes experimental and reference skills from runtime prompts", () => {
-    const active = makeAntibody("ab-active", "Active", "readme", "Detect.", 1);
-    const experimental = makeAntibody("ab-experimental", "Experimental", "readme", "Research.", 1);
+    const active = makeDefenseSkill("active", "Active", "readme", "Detect.", 1);
+    const experimental = makeDefenseSkill("experimental", "Experimental", "readme", "Research.", 1);
     experimental.config.implementation_status = "experimental";
-    const reference = makeAntibody("ab-reference", "Reference", "readme", "Research.", 1);
+    const reference = makeDefenseSkill("reference", "Reference", "readme", "Research.", 1);
     reference.config.implementation_status = "reference";
 
     expect(selectMergedSkills([active, experimental, reference], "knowledge").map((a) => a.config.id))
-      .toEqual(["ab-active"]);
+      .toEqual(["active"]);
     expect(selectTier1Detectors([active, experimental, reference]).map((a) => a.config.id))
-      .toEqual(["ab-active"]);
+      .toEqual(["active"]);
   });
 });
 
 describe("buildMergedTier1Prompt", () => {
   it("embeds every tier>0 skill as knowledge in the META system prompt", () => {
-    const detector = makeAntibody("ab-det", "Detector", "readme", "Detect X.", 1);
-    const nonDetector = makeAntibody("ab-hard", "Hardener", "readme", "Harden Y.", 2);
+    const detector = makeDefenseSkill("det", "Detector", "readme", "Detect X.", 1);
+    const nonDetector = makeDefenseSkill("hard", "Hardener", "readme", "Harden Y.", 2);
     nonDetector.config.role = "non_detector";
 
     const { systemPrompt, userPrompt, skillIds } = buildMergedTier1Prompt(
@@ -160,20 +160,20 @@ describe("buildMergedTier1Prompt", () => {
       "hello world",
     );
 
-    expect(skillIds).toEqual(["ab-det", "ab-hard"]);
+    expect(skillIds).toEqual(["det", "hard"]);
     expect(systemPrompt).toContain("security filter for LLM agents");
     expect(systemPrompt).toContain("reference knowledge");
-    expect(systemPrompt).toContain("[ab-det] Detector");
+    expect(systemPrompt).toContain("[det] Detector");
     expect(systemPrompt).toContain("Detect X.");
-    expect(systemPrompt).toContain("[ab-hard] Hardener");
+    expect(systemPrompt).toContain("[hard] Hardener");
     expect(systemPrompt).toContain('"malicious <number>"');
     expect(userPrompt).toContain("<content>");
     expect(userPrompt).toContain("hello world");
   });
 
   it("restricts to detector skills in detector scope", () => {
-    const detector = makeAntibody("ab-det", "Detector", "readme", "Detect X.", 1);
-    const nonDetector = makeAntibody("ab-hard", "Hardener", "readme", "Harden Y.", 2);
+    const detector = makeDefenseSkill("det", "Detector", "readme", "Detect X.", 1);
+    const nonDetector = makeDefenseSkill("hard", "Hardener", "readme", "Harden Y.", 2);
     nonDetector.config.role = "non_detector";
 
     const { systemPrompt, skillIds } = buildMergedTier1Prompt(
@@ -181,16 +181,16 @@ describe("buildMergedTier1Prompt", () => {
       "x",
       "detectors",
     );
-    expect(skillIds).toEqual(["ab-det"]);
-    expect(systemPrompt).not.toContain("ab-hard");
+    expect(skillIds).toEqual(["det"]);
+    expect(systemPrompt).not.toContain("[hard]");
   });
 });
 
 describe("runMergedTier1", () => {
   it("makes exactly one LLM call and returns a single verdict", async () => {
     const skills = [
-      makeAntibody("ab-a", "A", "readme", "Detect A.", 1),
-      makeAntibody("ab-b", "B", "readme", "Detect B.", 1),
+      makeDefenseSkill("a", "A", "readme", "Detect A.", 1),
+      makeDefenseSkill("b", "B", "readme", "Detect B.", 1),
     ];
     let calls = 0;
     let sawPrompt = "";
@@ -202,17 +202,17 @@ describe("runMergedTier1", () => {
     });
 
     expect(calls).toBe(1);
-    expect(result.antibody_id).toBe("merged-tier1");
+    expect(result.defense_skill_id).toBe("merged-tier1");
     expect(result.verdict).toBe("malicious");
     expect(result.confidence).toBe(0.91);
     expect(result.reason).toContain("2 skills");
     expect(result.tokens).toBeGreaterThan(0);
-    expect(sawPrompt).toContain("[ab-a] A");
-    expect(sawPrompt).toContain("[ab-b] B");
+    expect(sawPrompt).toContain("[a] A");
+    expect(sawPrompt).toContain("[b] B");
   });
 
   it("captures USD cost reported by the LLM call", async () => {
-    const skills = [makeAntibody("ab-a", "A", "readme", "Detect A.", 1)];
+    const skills = [makeDefenseSkill("a", "A", "readme", "Detect A.", 1)];
     const result = await runMergedTier1(skills, "content", async (_system, _user, onCost) => {
       onCost?.(0.00123);
       return "benign 0.1";
@@ -224,14 +224,14 @@ describe("runMergedTier1", () => {
 describe("runMergedPairTier1", () => {
   it("runs both merged scopes and OR-aggregates malicious votes", async () => {
     const skills = [
-      makeAntibody("ab-a", "A", "readme", "Detect A.", 1),
-      makeAntibody("ab-hard", "Hard", "readme", "Harden.", 1),
+      makeDefenseSkill("a", "A", "readme", "Detect A.", 1),
+      makeDefenseSkill("hard", "Hard", "readme", "Harden.", 1),
     ];
     skills[1].config.role = "non_detector";
     let calls = 0;
     const pair = await runMergedPairTier1(skills, "content", async (system) => {
       calls += 1;
-      return system.includes("[ab-a] A") && !system.includes("[ab-hard] Hard")
+      return system.includes("[a] A") && !system.includes("[hard] Hard")
         ? "malicious 0.91"
         : "benign 0.05";
     });
@@ -244,7 +244,7 @@ describe("runMergedPairTier1", () => {
   });
 
   it("returns benign only when both merged calls are benign", async () => {
-    const skills = [makeAntibody("ab-a", "A", "readme", "Detect A.", 1)];
+    const skills = [makeDefenseSkill("a", "A", "readme", "Detect A.", 1)];
     const pair = await runMergedPairTier1(skills, "content", async () => "benign 0.1");
     expect(pair.aggregated.verdict).toBe("benign");
   });
@@ -253,41 +253,41 @@ describe("runMergedPairTier1", () => {
 // ── Tier 1 Ensemble Tests ──────────────────────────────────────────
 
 describe("selectTier1Detectors", () => {
-  it("runs only detector-role tier 1/2 antibodies with a prompt", () => {
+  it("runs only detector-role tier 1/2 defense skills with a prompt", () => {
     const detectors = [
-      makeAntibody("ab-good", "Good", "readme", "You are a detector.", 1),
-      makeAntibody("ab-tier0", "T0", "readme", "prompt", 0),
-      makeAntibody("ab-no-prompt", "No Prompt", "readme", "", 2),
+      makeDefenseSkill("good", "Good", "readme", "You are a detector.", 1),
+      makeDefenseSkill("tier0", "T0", "readme", "prompt", 0),
+      makeDefenseSkill("no-prompt", "No Prompt", "readme", "", 2),
     ];
     detectors[2].config.role = "non_detector";
 
     const selected = selectTier1Detectors(detectors);
-    expect(selected.map((a) => a.config.id)).toEqual(["ab-good"]);
+    expect(selected.map((a) => a.config.id)).toEqual(["good"]);
   });
 });
 
 describe("runTier1Ensemble", () => {
-  it("runs every detector independently and keeps per-antibody verdicts", async () => {
+  it("runs every detector independently and keeps per-defense-skill verdicts", async () => {
     const detectors = [
-      makeAntibody("ab-a", "A", "readme", "Detect A.", 1),
-      makeAntibody("ab-b", "B", "readme", "Detect B.", 2),
+      makeDefenseSkill("a", "A", "readme", "Detect A.", 1),
+      makeDefenseSkill("b", "B", "readme", "Detect B.", 2),
     ];
     const called: string[] = [];
     const results = await runTier1Ensemble(detectors, "content", async (system) => {
-      called.push(system.includes("ab-a") ? "ab-a" : "ab-b");
-      return system.includes("ab-a") ? "malicious 0.9" : "benign 0.1";
+      called.push(system.includes("(a)") ? "a" : "b");
+      return system.includes("(a)") ? "malicious 0.9" : "benign 0.1";
     });
 
-    expect(called.sort()).toEqual(["ab-a", "ab-b"]);
-    const byId = new Map(results.map((r) => [r.antibody_id, r]));
-    expect(byId.get("ab-a")?.verdict).toBe("malicious");
-    expect(byId.get("ab-a")?.confidence).toBe(0.9);
-    expect(byId.get("ab-b")?.verdict).toBe("benign");
-    expect(byId.get("ab-a")?.tokens).toBeGreaterThan(0);
+    expect(called.sort()).toEqual(["a", "b"]);
+    const byId = new Map(results.map((r) => [r.defense_skill_id, r]));
+    expect(byId.get("a")?.verdict).toBe("malicious");
+    expect(byId.get("a")?.confidence).toBe(0.9);
+    expect(byId.get("b")?.verdict).toBe("benign");
+    expect(byId.get("a")?.tokens).toBeGreaterThan(0);
   });
 
   it("records per-detector errors and throws when every detector fails", async () => {
-    const detectors = [makeAntibody("ab-a", "A", "readme", "Detect A.", 1)];
+    const detectors = [makeDefenseSkill("a", "A", "readme", "Detect A.", 1)];
     await expect(
       runTier1Ensemble(detectors, "content", async () => {
         throw new Error("llm down");
@@ -297,38 +297,38 @@ describe("runTier1Ensemble", () => {
 
   it("returns partial results when only some detectors fail", async () => {
     const detectors = [
-      makeAntibody("ab-a", "A", "readme", "Detect A.", 1),
-      makeAntibody("ab-b", "B", "readme", "Detect B.", 1),
+      makeDefenseSkill("a", "A", "readme", "Detect A.", 1),
+      makeDefenseSkill("b", "B", "readme", "Detect B.", 1),
     ];
     const results = await runTier1Ensemble(detectors, "content", async (system) => {
-      if (system.includes("ab-a")) throw new Error("down");
+      if (system.includes("(a)")) throw new Error("down");
       return "suspicious 0.5";
     });
-    const byId = new Map(results.map((r) => [r.antibody_id, r]));
-    expect(byId.get("ab-a")?.error).toContain("down");
-    expect(byId.get("ab-b")?.verdict).toBe("suspicious");
+    const byId = new Map(results.map((r) => [r.defense_skill_id, r]));
+    expect(byId.get("a")?.error).toContain("down");
+    expect(byId.get("b")?.verdict).toBe("suspicious");
   });
 
   it("times out a hung detector call without blocking the ensemble", async () => {
     const detectors = [
-      makeAntibody("ab-slow", "Slow", "readme", "Detect slow.", 1),
-      makeAntibody("ab-fast", "Fast", "readme", "Detect fast.", 1),
+      makeDefenseSkill("slow", "Slow", "readme", "Detect slow.", 1),
+      makeDefenseSkill("fast", "Fast", "readme", "Detect fast.", 1),
     ];
     const results = await runTier1Ensemble(detectors, "content", async (system) => {
-      if (system.includes("ab-slow")) {
+      if (system.includes("slow")) {
         return new Promise<string>(() => {});
       }
       return "benign 0.1";
     }, undefined, { timeoutMs: 50 });
 
-    const byId = new Map(results.map((r) => [r.antibody_id, r]));
-    expect(byId.get("ab-slow")?.error).toContain("timeout after 50ms");
-    expect(byId.get("ab-fast")?.verdict).toBe("benign");
+    const byId = new Map(results.map((r) => [r.defense_skill_id, r]));
+    expect(byId.get("slow")?.error).toContain("timeout after 50ms");
+    expect(byId.get("fast")?.verdict).toBe("benign");
   });
 
   it("limits Tier 1 concurrency to maxParallel", async () => {
     const detectors = Array.from({ length: 5 }, (_, i) =>
-      makeAntibody(`ab-p${i}`, `P${i}`, "readme", "Detect.", 1),
+      makeDefenseSkill(`p${i}`, `P${i}`, "readme", "Detect.", 1),
     );
     let active = 0;
     let maxActive = 0;
@@ -347,8 +347,8 @@ describe("runTier1Ensemble", () => {
 
 describe("aggregateTier1", () => {
   const thresholds = new Map([
-    ["ab-a", 0.6],
-    ["ab-b", 0.7],
+    ["a", 0.6],
+    ["b", 0.7],
   ]);
 
   function result(
@@ -357,7 +357,7 @@ describe("aggregateTier1", () => {
     confidence: number,
   ) {
     return {
-      antibody_id: id,
+      defense_skill_id: id,
       verdict,
       confidence,
       reason: null,
@@ -369,21 +369,21 @@ describe("aggregateTier1", () => {
 
   it("any fired malicious vote wins", () => {
     const aggregated = aggregateTier1(
-      [result("ab-a", "malicious", 0.95), result("ab-b", "benign", 0.1)],
+      [result("a", "malicious", 0.95), result("b", "benign", 0.1)],
       thresholds,
     );
     expect(aggregated.verdict).toBe("malicious");
     expect(aggregated.confidence).toBe(0.95);
   });
 
-  it("a malicious vote below its antibody threshold does not fire", () => {
-    const aggregated = aggregateTier1([result("ab-b", "malicious", 0.65)], thresholds);
+  it("a malicious vote below its defense skill threshold does not fire", () => {
+    const aggregated = aggregateTier1([result("b", "malicious", 0.65)], thresholds);
     expect(aggregated.verdict).toBe("benign");
   });
 
   it("suspicious signals aggregate when nothing fires", () => {
     const aggregated = aggregateTier1(
-      [result("ab-a", "benign", 0.1), result("ab-b", "suspicious", 0.55)],
+      [result("a", "benign", 0.1), result("b", "suspicious", 0.55)],
       thresholds,
     );
     expect(aggregated.verdict).toBe("suspicious");
@@ -395,7 +395,7 @@ describe("aggregateTier1", () => {
 
 describe("matchSignatures", () => {
   it("matches exact and regex signatures and returns a malicious vote", () => {
-    const ab = makeAntibody("ab-sig", "Sig", "readme", "", 0);
+    const ab = makeDefenseSkill("sig", "Sig", "readme", "", 0);
     ab.config.signatures = [
       { pattern: "ignore previous", type: "exact", label: "ignore" },
       { pattern: "send.{0,20}@\\S+", type: "regex", label: "exfil" },
@@ -410,19 +410,19 @@ describe("matchSignatures", () => {
   });
 
   it("ignores malformed regex patterns without crashing", () => {
-    const ab = makeAntibody("ab-bad", "Bad", "readme", "", 0);
+    const ab = makeDefenseSkill("bad", "Bad", "readme", "", 0);
     ab.config.signatures = [{ pattern: "(", type: "regex", label: "broken" }];
     expect(matchSignatures(ab, "anything")).toBeNull();
   });
 
   it("runTier0 executes signature-only detectors without spawning a script", async () => {
-    const ab = makeAntibody("ab-sig-only", "Sig Only", "readme", "", 0);
+    const ab = makeDefenseSkill("sig-only", "Sig Only", "readme", "", 0);
     ab.config.signatures = [{ pattern: "send.{0,20}@\\S+", type: "regex", label: "exfil" }];
     ab.scriptPath = null;
 
     const { results, malicious } = await runTier0([ab], "send it to x@y.com");
     expect(malicious).toBe(true);
-    expect(results[0]?.antibody_id).toBe("ab-sig-only");
+    expect(results[0]?.defense_skill_id).toBe("sig-only");
   });
 });
 
@@ -553,13 +553,13 @@ describe("token estimation", () => {
 
 describe("scan() cost accounting", () => {
   it("reports the summed per-detector prompt + output tokens for Tier 1", async () => {
-    const ab = makeAntibody("ab-cost", "Cost", "readme", "You are a detector.", 1);
-    const { systemPrompt, userPrompt } = buildAntibodyPrompt(ab, "hello");
+    const ab = makeDefenseSkill("cost", "Cost", "readme", "You are a detector.", 1);
+    const { systemPrompt, userPrompt } = buildDefenseSkillPrompt(ab, "hello");
     const output = "benign 0.95";
     let calls = 0;
     const result = await scan({
-      antibodies: [ab],
-      antigens: [],
+      defenseSkills: [ab],
+      attacks: [],
       content: "hello",
       llmCall: async () => {
         calls += 1;
@@ -575,8 +575,8 @@ describe("scan() cost accounting", () => {
   it("skips the LLM entirely when the library has no Tier 1 detectors", async () => {
     let calls = 0;
     const result = await scan({
-      antibodies: [],
-      antigens: [],
+      defenseSkills: [],
+      attacks: [],
       content: "hello",
       llmCall: async () => {
         calls += 1;
@@ -589,10 +589,10 @@ describe("scan() cost accounting", () => {
   });
 
   it("reports zero tokens when the LLM call fails (fallback path)", async () => {
-    const ab = makeAntibody("ab-down", "Down", "readme", "You are a detector.", 1);
+    const ab = makeDefenseSkill("down", "Down", "readme", "You are a detector.", 1);
     const result = await scan({
-      antibodies: [ab],
-      antigens: [],
+      defenseSkills: [ab],
+      attacks: [],
       content: "hello",
       llmCall: async () => {
         throw new Error("llm down");
@@ -603,11 +603,11 @@ describe("scan() cost accounting", () => {
   });
 
   it("merged mode makes one LLM call and bypasses the escalation gate", async () => {
-    const ab = makeAntibody("ab-a", "A", "readme", "You are a detector.", 1);
+    const ab = makeDefenseSkill("a", "A", "readme", "You are a detector.", 1);
     let calls = 0;
     const result = await scan({
-      antibodies: [ab],
-      antigens: [],
+      defenseSkills: [ab],
+      attacks: [],
       content: "hello",
       tier1Mode: "merged",
       escalationPolicy: "aggressive",
@@ -623,63 +623,63 @@ describe("scan() cost accounting", () => {
     expect(result.verdict).toBe("malicious");
     expect(result.total_cost_usd).toBeCloseTo(0.0005, 6);
     expect(
-      result.script_results.some((r) => r.antibody_id === "merged-tier1"),
+      result.script_results.some((r) => r.defense_skill_id === "merged-tier1"),
     ).toBe(true);
   });
 
   it("merged-pair mode makes two calls and OR-aggregates the verdicts", async () => {
-    const ab = makeAntibody("ab-a", "A", "readme", "You are a detector.", 1);
-    const hard = makeAntibody("ab-hard", "Hard", "readme", "Harden.", 1);
+    const ab = makeDefenseSkill("a", "A", "readme", "You are a detector.", 1);
+    const hard = makeDefenseSkill("hard", "Hard", "readme", "Harden.", 1);
     hard.config.role = "non_detector";
     let calls = 0;
     const result = await scan({
-      antibodies: [ab, hard],
-      antigens: [],
+      defenseSkills: [ab, hard],
+      attacks: [],
       content: "hello",
       tier1Mode: "merged-pair",
       escalationPolicy: "aggressive",
       sourceTrust: "high",
       llmCall: async (system) => {
         calls += 1;
-        return system.includes("ab-hard") ? "benign 0.1" : "malicious 0.8";
+        return system.includes("[hard]") ? "benign 0.1" : "malicious 0.8";
       },
     });
     expect(calls).toBe(2);
     expect(result.tier).toBe(1);
     expect(result.verdict).toBe("malicious");
     expect(
-      result.script_results.filter((r) => r.antibody_id === "merged-tier1"),
+      result.script_results.filter((r) => r.defense_skill_id === "merged-tier1"),
     ).toHaveLength(2);
   });
 });
 
 describe("scan() Tier 1 escalation", () => {
   const FAST_IDS = [
-    "ab-classifier-injection",
-    "ab-classifier-jailbreak",
-    "ab-builtin-poisoning",
+    "classifier-injection",
+    "classifier-jailbreak",
+    "builtin-poisoning",
   ];
   const FULL_IDS = [
     ...FAST_IDS,
-    "ab-builtin-injection",
-    "ab-builtin-jailbreak",
-    "ab-context-aware",
-    "ab-instruction-hierarchy",
-    "ab-llm-judge",
-    "ab-semantic-similarity",
+    "builtin-injection",
+    "builtin-jailbreak",
+    "context-aware",
+    "instruction-hierarchy",
+    "llm-judge",
+    "semantic-similarity",
   ];
 
-  function makeEnsemble(): AntibodyEntry[] {
+  function makeEnsemble(): DefenseSkillEntry[] {
     return FULL_IDS.map((id) =>
-      makeAntibody(id, id, "readme", "You are a detector.", 1),
+      makeDefenseSkill(id, id, "readme", "You are a detector.", 1),
     );
   }
 
   it("safe policy runs only the fast subset on a clean scan", async () => {
     const called: string[] = [];
     const result = await scan({
-      antibodies: makeEnsemble(),
-      antigens: [],
+      defenseSkills: makeEnsemble(),
+      attacks: [],
       content: "hello",
       llmCall: async (system) => {
         const id = system.match(/\(([^)]+)\)/)![1];
@@ -701,13 +701,13 @@ describe("scan() Tier 1 escalation", () => {
       scriptPath,
       'console.log(JSON.stringify({ verdict: "suspicious", confidence: 0.5, reason: "weak" }));',
     );
-    const weakAb = makeAntibody("ab-weak", "Weak", "readme", "", 0);
+    const weakAb = makeDefenseSkill("weak", "Weak", "readme", "", 0);
     weakAb.scriptPath = scriptPath;
 
     const called: string[] = [];
     const result = await scan({
-      antibodies: [...makeEnsemble(), weakAb],
-      antigens: [],
+      defenseSkills: [...makeEnsemble(), weakAb],
+      attacks: [],
       content: "hello",
       llmCall: async (system) => {
         const id = system.match(/\(([^)]+)\)/)![1];
@@ -721,7 +721,7 @@ describe("scan() Tier 1 escalation", () => {
     expect(result.verdict).toBe("benign");
     expect(
       result.script_results.some(
-        (r) => r.antibody_id === "escalation" && r.reason?.includes("full"),
+        (r) => r.defense_skill_id === "escalation" && r.reason?.includes("full"),
       ),
     ).toBe(true);
   });
@@ -729,8 +729,8 @@ describe("scan() Tier 1 escalation", () => {
   it("aggressive policy skips the LLM on trusted clean input", async () => {
     let calls = 0;
     const result = await scan({
-      antibodies: makeEnsemble(),
-      antigens: [],
+      defenseSkills: makeEnsemble(),
+      attacks: [],
       content: "hello",
       llmCall: async () => {
         calls += 1;
@@ -748,8 +748,8 @@ describe("scan() Tier 1 escalation", () => {
   it("aggressive policy still runs the fast subset on untrusted input", async () => {
     const called: string[] = [];
     const result = await scan({
-      antibodies: makeEnsemble(),
-      antigens: [],
+      defenseSkills: makeEnsemble(),
+      attacks: [],
       content: "hello",
       llmCall: async (system) => {
         const id = system.match(/\(([^)]+)\)/)![1];
@@ -767,13 +767,13 @@ describe("scan() Tier 1 escalation", () => {
   it("fast subset that fires malicious blocks without running the rest", async () => {
     const called: string[] = [];
     const result = await scan({
-      antibodies: makeEnsemble(),
-      antigens: [],
+      defenseSkills: makeEnsemble(),
+      attacks: [],
       content: "hello",
       llmCall: async (system) => {
         const id = system.match(/\(([^)]+)\)/)![1];
         called.push(id);
-        return id === "ab-classifier-injection" ? "malicious 0.95" : "benign 0.1";
+        return id === "classifier-injection" ? "malicious 0.95" : "benign 0.1";
       },
       escalationPolicy: "safe",
       fastDetectorIds: FAST_IDS,
@@ -785,8 +785,8 @@ describe("scan() Tier 1 escalation", () => {
   it("suspicious fast subset escalates to the remaining detectors", async () => {
     const called: string[] = [];
     const result = await scan({
-      antibodies: makeEnsemble(),
-      antigens: [],
+      defenseSkills: makeEnsemble(),
+      attacks: [],
       content: "hello",
       llmCall: async (system) => {
         const id = system.match(/\(([^)]+)\)/)![1];
@@ -803,8 +803,8 @@ describe("scan() Tier 1 escalation", () => {
   it("ensemble mode runs every detector and bypasses the escalation gate", async () => {
     const called: string[] = [];
     const result = await scan({
-      antibodies: makeEnsemble(),
-      antigens: [],
+      defenseSkills: makeEnsemble(),
+      attacks: [],
       content: "hello",
       tier1Mode: "ensemble",
       escalationPolicy: "aggressive",
@@ -843,8 +843,8 @@ describe("parseScanMode", () => {
 });
 
 describe("scan() System I ablation modes", () => {
-  function makeTier0Hit(): AntibodyEntry {
-    const ab = makeAntibody("ab-t0", "T0", "readme", "", 0);
+  function makeTier0Hit(): DefenseSkillEntry {
+    const ab = makeDefenseSkill("t0", "T0", "readme", "", 0);
     ab.config.signatures = [
       { pattern: "evil-payload", type: "exact", label: "hit" },
     ];
@@ -854,8 +854,8 @@ describe("scan() System I ablation modes", () => {
   it("t0-only returns the Tier 0 verdict without calling the LLM", async () => {
     let calls = 0;
     const result = await scan({
-      antibodies: [makeTier0Hit()],
-      antigens: [],
+      defenseSkills: [makeTier0Hit()],
+      attacks: [],
       content: "evil-payload in a file",
       skipTier1: true,
       llmCall: async () => {
@@ -870,10 +870,10 @@ describe("scan() System I ablation modes", () => {
 
   it("none (skip Tier 0) still runs Tier 1 on a payload Tier 0 would block", async () => {
     let calls = 0;
-    const t1 = makeAntibody("ab-t1", "T1", "readme", "You are a detector.", 1);
+    const t1 = makeDefenseSkill("t1", "T1", "readme", "You are a detector.", 1);
     const result = await scan({
-      antibodies: [makeTier0Hit(), t1],
-      antigens: [],
+      defenseSkills: [makeTier0Hit(), t1],
+      attacks: [],
       content: "evil-payload in a file",
       skipTier0: true,
       tier1Mode: "merged-pair",

@@ -27,12 +27,12 @@ Table: three methods at endpoint.
 Driver lives in this branch only:
 - AgentEval/scripts/run_lifelong_synthesis.py
 - caitlyn-agent/scripts/scan-batch.ts
-- caitlyn-agent/scripts/vaccinate-cluster.ts
+- caitlyn-agent/scripts/synthesize-cluster.ts
 --library-root defaults to /home/zi/caitlyn. Changing the source wipes
 the isolated library and the static cache.
 Isolated CAITLYN_LIBRARY_DIR / EVOLUTION_DIR / HISTORY_DIR / STATS_DIR.
 Static scan cached once. Combined detector = cached static ∪ DAG signatures
-(same path as 5.1 CaitlynEvolvedDefense). Product vaccinate CLI unchanged.
+(same path as 5.1 CaitlynEvolvedDefense). Product synthesize CLI unchanged.
 Small isolation hooks: CAITLYN_HISTORY_DIR, CAITLYN_EVOLUTION_DIR env.
 
 * Dry-run 2026-08-22
@@ -48,9 +48,9 @@ The hard Pass on a 13-sample cluster is why synthesis produced nothing.
 * Dry-run 2, caitlyn 24 (2026-08-22)
 
 Out: AgentEval/results/lifelong_20260822_dryrun_caitlyn24
-Copied 24 antibody dirs from /home/zi/caitlyn.
+Copied 24 defense skill dirs from /home/zi/caitlyn.
 Wave 1 under --tier0-only: 0 seed misses, held-out TPR 1.0, FPR 0 on 20
-short XSTest strings. All 25 status_field hits were ab-entropy-anomaly
+short XSTest strings. All 25 status_field hits were entropy-anomaly
 voting suspicious, which the driver counted as blocked.
 This is not 5.1 e2e behavior: CaitlynDefense only blocks malicious, and
 Tier-0 suspicious does not short-circuit before Tier 1.

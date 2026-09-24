@@ -63,7 +63,7 @@ Tier 0 在相互隔离的子进程中执行预编译的 `detect.mjs` 技能。�
 
 System II 将一次漏检视为可供学习的反例，而非永久失效。其合成循环执行以下步骤：
 
-1. 提取结构化抗原画像，同时不将原始触发文本放入生成器 prompt
+1. 提取结构化攻击画像，同时不将原始触发文本放入生成器 prompt
 2. 选择相关的防御库上下文与历史经验
 3. 由生成器模型提出候选防御技能
 4. 在攻击约束与良性约束上执行候选技能
@@ -252,10 +252,10 @@ export CAITLYN_MODEL="deepseek-v4-flash"
 | `./caitlyn uninstall <agent>` | 移除集成并恢复备份 |
 | `./caitlyn daemon start\|stop\|status` | 管理本地扫描 daemon |
 | `./caitlyn watch [--add <dir>]` | 添加文件系统观察目录 |
-| `./caitlyn vaccinate <pattern>` | 提交显式 System II 触发器 |
-| `./caitlyn vaccinate --status` | 检查进化谱系 |
-| `./caitlyn vaccinate --approve <id>` | 批准 shadow 候选 |
-| `./caitlyn vaccinate --redteam [category]` | 在攻击语料上评测 Tier 0 |
+| `./caitlyn synthesize <pattern>` | 提交显式 System II 触发器 |
+| `./caitlyn synthesize --status` | 检查进化谱系 |
+| `./caitlyn synthesize --approve <id>` | 批准 shadow 候选 |
+| `./caitlyn synthesize --redteam [category]` | 在攻击语料上评测 Tier 0 |
 | `./caitlyn providers` | 列出内置服务商与模型 |
 | `./caitlyn update --check` | 检查发布版本元数据 |
 | `./caitlyn contribute` | 打包防御库贡献以供评审 |
@@ -286,7 +286,7 @@ export CAITLYN_MODEL="deepseek-v4-flash"
 每个防御技能都是可移植目录：
 
 ```text
-antibodies/<skill-id>/
+skills/<skill-id>/
 ├── README.md
 ├── config.yaml
 ├── detect.ts
@@ -305,7 +305,7 @@ antibodies/<skill-id>/
 攻击条目采用平行结构：
 
 ```text
-antigens/<attack-id>/
+attacks/<attack-id>/
 ├── README.md
 ├── config.yaml
 └── payload.txt
@@ -365,8 +365,8 @@ uv run python run_benchmark.py \
 ```text
 caitlyn/
 ├── caitlyn-agent/       TypeScript CLI、终端界面、daemon、守卫与合成
-├── antibodies/          版本化的防御技能库
-├── antigens/            版本化的攻击与反例库
+├── skills/          版本化的防御技能库
+├── attacks/            版本化的攻击与反例库
 ├── library/             待评审的贡献包与同步状态
 ├── knowledge_base/      攻击载荷、标注与来源材料
 ├── AgentEval/           Python 基准与实验框架

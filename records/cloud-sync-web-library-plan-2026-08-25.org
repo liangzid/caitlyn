@@ -18,10 +18,10 @@ library refresh via product update (no separate sync pull).
 5. Contribute UX :: Interactive picker over *all* local entries (Option C).
 6. Hub :: Same repo (=caitlyn=).
 7. Pre-audit path :: =library/incoming/<contrib-id>/...=; promote into
-   =antibodies/= / =antigens/= only after maintainer audit.
-8. Sanitize :: Strip stats/PII/paths; antigen payloads hashed/redacted by default;
+   =skills/= / =attacks/= only after maintainer audit.
+8. Sanitize :: Strip stats/PII/paths; attack payloads hashed/redacted by default;
    full payload only per-entry explicit opt-in in picker.
-9. Local verify :: Hard gate L2+schema for defenses; soft warn for antigens.
+9. Local verify :: Hard gate L2+schema for defenses; soft warn for attacks.
 10. Install :: npm package =caitlyn= + wget/curl install shell.
 11. Upgrade apply :: npm (and install-method aware later as needed).
 12. Upgrade prompt :: TUI soft nudge + one-key confirm (not silent auto-update).
@@ -46,7 +46,7 @@ library refresh via product update (no separate sync pull).
 
 - ~~v1 implementation phase order (MVP slice).~~ Done: thin vertical (Option 3).
 - Exact =library/incoming= manifest schema + PR template. (MANIFEST.json shipped; PR template later)
-- Migration of current in-tree =antibodies/= into package-root vs user-root. (dual-root live)
+- Migration of current in-tree =skills/= into package-root vs user-root. (dual-root live)
 - ~~Package name for public release.~~ Resolved: =caitlyn=.
 - Install script URL for public release.
 - Follow-ups: wget install shell, TUI one-key update nudge, =gh pr create=.
@@ -58,7 +58,7 @@ Findings:
    shipped skills (was 6/24, then 4/24). Causes: (a) outer =?= treated as nested;
    (b) deleting =\.= escapes turned =\s+= into bare =+= glued to prior group.
    Fix: placeholder replace for escapes; outer quantifier only =+/*=. Now 24/24 pass.
-2. *Medium (fixed)*: user-side =index.json= could lag shipped library; =loadAntibodyIndex=
+2. *Medium (fixed)*: user-side =index.json= could lag shipped library; =loadDefenseSkillIndex=
    now rebuilds when live ids are missing from the index.
 
 ** Open issues (recorded; do not fix yet)

@@ -21,17 +21,17 @@ export {
 export type { LlmCallFn, ScanOptions } from "./scanner.js";
 
 export {
-  loadAntibodies,
-  loadAntigens,
+  loadDefenseSkills,
+  loadAttacks,
   shippedLibraryRoot,
   userLibraryRoot,
 } from "./library.js";
 
 export type {
-  AntibodyConfig,
-  AntibodyEntry,
-  AntigenConfig,
-  AntigenEntry,
+  DefenseSkillConfig,
+  DefenseSkillEntry,
+  AttackConfig,
+  AttackEntry,
   ScanResult,
   ScriptResult,
   Verdict,

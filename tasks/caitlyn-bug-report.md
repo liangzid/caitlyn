@@ -44,40 +44,40 @@ When no compaction exists, `compactFromIndex` defaults to `-1`. The loop at `Mat
 Any I/O or parse error → returns `[]`. Corrupted JSON file → all history silently "vanishes."
 **Risk**: Users never know their scan history is gone.
 
-### 7. YAML injection in `saveAntibody()`
+### 7. YAML injection in `saveDefenseSkill()`
 **File**: `caitlyn-agent/src/library.ts:213-236` (inferred)
-Antibody config values are written directly into YAML without sanitization. Values containing `:` or `#` can produce malformed or hostile YAML.
-**Risk**: Malicious antibody config could corrupt the YAML file or inject new keys.
+Defense skill config values are written directly into YAML without sanitization. Values containing `:` or `#` can produce malformed or hostile YAML.
+**Risk**: Malicious defense skill config could corrupt the YAML file or inject new keys.
 
 ### 8. Memory bank: `hit_count` increments lost on clone
 **File**: `src/core/memory.rs`
 `MemoryEntry` derives `Clone`. `MemoryBank.check()` returns `MemoryMatch::Exact(entry.clone())` — the clone has `hit_count` from the clone source, but the original in the `HashMap` is never incremented.
-**Risk**: Hit count metrics are always wrong — vaccination triggers on stale data.
+**Risk**: Hit count metrics are always wrong — synthesis triggers on stale data.
 
-### 9. Vaccination pipeline: scanner uses hardcoded string match, not LLM
+### 9. Synthesis pipeline: scanner uses hardcoded string match, not LLM
 **File**: `src/evolution/trigger.rs`
 The scanner closure passed to `AffinityMaturation::evaluate()` does literal string matching (`content.contains(sample)`) instead of calling the LLM.
-**Risk**: The entire vaccination pipeline evaluates antibodies against a trivial heuristic. Generated antibodies are never LLM-validated.
+**Risk**: The entire synthesis pipeline evaluates defense skills against a trivial heuristic. Generated defense skills are never LLM-validated.
 
 ### 10. MCP `caitlyn_scan` tool: memory-only, never calls scanner
 **File**: `src/server/mcp.rs`
 The `caitlyn_scan` tool checks the memory bank but never invokes the full SurveillanceScanner. Content that doesn't match memory is silently returned as safe.
 **Risk**: MCP clients get false negatives for all non-cached attacks.
 
-### 11. Daemon `vaccinate()` is a no-op stub
+### 11. Daemon `synthesize()` is a no-op stub
 **File**: `src/lib.rs:107-110`
-`pub async fn vaccinate(&self, _pattern_hash: &str) -> CaitlynResult<()> { Ok(()) }` — returns success without doing anything.
-**Risk**: HTTP `/v1/vaccinate` and MCP `caitlyn_vaccinate` endpoints silently succeed without evolving any antibody.
+`pub async fn synthesize(&self, _pattern_hash: &str) -> CaitlynResult<()> { Ok(()) }` — returns success without doing anything.
+**Risk**: HTTP `/v1/synthesize` and MCP `caitlyn_synthesize` endpoints silently succeed without evolving any defense skill.
 
 ### 12. Rust scanner: `tokens_used` always 0
 **File**: `src/surveillance/scanner.rs`
-Token tracking variable `total_tokens` is declared but `run_antibody_batch()` returns results where `tokens_used` is never populated from the LLM response.
+Token tracking variable `total_tokens` is declared but `run_defense_skill_batch()` returns results where `tokens_used` is never populated from the LLM response.
 **Risk**: Cost monitoring is completely blind to actual token usage.
 
 ### 13. Rust scanner: `max_parallel_tier1` / `max_parallel_tier2` config unused
 **File**: `src/surveillance/scanner.rs`
-Config fields for concurrency limits are read but never applied. `run_antibody_batch()` runs all antibodies in parallel unconditionally.
-**Risk**: N antibodies → N concurrent LLM calls, potentially overwhelming the API.
+Config fields for concurrency limits are read but never applied. `run_defense_skill_batch()` runs all defense skills in parallel unconditionally.
+**Risk**: N defense skills → N concurrent LLM calls, potentially overwhelming the API.
 
 ### 14. Rust LLM: fail-open on parse errors
 **File**: `src/surveillance/scanner.rs`
@@ -97,11 +97,11 @@ When LLM responses can't be parsed, the scanner defaults to `Verdict::Benign` wi
 - **Rust**: `AntibodyPool.EMA` stats use `u64` for averages — fractional precision lost.
 
 ### Concurrency & Resource Management
-- **TS**: No concurrency limit on `spawn("npx", ["tsx", ...])` — scanning N antibodies spawns N simultaneous child processes.
+- **TS**: No concurrency limit on `spawn("npx", ["tsx", ...])` — scanning N defense skills spawns N simultaneous child processes.
 - **TS**: TUI `footerTimer` interval runs `setInterval` but the cleanup in `stop()` only clears it — if `stop()` is never called (crash), the timer leaks.
 - **TS**: Agent event listener subscribed via `agent.subscribe()` — no `unsubscribe()` call path. Multiple TUI instances would receive duplicate events.
 - **Rust**: `cost_monitor.record()` acquires a write lock on every scan — hot-path contention.
-- **Rust**: `antibody_store` does synchronous file I/O inside async functions — blocks the tokio runtime.
+- **Rust**: `defense_skill_store` does synchronous file I/O inside async functions — blocks the tokio runtime.
 
 ### Error Handling
 - **TS**: `scanner.ts:102` — `child.stdin?.write()` errors silently ignored.
@@ -123,18 +123,18 @@ When LLM responses can't be parsed, the scanner defaults to `Verdict::Benign` wi
 - **Rust**: `config.rs` — `grpc_port` field defined but unused.
 
 ### Performance
-- **TS**: Every tool call reloads `loadAntibodies()` + `loadAntigens()` from disk — `readdirSync` + `statSync` + `readFileSync` × N per invocation.
+- **TS**: Every tool call reloads `loadDefenseSkills()` + `loadAttacks()` from disk — `readdirSync` + `statSync` + `readFileSync` × N per invocation.
 - **TS**: `saveHistory()` rewrites the entire file on every `logScan()` — O(n) I/O.
 - **TS**: `scan` content passed via environment variable `CAITLYN_SCAN_CONTENT` — OS limit ~128KB.
-- **TS**: The `npx tsx` startup overhead is ~500ms per script. 3 antibodies = 1.5s minimum on every scan.
+- **TS**: The `npx tsx` startup overhead is ~500ms per script. 3 defense skills = 1.5s minimum on every scan.
 - **Rust**: `MemoryBank.rebuild_regex_cache()` recompiles all regexes on every insertion.
 
 ### Half-Implemented Features
-- **TS**: `caitlyn_vaccinate` tool generates antibody text but never persists it to disk.
+- **TS**: `caitlyn_synthesize` tool generates defense skill text but never persists it to disk.
 - **TS**: `tools.ts:formatTree()` has no cycle detection — infinite recursion on circular `parent_id`.
 - **TS**: `buildSessionContext()` has compaction logic that is never triggered (no compaction entries created).
-- **Rust**: `vaccinate()` is a complete no-op.
-- **Rust**: `prune()` only prunes memory, antibody pruning is TODO.
+- **Rust**: `synthesize()` is a complete no-op.
+- **Rust**: `prune()` only prunes memory, defense skill pruning is TODO.
 - **Rust**: `AntibodyStats.true_negatives` / `false_negatives` fields exist in schema but are never populated.
 
 ### Session-Context Disconnect
@@ -144,7 +144,7 @@ When LLM responses can't be parsed, the scanner defaults to `Verdict::Benign` wi
 ### Database
 - **Rust**: SQLite schema has no migration versioning — schema changes require manual intervention.
 - **Rust**: `memory_fts` FTS5 table has no sync triggers — content gets stale when `memory_entries` is updated.
-- **Rust**: No indexes on `antibody_id` foreign key in `memory_entries`.
+- **Rust**: No indexes on `defense_skill_id` foreign key in `memory_entries`.
 - **Rust**: `resolved_by` stored as JSON text — not queryable.
 - **Rust**: Custom binary embedding format has no versioning.
 
@@ -199,7 +199,7 @@ When LLM responses can't be parsed, the scanner defaults to `Verdict::Benign` wi
 
 1. **Scanner spawn error handler** — prevents crashes from missing dependencies
 2. **Session atomic writes** — prevents permanent data loss on crash
-3. **Daemon `vaccinate()` implementation** — the core value proposition is a stub
+3. **Daemon `synthesize()` implementation** — the core value proposition is a stub
 4. **History read-modify-write locking** — prevents silent scan data loss
 5. **MCP `caitlyn_scan` wired to real scanner** — MCP clients currently get false negatives
 
@@ -209,8 +209,8 @@ When LLM responses can't be parsed, the scanner defaults to `Verdict::Benign` wi
 
 The two subsystems (TypeScript agent + Rust daemon) evolved semi-independently. The agent can operate standalone (local scanning), and the daemon provides accelerated scanning + evolution. However:
 
-- The **vaccination pipeline** (the project's core differentiator) is effectively non-functional on both sides: the TS agent generates but doesn't persist antibodies; the Rust daemon's `vaccinate()` is a stub, and its evaluation uses hardcoded string matching instead of LLM.
+- The **synthesis pipeline** (the project's core differentiator) is effectively non-functional on both sides: the TS agent generates but doesn't persist defense skills; the Rust daemon's `synthesize()` is a stub, and its evaluation uses hardcoded string matching instead of LLM.
 - **Persistence is fragile**: both sides use full-file rewrites without atomicity guarantees.
-- **Caching is absent**: every scan and tool invocation reloads antibodies from disk.
+- **Caching is absent**: every scan and tool invocation reloads defense skills from disk.
 - **Error handling is pervasively fail-open**: scanner defaults to `benign` on errors, which is the wrong default for a security product.
 - **No cross-subsystem integration tests**: the agent and daemon are tested independently but never together.

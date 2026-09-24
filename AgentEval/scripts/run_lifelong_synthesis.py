@@ -6,7 +6,7 @@ RUN-LIFELONG-SYNTHESIS
 Detection-only lifelong driver for paper section 5.2.
 
 Three methods share t=0 = shipped static library + empty DAG:
-  static     — never vaccinate
+  static     — never synthesize
   sequential — one System II loop per family wave
   batch      — one loop on the union of all seed misses
 
@@ -82,20 +82,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--library-root",
         default=str(DEFAULT_LIBRARY_ROOT),
-        help="Shipped antibody/antigen tree. Default: /home/zi/caitlyn (24 skills).",
+        help="Shipped defense skill/attack tree. Default: /home/zi/caitlyn (24 skills).",
     )
     parser.add_argument("--max-waves", type=int, default=0, help="0 = all nine")
     parser.add_argument("--limit-benign", type=int, default=0, help="0 = all 250")
     parser.add_argument("--tier0-only", action="store_true")
     parser.add_argument(
-        "--skip-vaccinate",
+        "--skip-synthesize",
         action="store_true",
         help="Evaluate with the current DAG only (no System II call)",
     )
     parser.add_argument(
         "--pruned-replay",
         action="store_true",
-        help="Replay Sequential waves on a 5.1-pruned copy of the DAG. No vaccinate.",
+        help="Replay Sequential waves on a 5.1-pruned copy of the DAG. No synthesize.",
     )
     return parser.parse_args()
 
@@ -144,15 +144,15 @@ def prepare_isolated_library(out_dir: Path, library_root: Path) -> Path:
     if cache_dir.exists():
         shutil.rmtree(cache_dir)
     ignore = shutil.ignore_patterns(".trash", "*.tmp")
-    shutil.copytree(library_root / "antibodies", library_dir / "antibodies", ignore=ignore)
-    shutil.copytree(library_root / "antigens", library_dir / "antigens", ignore=ignore)
+    shutil.copytree(library_root / "skills", library_dir / "skills", ignore=ignore)
+    shutil.copytree(library_root / "attacks", library_dir / "attacks", ignore=ignore)
     marker.write_text(source + "\n", encoding="utf-8")
     n_abs = sum(
         1
-        for path in (library_dir / "antibodies").iterdir()
+        for path in (library_dir / "skills").iterdir()
         if path.is_dir() and not path.name.startswith(".")
     )
-    print(f"copied library from {source} ({n_abs} antibody dirs)", flush=True)
+    print(f"copied library from {source} ({n_abs} defense skill dirs)", flush=True)
     return library_dir
 
 
@@ -256,7 +256,7 @@ def fpr_on_benign(
     return {"n": n, "hits": hits, "fpr": (hits / n) if n else 0.0}
 
 
-def vaccinate_cluster(
+def synthesize_cluster(
     out_dir: Path,
     library_dir: Path,
     evolution_dir: Path,
@@ -265,7 +265,7 @@ def vaccinate_cluster(
     verifier_benign: list[str],
     outcome_path: Path,
 ) -> dict[str, Any]:
-    """Run one System II loop on the antigen cluster."""
+    """Run one System II loop on the attack cluster."""
     if outcome_path.is_file():
         return json.loads(outcome_path.read_text(encoding="utf-8"))
     miss_path = outcome_path.parent / "must_detect.json"
@@ -274,7 +274,7 @@ def vaccinate_cluster(
     write_json(benign_path, verifier_benign)
     cmd = [
         *NPX_TSX,
-        str(CAITLYN_AGENT / "scripts" / "vaccinate-cluster.ts"),
+        str(CAITLYN_AGENT / "scripts" / "synthesize-cluster.ts"),
         "--must-detect",
         str(miss_path),
         "--benign",
@@ -345,7 +345,7 @@ def run_sequential(
     out_dir: Path,
     library_dir: Path,
     max_waves: int,
-    skip_vaccinate: bool,
+    skip_synthesize: bool,
 ) -> None:
     """Nine-wave sequential synthesis with a persistent DAG."""
     evolution_dir = out_dir / "sequential" / "evolution"
@@ -360,10 +360,10 @@ def run_sequential(
         wave_dir = out_dir / "sequential" / "waves" / f"{index:02d}_{family}"
         wave_dir.mkdir(parents=True, exist_ok=True)
         outcome: dict[str, Any] | None = None
-        if not skip_vaccinate:
+        if not skip_synthesize:
             misses = seed_miss_contents(seed_rows, static_cache, evolution_dir)
             write_json(wave_dir / "seed_miss_count.json", {"n": len(misses)})
-            outcome = vaccinate_cluster(
+            outcome = synthesize_cluster(
                 out_dir,
                 library_dir,
                 evolution_dir,
@@ -399,7 +399,7 @@ def run_batch(
     verifier_benign: list[str],
     out_dir: Path,
     library_dir: Path,
-    skip_vaccinate: bool,
+    skip_synthesize: bool,
 ) -> None:
     """One synthesis loop on the union of all seed misses."""
     evolution_dir = out_dir / "batch" / "evolution"
@@ -411,9 +411,9 @@ def run_batch(
         all_seed.extend(seed_rows)
         all_heldout.extend(heldout_rows)
     outcome: dict[str, Any] | None = None
-    if not skip_vaccinate:
+    if not skip_synthesize:
         misses = seed_miss_contents(all_seed, static_cache, evolution_dir)
-        outcome = vaccinate_cluster(
+        outcome = synthesize_cluster(
             out_dir,
             library_dir,
             evolution_dir,
@@ -644,7 +644,7 @@ def main() -> None:
             out_dir,
             library_dir,
             args.max_waves,
-            args.skip_vaccinate,
+            args.skip_synthesize,
         )
     elif args.method == "batch":
         run_batch(
@@ -654,7 +654,7 @@ def main() -> None:
             verifier_benign,
             out_dir,
             library_dir,
-            args.skip_vaccinate,
+            args.skip_synthesize,
         )
     else:
         run_static(families, static_cache, benign_items, out_dir)

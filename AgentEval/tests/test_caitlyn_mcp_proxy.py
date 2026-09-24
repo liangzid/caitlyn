@@ -32,7 +32,7 @@ def test_scan_tool_output_blocks_malicious():
         verdict="malicious",
         confidence=0.95,
         reasoning="exfiltration attempt",
-        matched_antibodies=["ab-x"],
+        matched_defense_skills=["x"],
         matched_memory=[],
         latency_ms=5.0,
     )
@@ -49,7 +49,7 @@ def test_scan_tool_output_passes_benign():
         verdict="benign",
         confidence=0.99,
         reasoning="clean",
-        matched_antibodies=[],
+        matched_defense_skills=[],
         matched_memory=[],
         latency_ms=2.0,
     )

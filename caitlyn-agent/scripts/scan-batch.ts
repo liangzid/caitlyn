@@ -74,15 +74,15 @@ async function main(): Promise<void> {
     const result = await hybridScan({ content: item.content, llmCall });
     // KEYPOINT-REVIEW: 5.2 blocked = malicious only, matching 5.1 e2e CaitlynDefense.
     const blocked = result.verdict === "malicious";
-    const antibodies = result.script_results
+    const defenseSkills = result.script_results
       .filter((r) => r.verdict === "malicious")
-      .map((r) => r.antibody_id);
+      .map((r) => r.defense_skill_id);
     stream.write(
       `${JSON.stringify({
         id: item.id,
         verdict: result.verdict,
         blocked,
-        antibodies,
+        defenseSkills,
         tier: result.tier,
         latency_ms: result.total_latency_us / 1000,
         tokens: result.total_tokens,

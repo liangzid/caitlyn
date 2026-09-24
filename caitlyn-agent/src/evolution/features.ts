@@ -1,5 +1,5 @@
 /**
- * CAITLYN Evolution — Antigen Feature Extraction
+ * CAITLYN Evolution — Attack Feature Extraction
  *
  * L1 data boundary: raw trigger samples never enter the generator prompt.
  * This module computes real, deterministic statistical features from the
@@ -34,7 +34,7 @@ const INSTRUCTION_KEYWORDS = [
 ];
 
 /** Deterministic statistical features of a trigger sample set. */
-export function extractAntigenFeatures(samples: string[]): string[] {
+export function extractAttackFeatures(samples: string[]): string[] {
   const features: string[] = [];
   const joined = samples.join("\n");
   features.push(`total_length=${joined.length}`);

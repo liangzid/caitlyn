@@ -446,7 +446,7 @@ Both openclaw caitlyn-static and caitlyn-evolved after runs have
 mcp_tool_calls = 0 and defense events = 0. Therefore the real-agent openclaw
 prompt-delivery path did not invoke the MCP tool-output defense layer. This
 run measures attack success under prompt delivery, but it should not be used as
-evidence that System II evolved antibodies were applied through MCP filtering.
+evidence that System II evolved defense skills were applied through MCP filtering.
 
 * Emerging200 Three-Agent Caitlyn-Evolved After Check
 
@@ -469,21 +469,21 @@ For all three agents, mcp_tool_calls = 0 and defense events = 0 in the result
 files. The action_tool subset is also 0/40 compromised for every defense and
 agent. Therefore these real-agent runs mainly measure prompt-delivered answer
 poisoning behavior. They should not be interpreted as evidence that System II
-evolved antibodies were applied through tool-output filtering.
+evolved defense skills were applied through tool-output filtering.
 
-* Evolved Antibody Pruning For Prompt-Filtered After Runs
+* Evolved Defense skill Pruning For Prompt-Filtered After Runs
 
 Timestamp: 2026-08-13 HKT
 
 The first prompt-filtered after smoke produced 0 ASR because ab-015 matched
 nearly all long environment content through the broad regex
 ^[\s\S]{100,}$. After deactivating ab-015, the next partial still produced 0
-ASR because feature-expression antibodies such as ab-016 were interpreted as
+ASR because feature-expression defense skills such as ab-016 were interpreted as
 plain Python regex and degraded into broad keyword OR matching.
 
 Pruning decision：
 
-1. Deactivated broad or misinterpreted feature-expression active antibodies:
+1. Deactivated broad or misinterpreted feature-expression active defense skills:
    ab-016, ab-018, ab-014, ab-023, ab-024, ab-025, ab-026, ab-029,
    ab-032, ab-033, ab-034, ab-035, ab-037, ab-038, ab-040, ab-043,
    ab-048, ab-053, ab-056
@@ -515,7 +515,7 @@ prompt-filtering：
 All evolved after runs have 200 defense events. Evolved after blocks 118/200
 cases for each agent under the prompt-filtered delivery path.
 
-* Emerging200 Dataset And Antibody Cleanup
+* Emerging200 Dataset And Defense skill Cleanup
 
 Timestamp: 2026-08-13 HKT
 
@@ -530,8 +530,8 @@ Cleanup requested by 团长 after final comparison：
    "emerging" and does not store pattern in metadata
 5. Final comparison figure reports only overall dataset ASR, not per-pattern
    or per-objective breakdown
-6. Deleted unused evolved antibody nodes from ~/.caitlyn/evolution/nodes.json,
+6. Deleted unused evolved defense skill nodes from ~/.caitlyn/evolution/nodes.json,
    retaining only ab-044, ab-045, ab-049, and ab-051
 
 Backup：
-~/.caitlyn/evolution/nodes.json.backup-before-delete-unused-antibodies
+~/.caitlyn/evolution/nodes.json.backup-before-delete-unused-skills

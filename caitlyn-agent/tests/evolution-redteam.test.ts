@@ -33,13 +33,13 @@ describe("loadAttackSamples", () => {
 
 describe("runRedTeam", () => {
   it("counts detections per category and reports misses", async () => {
-    const tier0Runner = async (_antibodies: unknown, content: string) => {
+    const tier0Runner = async (_defense_skills: unknown, content: string) => {
       const hit = content.includes("hit");
       return {
         results: (hit
           ? [
               {
-                antibody_id: "ab-test",
+                defense_skill_id: "test",
                 verdict: "malicious",
                 confidence: 0.9,
                 reason: "hit",

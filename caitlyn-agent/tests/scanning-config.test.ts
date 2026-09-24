@@ -32,7 +32,7 @@ describe("loadScanningConfig", () => {
         "skip_tier1 = false",
         "tier0_timeout_ms = 750",
         'escalation_policy = "aggressive"',
-        'fast_detector_ids = "ab-a, ab-b,ab-c"',
+        'fast_detector_ids = "a, b,c"',
         "weak_signal_threshold = 0.5",
         'source_trust = "low"',
         "high_risk = true",
@@ -49,7 +49,7 @@ describe("loadScanningConfig", () => {
     expect(cfg.skipTier1).toBe(false);
     expect(cfg.tier0TimeoutMs).toBe(750);
     expect(cfg.policy).toBe("aggressive");
-    expect(cfg.fastDetectorIds).toEqual(["ab-a", "ab-b", "ab-c"]);
+    expect(cfg.fastDetectorIds).toEqual(["a", "b", "c"]);
     expect(cfg.weakSignalThreshold).toBe(0.5);
     expect(cfg.sourceTrust).toBe("low");
     expect(cfg.highRisk).toBe(true);

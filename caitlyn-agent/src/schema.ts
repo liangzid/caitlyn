@@ -1,19 +1,19 @@
 /**
- * CAITLYN Agent — Antibody & Antigen Schema
+ * CAITLYN Agent — Defense skill & Attack Schema
  *
- * Defines TypeScript types matching config.yaml for antibodies and antigens.
+ * Defines TypeScript types matching config.yaml for defense skills and attacks.
  */
-// ── Antibody ──────────────────────────────────────────────────────
+// ── Defense skill ──────────────────────────────────────────────────────
 
-export interface AntibodyStats {
+export interface DefenseSkillStats {
   total_scans: number;
   true_positives: number;
   false_positives: number;
   avg_latency_us: number;
 }
 
-/** Execution role of an antibody in the defense pipeline. */
-export type AntibodyRole = "detector" | "non_detector";
+/** Execution role of a defense skill in the defense pipeline. */
+export type DefenseSkillRole = "detector" | "non_detector";
 
 /** Deployment maturity of a defense skill. Only active skills run by default. */
 export type DefenseImplementationStatus = "active" | "experimental" | "reference";
@@ -37,7 +37,7 @@ export interface DefenseReference {
   year: number;
 }
 
-export interface AntibodyConfig {
+export interface DefenseSkillConfig {
   id: string;
   name: string;
   parent_id: string | null;
@@ -54,7 +54,7 @@ export interface AntibodyConfig {
   /** Full detector/hardener prompt; the executable knowledge for Tier 1/2. */
   prompt: string;
   /** detector = participates in content scanning; non_detector = other role. */
-  role: AntibodyRole;
+  role: DefenseSkillRole;
   /** active runs by default; experimental/reference entries stay inert. */
   implementation_status: DefenseImplementationStatus;
   /** Integration points required by the method. */
@@ -63,24 +63,24 @@ export interface AntibodyConfig {
   references: DefenseReference[];
   /** Capabilities still required for a faithful implementation. */
   runtime_requirements: string[];
-  affinity_score: number;
+  match_score: number;
   created_at: string;
   generation: number;
-  stats: AntibodyStats;
+  stats: DefenseSkillStats;
   deps: string[];
   signatures: Array<{ pattern: string; type: string; label: string }>;
 }
 
-export interface AntibodyEntry {
-  config: AntibodyConfig;
+export interface DefenseSkillEntry {
+  config: DefenseSkillConfig;
   readme: string;
   scriptPath: string | null; // path to detect.ts, null if tier=1 only
   folderPath: string;
 }
 
-// ── Antigen ───────────────────────────────────────────────────────
+// ── Attack ───────────────────────────────────────────────────────
 
-export interface AntigenConfig {
+export interface AttackConfig {
   id: string;
   name: string;
   category: "injection" | "jailbreak" | "poisoning" | "exfiltration";
@@ -92,8 +92,8 @@ export interface AntigenConfig {
   escapes: string[];
 }
 
-export interface AntigenEntry {
-  config: AntigenConfig;
+export interface AttackEntry {
+  config: AttackConfig;
   readme: string;
   payload: string;
   folderPath: string;
@@ -104,10 +104,10 @@ export interface AntigenEntry {
 export interface TreeNode {
   id: string;
   children: string[];
-  stats_aggregated: AntibodyStats;
+  stats_aggregated: DefenseSkillStats;
 }
 
-export interface AntibodyIndex {
+export interface DefenseSkillIndex {
   roots: string[];
   trees: Record<string, TreeNode>;
 }
@@ -116,7 +116,7 @@ export interface AntibodyIndex {
 
 export type Verdict = "benign" | "suspicious" | "malicious";
 export interface ScriptResult {
-  antibody_id: string;
+  defense_skill_id: string;
   verdict: Verdict;
   confidence: number;
   reason: string | null;

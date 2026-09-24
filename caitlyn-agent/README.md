@@ -70,7 +70,7 @@ Pi Coding Agent. Configuration changes are backed up before installation.
 | `caitlyn install <agent>` | Install an agent integration |
 | `caitlyn uninstall <agent>` | Remove an integration and restore its backup |
 | `caitlyn daemon start\|stop\|status` | Manage the local daemon |
-| `caitlyn vaccinate <pattern>` | Submit a System II trigger |
+| `caitlyn synthesize <pattern>` | Submit a System II trigger |
 | `caitlyn update --check` | Check for a newer release |
 
 ## Library use
@@ -80,14 +80,14 @@ The package exposes its scanner and filesystem-native defense library:
 ```ts
 import {
   createUnavailableLlmCall,
-  loadAntibodies,
-  loadAntigens,
+  loadDefenseSkills,
+  loadAttacks,
   scan,
 } from "caitlyn";
 
 const result = await scan({
-  antibodies: loadAntibodies(),
-  antigens: loadAntigens(),
+  defense skills: loadDefenseSkills(),
+  attacks: loadAttacks(),
   content: "untrusted content",
   llmCall: createUnavailableLlmCall("Tier 0 only"),
 });

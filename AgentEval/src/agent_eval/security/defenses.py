@@ -677,8 +677,8 @@ class TransformersPIDefense(Defense):
 class CaitlynEvolvedDefense(Defense):
     """CAITLYN daemon plus active System II DAG signatures.
 
-    The product scanner currently loads the filesystem antibody library,
-    while System II persists accepted antibodies in the evolution DAG. This
+    The product scanner currently loads the filesystem defense skill library,
+    while System II persists accepted defense skills in the evolution DAG. This
     experimental wrapper bridges that gap for before/after evaluation:
     first run CAITLYN-static through the daemon, then apply active DAG
     signatures from ~/.caitlyn/evolution/nodes.json.
@@ -722,7 +722,7 @@ class CaitlynEvolvedDefense(Defense):
             }
             warning = (
                 "[SECURITY BLOCKED by CAITLYN evolution]\n"
-                f"Matched evolved antibody: {match['node_id']} "
+                f"Matched evolved defense skill: {match['node_id']} "
                 f"({match['label']})\n\n"
                 "The original content was suppressed."
             )

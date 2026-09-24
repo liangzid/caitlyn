@@ -155,7 +155,7 @@ describe("parseYaml", () => {
   });
 
   it("handles YAML backslash line continuations with \\ space escapes", () => {
-    // Exact style used by antibody config.yaml prompt fields:
+    // Exact style used by defense skill config.yaml prompt fields:
     // lines end with "\" (escaped line break, no fold space) and the next
     // line starts with "\ " (escaped space).
     const raw = [
@@ -199,7 +199,7 @@ describe("parseYaml", () => {
 
   it("handles mixed top-level and nested content", () => {
     const yaml = [
-      "id: ab-test",
+      "id: test",
       "name: Test",
       "parent_id: null",
       "category: injection",
@@ -215,7 +215,7 @@ describe("parseYaml", () => {
 
     const result = parseYaml(yaml);
     expect(result).toEqual({
-      id: "ab-test",
+      id: "test",
       name: "Test",
       parent_id: null,
       category: "injection",

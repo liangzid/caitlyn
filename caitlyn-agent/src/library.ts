@@ -1,18 +1,18 @@
 /**
- * CAITLYN Agent — Antibody & Antigen Library
+ * CAITLYN Agent — Defense skill & Attack Library
  *
- * Loads antibodies and antigens from the filesystem, maintains the forest index.
+ * Loads defense skills and attacks from the filesystem, maintains the forest index.
  *
  * Dual-root layout (production):
- *   shipped: <repo-or-package>/antibodies|antigens   (curated, read-mostly)
- *   user:    ~/.caitlyn/library/antibodies|antigens  (local edits / evolution)
+ *   shipped: <repo-or-package>/skills|attacks   (curated, read-mostly)
+ *   user:    ~/.caitlyn/library/skills|attacks  (local edits / evolution)
  * Scanner unions both roots; user entries override shipped by id.
  *
  * Single-root (tests): CAITLYN_LIBRARY_DIR points at one root for read+write.
  *
  * Per-entry layout:
- *   antibodies/<id>/  README.md  config.yaml  detect.ts (optional)
- *   antigens/<id>/    README.md  config.yaml  payload.txt
+ *   skills/<id>/  README.md  config.yaml  detect.ts (optional)
+ *   attacks/<id>/    README.md  config.yaml  payload.txt
  */
 
 import * as fs from "node:fs";
@@ -20,13 +20,13 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
-  AntibodyEntry,
-  AntibodyConfig,
-  AntigenEntry,
-  AntigenConfig,
-  AntibodyIndex,
-  AntibodyStats,
-  AntibodyRole,
+  DefenseSkillEntry,
+  DefenseSkillConfig,
+  AttackEntry,
+  AttackConfig,
+  DefenseSkillIndex,
+  DefenseSkillStats,
+  DefenseSkillRole,
   DefenseExecutionStage,
   DefenseImplementationStatus,
   DefenseReference,
@@ -60,8 +60,8 @@ export function shippedLibraryRoot(): string {
   if (process.env.CAITLYN_LIBRARY_DIR) {
     return path.resolve(process.env.CAITLYN_LIBRARY_DIR);
   }
-  const projectAntibodies = path.join(PROJECT_ROOT, "antibodies");
-  if (fs.existsSync(projectAntibodies)) return PROJECT_ROOT;
+  const projectDefenseSkills = path.join(PROJECT_ROOT, "skills");
+  if (fs.existsSync(projectDefenseSkills)) return PROJECT_ROOT;
   return PKG_ROOT;
 }
 
@@ -79,24 +79,24 @@ export function userLibraryRoot(): string {
   return path.join(os.homedir(), ".caitlyn", "library");
 }
 
-/** Writable antibody directory (user root; same as shipped in single-root mode). */
-export function antibodiesDir(): string {
-  return path.join(userLibraryRoot(), "antibodies");
+/** Writable defense skill directory (user root; same as shipped in single-root mode). */
+export function defenseSkillsDir(): string {
+  return path.join(userLibraryRoot(), "skills");
 }
 
-/** Writable antigen directory (user root; same as shipped in single-root mode). */
-export function antigensDir(): string {
-  return path.join(userLibraryRoot(), "antigens");
+/** Writable attack directory (user root; same as shipped in single-root mode). */
+export function attacksDir(): string {
+  return path.join(userLibraryRoot(), "attacks");
 }
 
-/** Shipped curated antibody directory. */
-export function shippedAntibodiesDir(): string {
-  return path.join(shippedLibraryRoot(), "antibodies");
+/** Shipped curated defense skill directory. */
+export function shippedDefenseSkillsDir(): string {
+  return path.join(shippedLibraryRoot(), "skills");
 }
 
-/** Shipped curated antigen directory. */
-export function shippedAntigensDir(): string {
-  return path.join(shippedLibraryRoot(), "antigens");
+/** Shipped curated attack directory. */
+export function shippedAttacksDir(): string {
+  return path.join(shippedLibraryRoot(), "attacks");
 }
 
 /** Whether folderPath lives under the shipped (non-user) tree in dual-root mode. */
@@ -153,7 +153,7 @@ function normalizeConfig(raw: Record<string, unknown>): Record<string, unknown> 
 }
 // ── Config Validation ──────────────────────────────────────────────
 const VALID_CATEGORIES = ["injection", "jailbreak", "poisoning", "exfiltration", "unknown", "tool_misuse"] as const;
-const VALID_ANTIGEN_CATEGORIES = ["injection", "jailbreak", "poisoning", "exfiltration"] as const;
+const VALID_ATTACK_CATEGORIES = ["injection", "jailbreak", "poisoning", "exfiltration"] as const;
 const VALID_TIERS = [0, 1, 2] as const;
 const VALID_IMPLEMENTATION_STATUSES = ["active", "experimental", "reference"] as const;
 const VALID_EXECUTION_STAGES = [
@@ -198,22 +198,22 @@ function assertStringArray(v: unknown): string[] {
   return [];
 }
 
-function assertCategory(v: unknown, field: string): AntibodyConfig["category"] {
+function assertCategory(v: unknown, field: string): DefenseSkillConfig["category"] {
   const s = assertString(v, field).toLowerCase();
   if ((VALID_CATEGORIES as readonly string[]).includes(s)) {
-    return s as AntibodyConfig["category"];
+    return s as DefenseSkillConfig["category"];
   }
   throw new Error(`Invalid ${field}: "${s}". Must be one of: ${VALID_CATEGORIES.join(", ")}`);
 }
 
 /** Validate the narrower attack-corpus category vocabulary. */
-function assertAntigenCategory(v: unknown, field: string): AntigenConfig["category"] {
+function assertAttackCategory(v: unknown, field: string): AttackConfig["category"] {
   const category = assertString(v, field).toLowerCase();
-  if ((VALID_ANTIGEN_CATEGORIES as readonly string[]).includes(category)) {
-    return category as AntigenConfig["category"];
+  if ((VALID_ATTACK_CATEGORIES as readonly string[]).includes(category)) {
+    return category as AttackConfig["category"];
   }
   throw new Error(
-    `Invalid ${field}: "${category}". Must be one of: ${VALID_ANTIGEN_CATEGORIES.join(", ")}`,
+    `Invalid ${field}: "${category}". Must be one of: ${VALID_ATTACK_CATEGORIES.join(", ")}`,
   );
 }
 
@@ -223,7 +223,7 @@ function assertTier(v: unknown): 0 | 1 | 2 {
   throw new Error(`Invalid tier: ${n}. Must be 0, 1, or 2.`);
 }
 
-function assertRole(v: unknown): AntibodyRole {
+function assertRole(v: unknown): DefenseSkillRole {
   if (v === undefined || v === null) return "detector";
   const s = String(v);
   if (s === "detector" || s === "non_detector") return s;
@@ -243,7 +243,7 @@ function assertImplementationStatus(v: unknown): DefenseImplementationStatus {
 }
 
 /** Parse and validate every declared runtime integration point. */
-function assertExecutionStages(v: unknown, role: AntibodyRole): DefenseExecutionStage[] {
+function assertExecutionStages(v: unknown, role: DefenseSkillRole): DefenseExecutionStage[] {
   if (v === undefined || v === null) {
     return [role === "detector" ? "content_scan" : "prompt_construction"];
   }
@@ -275,7 +275,7 @@ function assertDefenseReferences(v: unknown): DefenseReference[] {
   });
 }
 
-function defaultStats(raw: unknown): AntibodyStats {
+function defaultStats(raw: unknown): DefenseSkillStats {
   if (raw !== null && typeof raw === "object" && !Array.isArray(raw)) {
     const s = raw as Record<string, unknown>;
     return {
@@ -292,7 +292,7 @@ function defaultStats(raw: unknown): AntibodyStats {
  * Validate and coerce a raw config object into a properly typed AntibodyConfig.
  * Throws descriptive errors for missing or invalid required fields.
  */
-export function validateAntibodyConfig(raw: Record<string, unknown>): AntibodyConfig {
+export function validateDefenseSkillConfig(raw: Record<string, unknown>): DefenseSkillConfig {
   const role = assertRole(raw.role);
   return {
     id: assertString(raw.id, "id"),
@@ -302,7 +302,7 @@ export function validateAntibodyConfig(raw: Record<string, unknown>): AntibodyCo
     tier: assertTier(raw.tier),
     threshold: assertNumber(raw.threshold, "threshold"),
     description: typeof raw.description === "string" ? raw.description : String(raw.description ?? ""),
-    // The prompt is the executable knowledge for Tier 1/2 antibodies.
+    // The prompt is the executable knowledge for Tier 1/2 defense skills.
     // Keep it first-class so saves never drop it (this was previously dead data).
     prompt: typeof raw.prompt === "string" ? raw.prompt : "",
     role,
@@ -310,12 +310,12 @@ export function validateAntibodyConfig(raw: Record<string, unknown>): AntibodyCo
     execution_stages: assertExecutionStages(raw.execution_stages, role),
     references: assertDefenseReferences(raw.references),
     runtime_requirements: assertStringArray(raw.runtime_requirements),
-    affinity_score: typeof raw.affinity_score === "number" ? raw.affinity_score : 0,
+    match_score: typeof raw.match_score === "number" ? raw.match_score : 0,
     created_at: assertString(raw.created_at, "created_at"),
     generation: typeof raw.generation === "number" ? raw.generation : 0,
     stats: defaultStats(raw.stats),
     deps: assertStringArray(raw.deps),
-    signatures: Array.isArray(raw.signatures) ? raw.signatures as AntibodyConfig["signatures"] : [],
+    signatures: Array.isArray(raw.signatures) ? raw.signatures as DefenseSkillConfig["signatures"] : [],
   };
 }
 
@@ -323,11 +323,11 @@ export function validateAntibodyConfig(raw: Record<string, unknown>): AntibodyCo
  * Validate and coerce a raw config object into a properly typed AntigenConfig.
  * Throws descriptive errors for missing or invalid required fields.
  */
-export function validateAntigenConfig(raw: Record<string, unknown>): AntigenConfig {
+export function validateAttackConfig(raw: Record<string, unknown>): AttackConfig {
   return {
     id: assertString(raw.id, "id"),
     name: assertString(raw.name, "name"),
-    category: assertAntigenCategory(raw.category, "category"),
+    category: assertAttackCategory(raw.category, "category"),
     injection_point: assertString(raw.injection_point, "injection_point"),
     target_agent: assertString(raw.target_agent, "target_agent"),
     attack_template: assertString(raw.attack_template, "attack_template"),
@@ -340,8 +340,8 @@ export function validateAntigenConfig(raw: Record<string, unknown>): AntigenConf
 
 // ── Caching (avoid redundant disk I/O on every tool call) ──────────
 
-let _cachedAntibodies: AntibodyEntry[] | null = null;
-let _cachedAntigens: AntigenEntry[] | null = null;
+let _cachedDefenseSkills: DefenseSkillEntry[] | null = null;
+let _cachedAttacks: AttackEntry[] | null = null;
 let _cacheTime = 0;
 const CACHE_TTL_MS = 30_000;
 
@@ -349,19 +349,19 @@ function cacheExpired(): boolean {
   return Date.now() - _cacheTime > CACHE_TTL_MS;
 }
 
-/** Invalidate the antibody/antigen caches (after external edits). */
+/** Invalidate the defense skill/attack caches (after external edits). */
 export function invalidateLibraryCache(): void {
-  _cachedAntibodies = null;
-  _cachedAntigens = null;
+  _cachedDefenseSkills = null;
+  _cachedAttacks = null;
   _cacheTime = 0;
 }
 
-// ── Load Antibodies ───────────────────────────────────────────────
+// ── Load Defense skills ───────────────────────────────────────────────
 
-/** Load antibody entries from one directory (no cache). */
-function loadAntibodiesFromDir(dir: string): AntibodyEntry[] {
+/** Load defense skill entries from one directory (no cache). */
+function loadDefenseSkillsFromDir(dir: string): DefenseSkillEntry[] {
   if (!fs.existsSync(dir)) return [];
-  const entries: AntibodyEntry[] = [];
+  const entries: DefenseSkillEntry[] = [];
 
   for (const dirName of fs.readdirSync(dir)) {
     const dirPath = path.join(dir, dirName);
@@ -374,14 +374,14 @@ function loadAntibodiesFromDir(dir: string): AntibodyEntry[] {
     const scriptPath = path.join(dirPath, "detect.ts");
 
     if (!fs.existsSync(configPath)) {
-      console.warn(`⚠️  Skipping antibody '${dirName}': no config.yaml`);
+      console.warn(`⚠️  Skipping defense skill '${dirName}': no config.yaml`);
       continue;
     }
 
     try {
       const configRaw = fs.readFileSync(configPath, "utf-8");
       const rawConfig = parseYaml(configRaw);
-      const config = validateAntibodyConfig(normalizeConfig(rawConfig));
+      const config = validateDefenseSkillConfig(normalizeConfig(rawConfig));
 
       const readme = fs.existsSync(readmePath)
         ? fs.readFileSync(readmePath, "utf-8")
@@ -396,34 +396,34 @@ function loadAntibodiesFromDir(dir: string): AntibodyEntry[] {
         folderPath: dirPath,
       });
     } catch (err) {
-      console.warn(`⚠️  Skipping antibody '${dirName}': failed to load config — ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(`⚠️  Skipping defense skill '${dirName}': failed to load config — ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   return entries;
 }
 
 /**
- * Merge shipped then user antibodies; user wins on id collision.
+ * Merge shipped then user defense skills; user wins on id collision.
  * KEYPOINT-REVIEW: dual-root is the production trust split; tests stay single-root via CAITLYN_LIBRARY_DIR.
  */
-export function loadAntibodies(): AntibodyEntry[] {
-  if (!cacheExpired() && _cachedAntibodies) return _cachedAntibodies;
+export function loadDefenseSkills(): DefenseSkillEntry[] {
+  if (!cacheExpired() && _cachedDefenseSkills) return _cachedDefenseSkills;
 
-  let entries: AntibodyEntry[];
+  let entries: DefenseSkillEntry[];
   if (isSingleLibraryMode()) {
-    const dir = antibodiesDir();
+    const dir = defenseSkillsDir();
     if (!fs.existsSync(dir)) {
-      console.warn(`⚠️  Antibodies directory not found: ${dir}`);
+      console.warn(`⚠️  Defense skills directory not found: ${dir}`);
       entries = [];
     } else {
-      entries = loadAntibodiesFromDir(dir);
+      entries = loadDefenseSkillsFromDir(dir);
     }
   } else {
-    const byId = new Map<string, AntibodyEntry>();
-    for (const ab of loadAntibodiesFromDir(shippedAntibodiesDir())) {
+    const byId = new Map<string, DefenseSkillEntry>();
+    for (const ab of loadDefenseSkillsFromDir(shippedDefenseSkillsDir())) {
       byId.set(ab.config.id, ab);
     }
-    for (const ab of loadAntibodiesFromDir(antibodiesDir())) {
+    for (const ab of loadDefenseSkillsFromDir(defenseSkillsDir())) {
       // Stats-only copy-on-write overrides created by older versions may not
       // contain documentation. Preserve the shipped README for that case.
       const shipped = byId.get(ab.config.id);
@@ -435,7 +435,7 @@ export function loadAntibodies(): AntibodyEntry[] {
     entries = [...byId.values()];
   }
 
-  _cachedAntibodies = entries;
+  _cachedDefenseSkills = entries;
   _cacheTime = Date.now();
   return entries;
 }
@@ -451,18 +451,18 @@ function yamlEscape(value: unknown): string {
 }
 
 /**
- * Persist an antibody under the writable user root.
+ * Persist a defenseSkill under the writable user root.
  * If the entry still points at a shipped path, copy-on-write into the user library.
  */
-export function saveAntibody(entry: AntibodyEntry): void {
+export function saveDefenseSkill(entry: DefenseSkillEntry): void {
   if (process.env.CAITLYN_TEST_TRACE) {
     fs.appendFileSync(
       "/tmp/caitlyn-trace.log",
-      `[saveAntibody pid=${process.pid} dir=${entry.folderPath}]\n${new Error().stack}\n`,
+      `[saveDefenseSkill pid=${process.pid} dir=${entry.folderPath}]\n${new Error().stack}\n`,
     );
   }
   if (isShippedLibraryPath(entry.folderPath)) {
-    const dest = path.join(antibodiesDir(), entry.config.id);
+    const dest = path.join(defenseSkillsDir(), entry.config.id);
     fs.mkdirSync(dest, { recursive: true });
     if (fs.existsSync(entry.folderPath)) {
       for (const name of fs.readdirSync(entry.folderPath)) {
@@ -519,16 +519,16 @@ export function saveAntibody(entry: AntibodyEntry): void {
     }
   }
   fs.writeFileSync(path.join(dirPath, "config.yaml"), configLines.join("\n"), "utf-8");
-  _cachedAntibodies = null; // invalidate cache
-  // Rebuild and persist the antibody index so the new antibody is immediately visible
-  const all = loadAntibodies();
-  saveAntibodyIndex(buildAntibodyIndex(all));
+  _cachedDefenseSkills = null; // invalidate cache
+  // Rebuild and persist the defenseSkill index so the new defenseSkill is immediately visible
+  const all = loadDefenseSkills();
+  saveDefenseSkillIndex(buildDefenseSkillIndex(all));
 }
 
-/** Load antigen entries from one directory (no cache). */
-function loadAntigensFromDir(dir: string): AntigenEntry[] {
+/** Load attack entries from one directory (no cache). */
+function loadAttacksFromDir(dir: string): AttackEntry[] {
   if (!fs.existsSync(dir)) return [];
-  const entries: AntigenEntry[] = [];
+  const entries: AttackEntry[] = [];
 
   for (const dirName of fs.readdirSync(dir)) {
     const dirPath = path.join(dir, dirName);
@@ -540,14 +540,14 @@ function loadAntigensFromDir(dir: string): AntigenEntry[] {
     const payloadPath = path.join(dirPath, "payload.txt");
 
     if (!fs.existsSync(configPath)) {
-      console.warn(`⚠️  Skipping antigen '${dirName}': no config.yaml`);
+      console.warn(`⚠️  Skipping attack '${dirName}': no config.yaml`);
       continue;
     }
 
     try {
       const configRaw = fs.readFileSync(configPath, "utf-8");
       const rawConfig = parseYaml(configRaw);
-      const config = validateAntigenConfig(normalizeConfig(rawConfig));
+      const config = validateAttackConfig(normalizeConfig(rawConfig));
 
       const readme = fs.existsSync(readmePath)
         ? fs.readFileSync(readmePath, "utf-8")
@@ -559,39 +559,39 @@ function loadAntigensFromDir(dir: string): AntigenEntry[] {
 
       entries.push({ config, readme, payload, folderPath: dirPath });
     } catch (err) {
-      console.warn(`⚠️  Skipping antigen '${dirName}': failed to load config — ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(`⚠️  Skipping attack '${dirName}': failed to load config — ${err instanceof Error ? err.message : String(err)}`);
     }
   }
   return entries;
 }
 
 /**
- * Merge shipped then user antigens; user wins on id collision.
+ * Merge shipped then user attacks; user wins on id collision.
  */
-export function loadAntigens(): AntigenEntry[] {
-  if (!cacheExpired() && _cachedAntigens) return _cachedAntigens;
+export function loadAttacks(): AttackEntry[] {
+  if (!cacheExpired() && _cachedAttacks) return _cachedAttacks;
 
-  let entries: AntigenEntry[];
+  let entries: AttackEntry[];
   if (isSingleLibraryMode()) {
-    const dir = antigensDir();
+    const dir = attacksDir();
     if (!fs.existsSync(dir)) {
-      console.warn(`⚠️  Antigens directory not found: ${dir}`);
+      console.warn(`⚠️  Attacks directory not found: ${dir}`);
       entries = [];
     } else {
-      entries = loadAntigensFromDir(dir);
+      entries = loadAttacksFromDir(dir);
     }
   } else {
-    const byId = new Map<string, AntigenEntry>();
-    for (const ag of loadAntigensFromDir(shippedAntigensDir())) {
+    const byId = new Map<string, AttackEntry>();
+    for (const ag of loadAttacksFromDir(shippedAttacksDir())) {
       byId.set(ag.config.id, ag);
     }
-    for (const ag of loadAntigensFromDir(antigensDir())) {
+    for (const ag of loadAttacksFromDir(attacksDir())) {
       byId.set(ag.config.id, ag);
     }
     entries = [...byId.values()];
   }
 
-  _cachedAntigens = entries;
+  _cachedAttacks = entries;
   _cacheTime = Date.now();
   return entries;
 }
@@ -599,10 +599,10 @@ export function loadAntigens(): AntigenEntry[] {
 
 // ── Forest Index ──────────────────────────────────────────────────
 
-export function buildAntibodyIndex(antibodies: AntibodyEntry[]): AntibodyIndex {
-  const index: AntibodyIndex = { roots: [], trees: {} };
+export function buildDefenseSkillIndex(defenseSkills: DefenseSkillEntry[]): DefenseSkillIndex {
+  const index: DefenseSkillIndex = { roots: [], trees: {} };
 
-  for (const ab of antibodies) {
+  for (const ab of defenseSkills) {
     index.trees[ab.config.id] = {
       id: ab.config.id,
       children: [],
@@ -610,7 +610,7 @@ export function buildAntibodyIndex(antibodies: AntibodyEntry[]): AntibodyIndex {
     };
   }
 
-  for (const ab of antibodies) {
+  for (const ab of defenseSkills) {
     if (ab.config.parent_id && index.trees[ab.config.parent_id]) {
       index.trees[ab.config.parent_id].children.push(ab.config.id);
     } else if (!ab.config.parent_id) {
@@ -619,17 +619,17 @@ export function buildAntibodyIndex(antibodies: AntibodyEntry[]): AntibodyIndex {
   }
 
   aggregateStats(index);
-  // NOTE: buildAntibodyIndex is a PURE function — it must not persist.
-  // Callers that need the index on disk (saveAntibody, vaccination,
-  // stale-index healing) must call saveAntibodyIndex explicitly.
+  // NOTE: buildDefenseSkillIndex is a PURE function — it must not persist.
+  // Callers that need the index on disk (saveDefenseSkill, synthesis,
+  // stale-index healing) must call saveDefenseSkillIndex explicitly.
   return index;
 }
 
-function aggregateStats(index: AntibodyIndex): void {
-  function aggregate(id: string): AntibodyStats {
+function aggregateStats(index: DefenseSkillIndex): void {
+  function aggregate(id: string): DefenseSkillStats {
     const node = index.trees[id];
     if (!node) return { total_scans: 0, true_positives: 0, false_positives: 0, avg_latency_us: 0 };
-    const merged: AntibodyStats = { ...node.stats_aggregated };
+    const merged: DefenseSkillStats = { ...node.stats_aggregated };
     let weightedLatencySum = merged.avg_latency_us * merged.total_scans;
     for (const childId of node.children) {
       const childStats = aggregate(childId);
@@ -649,26 +649,26 @@ function aggregateStats(index: AntibodyIndex): void {
 
 // ── Index persistence ─────────────────────────────────────────────
 
-export function saveAntibodyIndex(index: AntibodyIndex): void {
-  fs.mkdirSync(antibodiesDir(), { recursive: true });
+export function saveDefenseSkillIndex(index: DefenseSkillIndex): void {
+  fs.mkdirSync(defenseSkillsDir(), { recursive: true });
   fs.writeFileSync(
-    path.join(antibodiesDir(), "index.json"),
+    path.join(defenseSkillsDir(), "index.json"),
     JSON.stringify(index, null, 2),
     "utf-8",
   );
 }
 
-export function loadAntibodyIndex(): AntibodyIndex | null {
-  const p = path.join(antibodiesDir(), "index.json");
+export function loadDefenseSkillIndex(): DefenseSkillIndex | null {
+  const p = path.join(defenseSkillsDir(), "index.json");
   if (!fs.existsSync(p)) return null;
   try {
     const raw = fs.readFileSync(p, "utf-8");
-    const parsed = JSON.parse(raw) as AntibodyIndex;
+    const parsed = JSON.parse(raw) as DefenseSkillIndex;
     // Treat empty index (no roots, no trees) as stale — return null so caller rebuilds
     if (!parsed.roots || parsed.roots.length === 0) return null;
     // Dual-root: user-side index can lag behind newly shipped skills.
     // If the live library has ids the index does not know, force rebuild.
-    const live = loadAntibodies();
+    const live = loadDefenseSkills();
     const indexed = new Set(Object.keys(parsed.trees ?? {}));
     for (const ab of live) {
       if (!indexed.has(ab.config.id)) return null;
@@ -679,37 +679,37 @@ export function loadAntibodyIndex(): AntibodyIndex | null {
   }
 }
 
-/** One antibody's participation in a scan, for feedback accounting. */
-export interface AntibodyFeedback {
-  antibody_id: string;
+/** One defenseSkill's participation in a scan, for feedback accounting. */
+export interface DefenseSkillFeedback {
+  defense_skill_id: string;
   verdict: Verdict;
   confidence: number;
   latency_us: number;
-  /** True when this antibody's verdict is a hard malicious vote. */
+  /** True when this defenseSkill's verdict is a hard malicious vote. */
   fired: boolean;
 }
 
 /**
- * Record scan feedback to update antibody stats.
+ * Record scan feedback to update defenseSkill stats.
  *
- * Called after each scan with EVERY participating antibody (Tier 0 and
+ * Called after each scan with EVERY participating defenseSkill (Tier 0 and
  * Tier 1), so total_scans reflects real participation instead of only
- * counting antibodies that happened to fire. TP/FP are counted only for
+ * counting defenseSkills that happened to fire. TP/FP are counted only for
  * fired votes: a fired vote on a scan that ended malicious is a true
  * positive; a fired vote on a scan that did not end malicious is a
- * false positive. This gives the evolution loop per-antibody signal.
+ * false positive. This gives the evolution loop per-defense-skill signal.
  *
  * REVIEW(团长): TP/FP 是相对"最终判定"的代理标签，不是 ground truth；
  * 有标注的评测集（如 AgentEval）下应优先用真实标签覆盖此统计。
  */
 export function recordScanFeedback(
-  results: AntibodyFeedback[],
+  results: DefenseSkillFeedback[],
   finalVerdict: Verdict,
 ): void {
   for (const r of results) {
-    const antibody = loadAntibodies().find((a) => a.config.id === r.antibody_id);
-    if (!antibody) continue;
-    const stats = antibody.config.stats;
+    const defenseSkill = loadDefenseSkills().find((a) => a.config.id === r.defense_skill_id);
+    if (!defenseSkill) continue;
+    const stats = defenseSkill.config.stats;
     stats.total_scans = (stats.total_scans ?? 0) + 1;
     if (r.fired) {
       if (finalVerdict === "malicious") {
@@ -723,26 +723,26 @@ export function recordScanFeedback(
       ? (stats.avg_latency_us * (stats.total_scans - 1) + r.latency_us) / stats.total_scans
       : r.latency_us;
     // Persist immediately so stats survive the library cache and restarts.
-    saveAntibody(antibody);
+    saveDefenseSkill(defenseSkill);
   }
 }
 
 /**
- * Check that every antibody in the library is actually executable by the
+ * Check that every defenseSkill in the library is actually executable by the
  * scanner: Tier 0 detectors need detect.ts or signatures; Tier 1/2
  * detectors need a prompt; non-detectors need at least one artifact.
  * Also catches duplicate ids and duplicate runtime signatures.
  *
  * Returns a list of issues; an empty list means the library is sound.
  */
-export function checkLibraryIntegrity(entries: AntibodyEntry[]): string[] {
+export function checkLibraryIntegrity(entries: DefenseSkillEntry[]): string[] {
   const issues: string[] = [];
   const seenIds = new Set<string>();
   const seenTier0Signatures = new Set<string>();
 
   for (const ab of entries) {
     if (seenIds.has(ab.config.id)) {
-      issues.push(`duplicate antibody id: ${ab.config.id}`);
+      issues.push(`duplicate defense skill id: ${ab.config.id}`);
     }
     seenIds.add(ab.config.id);
 

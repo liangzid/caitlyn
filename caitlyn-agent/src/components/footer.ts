@@ -2,7 +2,7 @@
  * CAITLYN Footer Component
  *
  * Two-line status bar showing:
- *   Line 1: cwd, git branch, session name  ·  daemon + antibody pills
+ *   Line 1: cwd, git branch, session name  ·  daemon + defense skill pills
  *   Line 2: token/cost/context telemetry    ·  model + thinking level
  *
  * Styled with the bioluminescent palette from theme.ts.
@@ -69,7 +69,7 @@ export interface FooterData {
 
   // CAITLYN-specific
   daemonStatus: "connected" | "disconnected" | "checking";
-  antibodyCount: number;
+  defenseSkillCount: number;
   sessionName?: string;
 
   // Live scan progress (set while doScan is running)
@@ -114,13 +114,13 @@ export class FooterComponent implements Component {
       left1 += `  ${fg(PAL.faint)}◆${C.reset} ${fg(PAL.dim)}${d.sessionName}${C.reset}`;
     }
 
-    // Right: daemon status + antibody count pills (scan progress replaces daemon pill)
+    // Right: daemon status + defense skill count pills (scan progress replaces daemon pill)
     const daemonPill = d.daemonStatus === "connected"
       ? badge("● DAEMON", PAL.ok, PAL.okBg)
       : d.daemonStatus === "checking"
         ? badge("◌ CHECKING", PAL.warn, PAL.warnBg)
         : badge("○ LOCAL", PAL.faint, PAL.grayBg);
-    const abPill = badge(`${d.antibodyCount} Antibodies`, PAL.cyan, PAL.cyanBg);
+    const abPill = badge(`${d.defenseSkillCount} Defense skills`, PAL.cyan, PAL.cyanBg);
     const right1 = d.scanning
       ? `${scanPill(d.scanSeconds ?? 0)} ${abPill}`
       : `${daemonPill} ${abPill}`;
@@ -202,6 +202,6 @@ export function createDefaultFooterData(cwd: string): FooterData {
     providerName: "unknown",
     cwd,
     daemonStatus: "checking",
-    antibodyCount: 0,
+    defenseSkillCount: 0,
   };
 }

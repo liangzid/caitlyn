@@ -1,13 +1,13 @@
 /**
- * Tests for the antibody DAG store: lineage, score, cap enforcement,
+ * Tests for the defense skill DAG store: lineage, score, cap enforcement,
  * retirement, archiving, and persistence.
  */
 import { describe, it, expect, beforeEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { AntibodyDagStore } from "../src/evolution/dag-store.js";
-import { createEmptyEvidence, type AntibodyNode, type DagScorePolicy } from "../src/evolution/dag-types.js";
+import { DefenseSkillDagStore } from "../src/evolution/dag-store.js";
+import { createEmptyEvidence, type DefenseSkillNode, type DagScorePolicy } from "../src/evolution/dag-types.js";
 
 const NOW = new Date("2026-08-01T00:00:00.000Z");
 const DAY = 24 * 60 * 60 * 1000;
@@ -16,10 +16,10 @@ function isoDaysAgo(days: number): string {
   return new Date(NOW.getTime() - days * DAY).toISOString();
 }
 
-function makeNode(overrides: Partial<AntibodyNode> = {}): AntibodyNode {
+function makeNode(overrides: Partial<DefenseSkillNode> = {}): DefenseSkillNode {
   return {
-    id: "ab-test",
-    name: "Test Antibody",
+    id: "test",
+    name: "Test Defense skill",
     description: "test",
     category: "injection",
     tier: 0,
@@ -48,11 +48,11 @@ function makePolicy(overrides: Partial<DagScorePolicy> = {}): DagScorePolicy {
 
 describe("AntibodyDagStore", () => {
   let dir: string;
-  let store: AntibodyDagStore;
+  let store: DefenseSkillDagStore;
 
   beforeEach(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-dag-"));
-    store = new AntibodyDagStore(dir, makePolicy());
+    store = new DefenseSkillDagStore(dir, makePolicy());
     store.load();
   });
 
@@ -134,7 +134,7 @@ describe("AntibodyDagStore", () => {
     expect(store.getNode("orphan-low")!.status).toBe("active");
   });
 
-  it("retires negative-score and long-inactive covered antibodies", () => {
+  it("retires negative-score and long-inactive covered defense skills", () => {
     store.addNode(
       makeNode({
         id: "root",
@@ -187,7 +187,7 @@ describe("AntibodyDagStore", () => {
     store.recordHit("a", NOW);
     store.save();
 
-    const reloaded = new AntibodyDagStore(dir, makePolicy());
+    const reloaded = new DefenseSkillDagStore(dir, makePolicy());
     reloaded.load();
     expect(reloaded.listNodes().map((n) => n.id).sort()).toEqual(["a", "b"]);
     expect(reloaded.getNode("a")!.evidence.hits).toBe(1);

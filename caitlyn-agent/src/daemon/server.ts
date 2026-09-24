@@ -17,7 +17,7 @@ import * as http from "node:http";
 import * as os from "node:os";
 import * as path from "node:path";
 import { hybridScan } from "../hybrid-scanner.js";
-import { loadAntibodies, loadAntigens } from "../library.js";
+import { loadDefenseSkills, loadAttacks } from "../library.js";
 import { FSWatcher } from "../guard/fs-watcher.js";
 import { createUnavailableLlmCall, parseScanMode, type LlmCallFn } from "../scanner.js";
 import type { ScanResult } from "../schema.js";
@@ -44,8 +44,8 @@ export interface DaemonConfig {
 export interface DaemonStatus {
   pid: number;
   uptime_ms: number;
-  antibodies_loaded: number;
-  antigens_loaded: number;
+  defense_skills_loaded: number;
+  attacks_loaded: number;
   scans_total: number;
   scans_blocked: number;
   scans_flagged: number;
@@ -114,7 +114,7 @@ export class DaemonServer {
     this.llmCall = fn;
   }
 
-  /** Generator/reviewer pair for the immune loop (daemon entry point). */
+  /** Generator/reviewer pair for the synthesis loop (daemon entry point). */
   setEvolutionLlmPair(generator: LlmCallFn, reviewer: LlmCallFn): void {
     this.generatorLlm = generator;
     this.reviewerLlm = reviewer;
@@ -160,7 +160,7 @@ export class DaemonServer {
   }
 
   /**
-   * Aggregate new stats events and run an immune response for each
+   * Aggregate new stats events and run an synthesis for each
    * anomaly trigger. Public for tests and manual daemon status checks.
    */
   async collectStats(): Promise<AnomalyTrigger[]> {
@@ -171,7 +171,7 @@ export class DaemonServer {
     const triggers = this.statsCollector.collect();
     if (this.evolutionDisabled) {
       console.error(
-        "[daemon] stats evolution disabled (CAITLYN_DISABLE_EVOLUTION) — no immune response",
+        "[daemon] stats evolution disabled (CAITLYN_DISABLE_EVOLUTION) — no synthesis",
       );
       return triggers;
     }
@@ -191,7 +191,7 @@ export class DaemonServer {
     const generator = this.generatorLlm ?? this.llmCall;
     const reviewer = this.reviewerLlm ?? this.llmCall;
     if (!generator || !reviewer) {
-      console.error("[daemon] no LLM available — immune response skipped (record kept).");
+      console.error("[daemon] no LLM available — synthesis skipped (record kept).");
       return;
     }
     const engine = new EvolutionEngine({
@@ -222,12 +222,12 @@ export class DaemonServer {
         hasSamples: false,
       });
       console.error(
-        `[daemon] immune response done: ${outcome.loop.termination}, ` +
+        `[daemon] synthesis done: ${outcome.loop.termination}, ` +
           `${outcome.loop.approved.length} approved, shadow: ${outcome.shadowStarted.join(",")}`,
       );
     } catch (err) {
       console.error(
-        `[daemon] immune response failed: ${err instanceof Error ? err.message : String(err)}`,
+        `[daemon] synthesis failed: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
@@ -382,14 +382,14 @@ export class DaemonServer {
   }
 
   private async _status(res: http.ServerResponse): Promise<void> {
-    const antibodies = loadAntibodies();
-    const antigens = loadAntigens();
+    const defenseSkills = loadDefenseSkills();
+    const attacks = loadAttacks();
 
     const status: DaemonStatus = {
       pid: process.pid,
       uptime_ms: Date.now() - this.startTime,
-      antibodies_loaded: antibodies.length,
-      antigens_loaded: antigens.length,
+      defense_skills_loaded: defenseSkills.length,
+      attacks_loaded: attacks.length,
       scans_total: this.scansTotal,
       scans_blocked: this.scansBlocked,
       scans_flagged: this.scansFlagged,

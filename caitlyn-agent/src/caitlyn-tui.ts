@@ -36,7 +36,7 @@ import type { Agent } from "@earendil-works/pi-agent-core";
 import { type LlmCallFn } from "./scanner.js";
 import { loadConfig } from "./config.js";
 import { isDaemonRunning } from "./daemon/index.js";
-import { loadAntibodies, loadAntibodyIndex, buildAntibodyIndex } from "./library.js";
+import { loadDefenseSkills, loadDefenseSkillIndex, buildDefenseSkillIndex } from "./library.js";
 import { SessionManager } from "./session/session-manager.js";
 import {
   FooterComponent,
@@ -56,11 +56,11 @@ import {
 } from "./components/overlays.js";
 import {
   doScan,
-  doAntibodyList,
-  doAntibodyAddFull,
-  doAntibodyRemove,
-  doAntigenShow,
-  doVaccinate,
+  doDefenseSkillList,
+  doDefenseSkillAddFull,
+  doDefenseSkillRemove,
+  doAttackShow,
+  doSynthesize,
   doNewSession,
   doResumeSession,
   doSessionInfo,
@@ -281,7 +281,7 @@ export class CaitlynTUI {
 
     // Add logo
     const header = new Text(
-      noEmoji ? "CAITLYN — AI Agent Immune System" : CAITLYN_LOGO,
+      noEmoji ? "CAITLYN — AI Agent Defense System" : CAITLYN_LOGO,
     );
     tui.addChild(header);
 
@@ -294,7 +294,7 @@ export class CaitlynTUI {
     footerData.currentModel = getModelDisplay(provider, modelId);
     footerData.providerName = provider;
     footerData.sessionName = mgr.getSessionName();
-    footerData.antibodyCount = loadAntibodies().length;
+    footerData.defenseSkillCount = loadDefenseSkills().length;
     footerData.gitBranch = getGitBranch(cwd);
 
     footerData.daemonStatus = isDaemonRunning() ? "connected" : "disconnected";
@@ -621,32 +621,32 @@ export class CaitlynTUI {
         break;
       }
 
-      // ── Antibody Management ────────────────────────────────
-      case "/antibody": {
+      // ── Defense skill Management ────────────────────────────────
+      case "/defense-skill": {
         const subCmd = parts[1]?.toLowerCase();
-        if (subCmd === "list") { await doAntibodyList(this); }
+        if (subCmd === "list") { await doDefenseSkillList(this); }
         else if (subCmd === "add") {
           const abId = parts[2];
           const category = parts[3]?.toLowerCase() ?? "injection";
           const tier = parts[4] !== undefined ? parseInt(parts[4], 10) : 0;
           if (!abId) {
-            this.showSystemMessage("Usage: /antibody add <id> [category] [tier]");
+            this.showSystemMessage("Usage: /defense-skill add <id> [category] [tier]");
             break;
           }
-          await doAntibodyAddFull(this, abId, category, Number.isNaN(tier) ? 0 : tier);
+          await doDefenseSkillAddFull(this, abId, category, Number.isNaN(tier) ? 0 : tier);
         }
-        else if (subCmd === "remove" && parts[2]) { await doAntibodyRemove(this, parts[2]); }
-        else { this.showSystemMessage("Usage: /antibody list | add <id> [category] [tier] | remove <id>"); }
+        else if (subCmd === "remove" && parts[2]) { await doDefenseSkillRemove(this, parts[2]); }
+        else { this.showSystemMessage("Usage: /defense-skill list | add <id> [category] [tier] | remove <id>"); }
         break;
       }
-      case "/antigen": {
-        if (!args) { this.showSystemMessage("Usage: /antigen <id>"); return; }
-        await doAntigenShow(this, args.trim());
+      case "/attack": {
+        if (!args) { this.showSystemMessage("Usage: /attack <id>"); return; }
+        await doAttackShow(this, args.trim());
         break;
       }
-      case "/vaccinate": {
-        if (!args) { this.showSystemMessage("Usage: /vaccinate <pattern>"); return; }
-        await doVaccinate(this, args);
+      case "/synthesize": {
+        if (!args) { this.showSystemMessage("Usage: /synthesize <pattern>"); return; }
+        await doSynthesize(this, args);
         break;
       }
 
@@ -850,7 +850,7 @@ export class CaitlynTUI {
       totalCacheRead: stats.cacheRead,
       totalCacheWrite: stats.cacheWrite,
       totalCost: stats.cost,
-      antibodyCount: loadAntibodies().length,
+      defenseSkillCount: loadDefenseSkills().length,
     });
     this.footer.invalidate();
   }
@@ -912,13 +912,13 @@ export class CaitlynTUI {
     }, 30_000);
 
     // Welcome messages
-    const antibodies = loadAntibodies();
-    // Ensure antibody index is valid (rebuild if missing or stale)
+    const defenseSkills = loadDefenseSkills();
+    // Ensure defense skill index is valid (rebuild if missing or stale)
 
     const agentChip = this.agent
       ? badge("● READY", PAL.ok, PAL.okBg)
       : badge("○ OFFLINE", PAL.warn, PAL.warnBg);
-    const abChip = badge(`${antibodies.length} Antibodies`, PAL.cyan, PAL.cyanBg);
+    const abChip = badge(`${skills.length} Defense skills`, PAL.cyan, PAL.cyanBg);
     const evoChip = badge("EVOLUTION ONLINE", PAL.violet, PAL.violetBg);
     const quote = randomDefenseQuote();
 

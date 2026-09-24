@@ -7,7 +7,7 @@
  * the ~90ms Tier 0 floor essentially free.
  *
  * Protocol (one JSON object per line, both directions):
- *   request:  {"reqId":number,"id":"<antibody id>","content":"<text>"}
+ *   request:  {"reqId":number,"id":"<defense skill id>","content":"<text>"}
  *   response: {"reqId":number,"ok":true,"result":{verdict,confidence,reason}}
  *             {"reqId":number,"ok":false,"error":"<message>"}
  *   ready:    {"ready":true,"loaded":<n>}

@@ -273,7 +273,7 @@ def collect_annotations(prefill: Optional[dict] = None) -> dict:
     print("\n--- Actionable Artifacts ---")
     attack_payloads = prompt_list("  Attack payloads (comma-sep, or blank)", [])
     signatures = prompt_list("  Detection signatures/regex (comma-sep, or blank)", [])
-    ab_prompt = prompt_nonempty("  Antibody prompt template (or '-' for none)", "-")
+    ab_prompt = prompt_nonempty("  Defense skill prompt template (or '-' for none)", "-")
     if ab_prompt == "-":
         ab_prompt = ""
     eval_metric = prompt_nonempty("  Evaluation metric (ASR, F1, etc., or '-' for none)", "-")
@@ -283,7 +283,7 @@ def collect_annotations(prefill: Optional[dict] = None) -> dict:
     artifacts = {
         "attack_payloads": attack_payloads,
         "signatures": signatures,
-        "antibody_prompt_template": ab_prompt,
+        "defense_skill_prompt_template": ab_prompt,
         "evaluation_metric": eval_metric,
     }
 
@@ -376,9 +376,9 @@ def append_to_org(annotation: dict, path: Path = ANNOTATIONS_ORG) -> None:
     lines.append("- Actionable for CAITLYN ::")
     lines.append(f"  - Attack payloads: {art.get('attack_payloads', [])}")
     lines.append(f"  - Signatures: {art.get('signatures', [])}")
-    ab_prompt = art.get("antibody_prompt_template", "")
+    ab_prompt = art.get("defense_skill_prompt_template", "")
     if ab_prompt:
-        lines.append(f"  - Antibody prompt idea: {_escape_org(ab_prompt[:200])}")
+        lines.append(f"  - Defense skill prompt idea: {_escape_org(ab_prompt[:200])}")
 
     datasets = annotation.get("dataset_used", [])
     ds_str = ", ".join(datasets) if datasets else "N/A"

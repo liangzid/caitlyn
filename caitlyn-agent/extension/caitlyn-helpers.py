@@ -30,7 +30,7 @@ def cmd_scan():
     for ab in r.get("script_results", []):
         icon = "🔴" if ab["verdict"] == "malicious" else ("🟡" if ab["verdict"] == "suspicious" else "🟢")
         reason = ab.get("reason") or ""
-        print(f"   {icon} {ab['antibody_id']}: {ab['verdict']} ({ab['confidence']*100:.0f}%)")
+        print(f"   {icon} {ab['defense_skill_id']}: {ab['verdict']} ({ab['confidence']*100:.0f}%)")
         if reason:
             print(f"      {reason}")
     sys.exit(1 if v == "MALICIOUS" else 0)
@@ -43,8 +43,8 @@ def cmd_status():
     except Exception as e:
         print(f"❌ caitlynd unreachable: {e}")
         sys.exit(1)
-    print(f"🛡️  Antibodies: {s.get('antibodies_loaded', 0)}")
-    print(f"🧬 Antigens:   {s.get('antigens_loaded', 0)}")
+    print(f"🛡️  Defense skills: {s.get('defense_skills_loaded', 0)}")
+    print(f"🧬 Attacks:   {s.get('attacks_loaded', 0)}")
     scans = s.get("scans_total", 0)
     blocked = s.get("scans_blocked", 0)
     flagged = s.get("scans_flagged", 0)

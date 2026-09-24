@@ -126,14 +126,14 @@ paste markers, undo, Up/Down history, built-in Tab completion.
 const provider = new CombinedAutocompleteProvider([
   // Scan & defense
   { name: "scan",      description: "Scan content for attacks", argumentHint: "<content>" },
-  { name: "status",    description: "Show antibody/antigen library" },
+  { name: "status",    description: "Show defense skill/attack library" },
   { name: "dashboard", description: "Defense dashboard overlay" },
   { name: "history",   description: "Recent scan history", argumentHint: "[N]" },
 
-  // Antibody management
-  { name: "antibody",  description: "Manage antibodies", argumentHint: "list|add|remove <id>",
+  // Defense skill management
+  { name: "defense skill",  description: "Manage defense skills", argumentHint: "list|add|remove <id>",
     getArgumentCompletions: async (prefix) => {
-      const abs = loadAntibodies();
+      const abs = loadDefenseSkills();
       if (prefix.startsWith("add ")) return null;
       if (prefix.startsWith("remove "))
         return abs.map(a => ({ value: a.config.id, label: a.config.name }));
@@ -144,11 +144,11 @@ const provider = new CombinedAutocompleteProvider([
       ];
     }
   },
-  { name: "antigen",   description: "Show antigen details", argumentHint: "<id>",
+  { name: "attack",   description: "Show attack details", argumentHint: "<id>",
     getArgumentCompletions: () =>
-      loadAntigens().map(a => ({ value: a.config.id, label: a.config.name }))
+      loadAttacks().map(a => ({ value: a.config.id, label: a.config.name }))
   },
-  { name: "vaccinate", description: "Evolve antibody", argumentHint: "<pattern>" },
+  { name: "synthesize", description: "Evolve defense skill", argumentHint: "<pattern>" },
 
   // Session
   { name: "new",       description: "Start a new session" },
@@ -257,7 +257,7 @@ class CaitlynFooterData {
 
   // CAITLYN-specific
   daemonStatus: "connected" | "disconnected";
-  antibodyCount: number;
+  defenseSkillCount: number;
   sessionName?: string;      // from session_info entry
   cwd: string;               // with ~ substitution
 }
@@ -345,7 +345,7 @@ Replace inline chat text for dashboard/status/history with modal overlays:
 | /command  | Overlay component      | Dismiss  |
 |-----------|------------------------|----------|
 | /dashboard | Box with Text stats   | Escape   |
-| /status   | SelectList of antibodies | Escape |
+| /status   | SelectList of defense skills | Escape |
 | /history  | SelectList of recent scans | Escape |
 | /resume   | Session picker (SelectList) | Escape |
 | /model    | Model selector (SelectList) | Escape |

@@ -18,20 +18,20 @@ import type { Agent } from "@earendil-works/pi-agent-core";
 import type { LlmCallFn } from "../scanner.js";
 import { hybridScan } from "../hybrid-scanner.js";
 import {
-  buildAntibodyIndex,
-  antibodiesDir,
+  buildDefenseSkillIndex,
+  defenseSkillsDir,
   invalidateLibraryCache,
-  loadAntibodies,
-  loadAntigens,
-  saveAntibody,
-  saveAntibodyIndex,
+  loadDefenseSkills,
+  loadAttacks,
+  saveDefenseSkill,
+  saveDefenseSkillIndex,
 } from "../library.js";
 import { loadEvolutionConfig } from "../config.js";
 import { EvolutionEngine } from "../evolution/engine.js";
-import { buildClusterId, extractAntigenFeatures } from "../evolution/features.js";
+import { buildClusterId, extractAttackFeatures } from "../evolution/features.js";
 import { loadHistory } from "../history.js";
 import { SessionManager } from "../session/session-manager.js";
-import type { AntibodyEntry, ScriptResult } from "../schema.js";
+import type { DefenseSkillEntry, ScriptResult } from "../schema.js";
 import type { MessageEntry, SessionInfoEntry } from "../session/session-types.js";
 import { getContextWindow, getModelDisplay } from "../config/models.js";
 import { getProviders, getModels } from "../llm.js";
@@ -94,13 +94,13 @@ export async function doScan(self: TUIHost, content: string): Promise<void> {
 
     const hits = result.script_results.filter((r: ScriptResult) => r.verdict === "malicious");
     if (hits.length > 0) {
-      // Map antibody ids → configs to color-code by category
-      const abById = new Map(loadAntibodies().map((a) => [a.config.id, a.config]));
-      output += `\n\n${gradText("MATCHED ANTIBODIES", PAL.cyan, PAL.violet, true)}\n`;
+      // Map defense skill ids → configs to color-code by category
+      const abById = new Map(loadDefenseSkills().map((a) => [a.config.id, a.config]));
+      output += `\n\n${gradText("MATCHED DEFENSE SKILLS", PAL.cyan, PAL.violet, true)}\n`;
       for (const h of hits) {
-        const cat = abById.get(h.antibody_id)?.category ?? "unknown";
+        const cat = abById.get(h.defense_skill_id)?.category ?? "unknown";
         const cc = categoryColor(cat);
-        output += ` ${fg(cc)}●${C.reset} ${fg(PAL.text)}${h.antibody_id}${C.reset} ${fg(PAL.faint)}— ${h.reason ?? "detected"} (${(h.confidence * 100).toFixed(0)}%)${C.reset}\n`;
+        output += ` ${fg(cc)}●${C.reset} ${fg(PAL.text)}${h.defense_skill_id}${C.reset} ${fg(PAL.faint)}— ${h.reason ?? "detected"} (${(h.confidence * 100).toFixed(0)}%)${C.reset}\n`;
       }
     }
 
@@ -115,28 +115,28 @@ export async function doScan(self: TUIHost, content: string): Promise<void> {
   }
 }
 
-// ── Antibody / Antigen ────────────────────────────────────────────
+// ── Defense skill / Attack ────────────────────────────────────────────
 
-export async function doAntibodyList(self: TUIHost): Promise<void> {
-  const antibodies = loadAntibodies();
-  if (antibodies.length === 0) { self.showSystemMessage("No antibodies loaded."); return; }
-  let out = `${gradText("ANTIBODY FOREST", PAL.cyan, PAL.violet, true)}  ${badge(`${antibodies.length} LOADED`, PAL.cyan, PAL.cyanBg, false)}\n`;
-  for (const ab of antibodies) {
+export async function doDefenseSkillList(self: TUIHost): Promise<void> {
+  const defenseSkills = loadDefenseSkills();
+  if (defenseSkills.length === 0) { self.showSystemMessage("No defense skills loaded."); return; }
+  let out = `${gradText("DEFENSE SKILL FOREST", PAL.cyan, PAL.violet, true)}  ${badge(`${defenseSkills.length} LOADED`, PAL.cyan, PAL.cyanBg, false)}\n`;
+  for (const ab of defenseSkills) {
     const cc = categoryColor(ab.config.category);
     out += ` ${fg(cc)}◆${C.reset} ${fg(PAL.text)}${ab.config.id}${C.reset} ${badge(ab.config.category.toUpperCase(), cc, PAL.panelHi, false)} ${badge(`T${ab.config.tier}`, tierColor(ab.config.tier), PAL.panelHi, false)} ${fg(PAL.faint)}gen ${ab.config.generation}${C.reset}\n`;
   }
   self.showSystemMessage(out);
 }
 
-export async function doAntibodyAdd(self: TUIHost, id: string): Promise<void> {
-  await doAntibodyAddFull(self, id, "injection", 0);
+export async function doDefenseSkillAdd(self: TUIHost, id: string): Promise<void> {
+  await doDefenseSkillAddFull(self, id, "injection", 0);
 }
 
 const ADD_CATEGORIES = ["injection", "jailbreak", "poisoning", "exfiltration"] as const;
 
 /** Minimal Tier 0 detector script (empty detector — matches nothing). */
 const TIER0_DETECT_TEMPLATE = [
-  "// detect.ts — created via CAITLYN TUI /antibody add",
+  "// detect.ts — created via CAITLYN TUI /defense-skill add",
   "// Reads content from stdin and outputs one JSON verdict line.",
   'import { readFileSync } from "node:fs";',
   'const content = readFileSync(0, "utf-8");',
@@ -144,14 +144,14 @@ const TIER0_DETECT_TEMPLATE = [
   "",
 ].join("\n");
 
-export async function doAntibodyAddFull(
+export async function doDefenseSkillAddFull(
   self: TUIHost,
   id: string,
   category: string,
   tier: number,
 ): Promise<void> {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) {
-    self.showSystemMessage(`${C.red}Invalid antibody id:${C.reset} use lowercase letters, digits and dashes.`);
+    self.showSystemMessage(`${C.red}Invalid defense skill id:${C.reset} use lowercase letters, digits and dashes.`);
     return;
   }
   if (!(ADD_CATEGORIES as readonly string[]).includes(category)) {
@@ -162,18 +162,18 @@ export async function doAntibodyAddFull(
     self.showSystemMessage(`${C.red}Invalid tier:${C.reset} 0 | 1 | 2`);
     return;
   }
-  const dirPath = path.join(antibodiesDir(), id);
+  const dirPath = path.join(defenseSkillsDir(), id);
   if (fs.existsSync(dirPath)) {
-    self.showSystemMessage(`${C.yellow}Antibody "${id}" already exists.${C.reset}`);
+    self.showSystemMessage(`${C.yellow}Defense skill "${id}" already exists.${C.reset}`);
     return;
   }
 
-  const entry: AntibodyEntry = {
+  const entry: DefenseSkillEntry = {
     config: {
       id,
       name: id,
       description: `Created via CAITLYN TUI (${category}, tier ${tier})`,
-      category: category as AntibodyEntry["config"]["category"],
+      category: category as DefenseSkillEntry["config"]["category"],
       tier: tier as 0 | 1 | 2,
       threshold: 0.6,
       prompt: "",
@@ -182,7 +182,7 @@ export async function doAntibodyAddFull(
       execution_stages: ["content_scan"],
       references: [],
       runtime_requirements: [],
-      affinity_score: 0,
+      match_score: 0,
       created_at: new Date().toISOString(),
       parent_id: null,
       generation: 0,
@@ -195,51 +195,51 @@ export async function doAntibodyAddFull(
         avg_latency_us: 0,
       },
     },
-    readme: `# ${id}\n\nCreated via CAITLYN TUI /antibody add.\n`,
+    readme: `# ${id}\n\nCreated via CAITLYN TUI /defense-skill add.\n`,
     scriptPath: null,
     folderPath: dirPath,
   };
-  saveAntibody(entry);
+  saveDefenseSkill(entry);
   fs.writeFileSync(path.join(dirPath, "README.md"), entry.readme, "utf-8");
   if (tier === 0) {
     fs.writeFileSync(path.join(dirPath, "detect.ts"), TIER0_DETECT_TEMPLATE, "utf-8");
   }
   self.showSystemMessage(
-    `${C.green}✅ Antibody "${id}" created${C.reset} (${category}, tier ${tier}).\n` +
+    `${C.green}✅ Defense skill "${id}" created${C.reset} (${category}, tier ${tier}).\n` +
     `${C.dim}Run "npm run build" in caitlyn-agent/ to precompile detect.mjs.${C.reset}`,
   );
 }
 
-export async function doAntibodyRemove(self: TUIHost, id: string): Promise<void> {
-  const dirPath = path.join(antibodiesDir(), id);
+export async function doDefenseSkillRemove(self: TUIHost, id: string): Promise<void> {
+  const dirPath = path.join(defenseSkillsDir(), id);
   if (!fs.existsSync(dirPath)) {
-    const shipped = loadAntibodies().find((a) => a.config.id === id);
+    const shipped = loadDefenseSkills().find((a) => a.config.id === id);
     if (shipped) {
       self.showSystemMessage(
-        `Antibody "${id}" is shipped (read-only). Add a local override to replace it, or leave it in place.`,
+        `Defense skill "${id}" is shipped (read-only). Add a local override to replace it, or leave it in place.`,
       );
       return;
     }
-    self.showSystemMessage(`Antibody "${id}" not found.`);
+    self.showSystemMessage(`Defense skill "${id}" not found.`);
     return;
   }
-  const trashDir = path.join(antibodiesDir(), ".trash");
+  const trashDir = path.join(defenseSkillsDir(), ".trash");
   fs.mkdirSync(trashDir, { recursive: true });
   const target = path.join(trashDir, `${id}-${Date.now()}`);
   fs.renameSync(dirPath, target);
   invalidateLibraryCache();
-  const all = loadAntibodies();
-  saveAntibodyIndex(buildAntibodyIndex(all));
+  const all = loadDefenseSkills();
+  saveDefenseSkillIndex(buildDefenseSkillIndex(all));
   self.showSystemMessage(
-    `${C.green}✅ Antibody "${id}" moved to ${C.reset}antibodies/.trash/ (recoverable).`,
+    `${C.green}✅ Defense skill "${id}" moved to ${C.reset}skills/.trash/ (recoverable).`,
   );
 }
 
-export async function doAntigenShow(self: TUIHost, id: string): Promise<void> {
-  const antigens = loadAntigens();
-  const ag = antigens.find((a) => a.config.id === id);
-  if (!ag) { self.showSystemMessage(`Antigen "${id}" not found.`); return; }
-  let out = `${C.bold}Antigen: ${ag.config.name}${C.reset} [${ag.config.id}]\n`;
+export async function doAttackShow(self: TUIHost, id: string): Promise<void> {
+  const attacks = loadAttacks();
+  const ag = attacks.find((a) => a.config.id === id);
+  if (!ag) { self.showSystemMessage(`Attack "${id}" not found.`); return; }
+  let out = `${C.bold}Attack: ${ag.config.name}${C.reset} [${ag.config.id}]\n`;
   out += `Category: ${ag.config.category}\n`;
   out += `Injection: ${ag.config.injection_point}\n`;
   if (ag.payload) {
@@ -248,7 +248,7 @@ export async function doAntigenShow(self: TUIHost, id: string): Promise<void> {
   self.showSystemMessage(out);
 }
 
-export async function doVaccinate(self: TUIHost, pattern: string): Promise<void> {
+export async function doSynthesize(self: TUIHost, pattern: string): Promise<void> {
   const config = loadEvolutionConfig();
   const engine = new EvolutionEngine({
     config,
@@ -261,16 +261,16 @@ export async function doVaccinate(self: TUIHost, pattern: string): Promise<void>
     .slice(0, config.benignSamples)
     .map((h) => h.content_preview);
 
-  self.showSystemMessage(`${C.cyan}💉 Running immune System 2 loop...${C.reset}`);
+  self.showSystemMessage(`${C.cyan}Running System 2 loop...${C.reset}`);
 
   try {
     const outcome = await engine.run({
       clusterId,
-      target: `user-requested vaccination for cluster ${clusterId}`,
+      target: `user-requested synthesis for cluster ${clusterId}`,
       profile: {
         clusterId,
         category: "unknown",
-        features: extractAntigenFeatures([pattern]),
+        features: extractAttackFeatures([pattern]),
         sampleCount: 1,
       },
       mustDetect: [pattern],
@@ -280,7 +280,7 @@ export async function doVaccinate(self: TUIHost, pattern: string): Promise<void>
     const { loop } = outcome;
     if (loop.approved.length === 0) {
       self.showSystemMessage(
-        `${C.yellow}Vaccination finished: ${loop.termination} (${loop.rounds} rounds). No antibody accepted.${C.reset}`,
+        `${C.yellow}Synthesis finished: ${loop.termination} (${loop.rounds} rounds). No defense skill accepted.${C.reset}`,
       );
       return;
     }
@@ -291,11 +291,11 @@ export async function doVaccinate(self: TUIHost, pattern: string): Promise<void>
         ? ` Shadow observation: ${outcome.shadowStarted.join(", ")}`
         : "";
     self.showSystemMessage(
-      `${C.green}💉 Vaccination complete:${C.reset} ${loop.approved.length} antibody(s) — ${names}${shadowNote}`,
+      `${C.green}Synthesis complete:${C.reset} ${loop.approved.length} defense skill(s) — ${names}${shadowNote}`,
     );
     self.refreshFooter();
   } catch (err) {
-    self.showSystemMessage(`${C.red}❌ Vaccination failed:${C.reset} ${err instanceof Error ? err.message : String(err)}`);
+    self.showSystemMessage(`${C.red}❌ Synthesis failed:${C.reset} ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -532,13 +532,13 @@ export function showHelp(self: TUIHost): void {
     ``,
     section("SCANNING & DEFENSE"),
     `  /scan <content>      Security scan for injection attacks`,
-    `  /status              Immune library status`,
+    `  /status              Defense library status`,
     `  /dashboard           Defense telemetry dashboard`,
     `  /guard               Agent protection & watch status`,
     `  /history             Recent scan history`,
-    `  /antibody list       List antibody forest`,
-    `  /antigen <id>        Show antigen details`,
-    `  /vaccinate <pattern> Evolve antibody`,
+    `  /defense-skill list       List defense skill forest`,
+    `  /attack <id>        Show attack details`,
+    `  /synthesize <pattern> Evolve defense skill`,
     ``,
     `${fg(PAL.faint)}Ctrl+G guard status · Ctrl+D dashboard · Ctrl+S status · Ctrl+H history · Ctrl+P model${C.reset}`,
     section("SESSION"),

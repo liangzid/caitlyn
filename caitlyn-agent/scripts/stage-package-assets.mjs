@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.resolve(scriptDirectory, "..");
 const projectRoot = path.resolve(packageRoot, "..");
-const resourceDirectories = ["antibodies", "antigens"];
+const resourceDirectories = ["skills", "attacks"];
 
 /** Return false for local state that must never enter a published package. */
 function isPublishableResource(sourcePath) {
@@ -63,16 +63,16 @@ function countConfiguredEntries(directoryName) {
 
 /** Validate that the staged library is complete enough for an installed CLI. */
 function validateStagedResources() {
-  const antibodyCount = countConfiguredEntries("antibodies");
-  const antigenCount = countConfiguredEntries("antigens");
-  const indexPath = path.join(packageRoot, "antibodies", "index.json");
-  if (antibodyCount === 0 || antigenCount === 0 || !fs.existsSync(indexPath)) {
+  const defenseSkillCount = countConfiguredEntries("skills");
+  const attackCount = countConfiguredEntries("attacks");
+  const indexPath = path.join(packageRoot, "skills", "index.json");
+  if (defenseSkillCount === 0 || attackCount === 0 || !fs.existsSync(indexPath)) {
     throw new Error(
-      `Incomplete package library: ${antibodyCount} antibodies, ${antigenCount} antigens`,
+      `Incomplete package library: ${defenseSkillCount} defense skills, ${attackCount} attacks`,
     );
   }
   console.log(
-    `Staged npm library: ${antibodyCount} antibodies, ${antigenCount} antigens`,
+    `Staged npm library: ${defenseSkillCount} defense skills, ${attackCount} attacks`,
   );
 }
 

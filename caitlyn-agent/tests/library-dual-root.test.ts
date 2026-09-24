@@ -7,16 +7,16 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
   invalidateLibraryCache,
-  loadAntibodies,
-  saveAntibody,
-  shippedAntibodiesDir,
-  antibodiesDir,
+  loadDefenseSkills,
+  saveDefenseSkill,
+  shippedDefenseSkillsDir,
+  defenseSkillsDir,
   isShippedLibraryPath,
 } from "../src/library.js";
-import type { AntibodyEntry } from "../src/schema.js";
+import type { DefenseSkillEntry } from "../src/schema.js";
 
-function writeMinimalAntibody(root: string, id: string, name: string): void {
-  const dir = path.join(root, "antibodies", id);
+function writeMinimalDefenseSkill(root: string, id: string, name: string): void {
+  const dir = path.join(root, "skills", id);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
     path.join(dir, "config.yaml"),
@@ -30,7 +30,7 @@ function writeMinimalAntibody(root: string, id: string, name: string): void {
       `description: "test"`,
       `prompt: "detect injection"`,
       `role: "detector"`,
-      `affinity_score: 0`,
+      `match_score: 0`,
       `created_at: "2026-01-01"`,
       `generation: 0`,
       `stats:`,
@@ -74,32 +74,32 @@ describe("dual-root library", () => {
   });
 
   it("user overrides shipped by id when dual-root envs are set", () => {
-    writeMinimalAntibody(shipped, "ab-shared", "shipped-name");
-    writeMinimalAntibody(user, "ab-shared", "user-name");
-    writeMinimalAntibody(shipped, "ab-only-shipped", "shipped-only");
-    writeMinimalAntibody(user, "ab-only-user", "user-only");
+    writeMinimalDefenseSkill(shipped, "shared", "shipped-name");
+    writeMinimalDefenseSkill(user, "shared", "user-name");
+    writeMinimalDefenseSkill(shipped, "only-shipped", "shipped-only");
+    writeMinimalDefenseSkill(user, "only-user", "user-only");
     invalidateLibraryCache();
 
-    const loaded = loadAntibodies();
+    const loaded = loadDefenseSkills();
     const byId = new Map(loaded.map((a) => [a.config.id, a]));
-    expect(byId.get("ab-shared")?.config.name).toBe("user-name");
-    expect(byId.has("ab-only-shipped")).toBe(true);
-    expect(byId.has("ab-only-user")).toBe(true);
-    expect(isShippedLibraryPath(path.join(shipped, "antibodies", "ab-only-shipped"))).toBe(true);
-    expect(antibodiesDir()).toBe(path.join(user, "antibodies"));
-    expect(shippedAntibodiesDir()).toBe(path.join(shipped, "antibodies"));
+    expect(byId.get("shared")?.config.name).toBe("user-name");
+    expect(byId.has("only-shipped")).toBe(true);
+    expect(byId.has("only-user")).toBe(true);
+    expect(isShippedLibraryPath(path.join(shipped, "skills", "only-shipped"))).toBe(true);
+    expect(defenseSkillsDir()).toBe(path.join(user, "skills"));
+    expect(shippedDefenseSkillsDir()).toBe(path.join(shipped, "skills"));
   });
 
-  it("saveAntibody copy-on-writes shipped entries into the user root", () => {
-    writeMinimalAntibody(shipped, "ab-cow", "shipped");
+  it("saveDefenseSkill copy-on-writes shipped entries into the user root", () => {
+    writeMinimalDefenseSkill(shipped, "cow", "shipped");
     invalidateLibraryCache();
-    const entry = loadAntibodies().find((a) => a.config.id === "ab-cow") as AntibodyEntry;
+    const entry = loadDefenseSkills().find((a) => a.config.id === "cow") as DefenseSkillEntry;
     expect(entry).toBeTruthy();
     entry.config.stats.total_scans = 3;
-    saveAntibody(entry);
+    saveDefenseSkill(entry);
     expect(entry.folderPath.startsWith(user)).toBe(true);
-    expect(fs.existsSync(path.join(user, "antibodies", "ab-cow", "config.yaml"))).toBe(true);
+    expect(fs.existsSync(path.join(user, "skills", "cow", "config.yaml"))).toBe(true);
     // Shipped original remains.
-    expect(fs.existsSync(path.join(shipped, "antibodies", "ab-cow", "config.yaml"))).toBe(true);
+    expect(fs.existsSync(path.join(shipped, "skills", "cow", "config.yaml"))).toBe(true);
   });
 });

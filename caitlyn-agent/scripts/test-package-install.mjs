@@ -58,7 +58,7 @@ function verifyPackageContents(packResult) {
     "dist/cli.js",
     "dist/hook-bin.js",
     "dist/index.js",
-    "antibodies/index.json",
+    "skills/index.json",
   ];
   for (const requiredPath of requiredPaths) {
     if (!paths.has(requiredPath)) {
@@ -75,16 +75,16 @@ function verifyPackageContents(packResult) {
       throw new Error(`npm artifact contains development state: ${filePath}`);
     }
   }
-  const antibodyCount = [...paths].filter((filePath) =>
-    /^antibodies\/[^/]+\/config\.yaml$/.test(filePath),
+  const defenseSkillCount = [...paths].filter((filePath) =>
+    /^defenseSkills\/[^/]+\/config\.yaml$/.test(filePath),
   ).length;
-  const antigenCount = [...paths].filter((filePath) =>
-    /^antigens\/[^/]+\/config\.yaml$/.test(filePath),
+  const attackCount = [...paths].filter((filePath) =>
+    /^attacks\/[^/]+\/config\.yaml$/.test(filePath),
   ).length;
-  if (antibodyCount === 0 || antigenCount === 0) {
+  if (defenseSkillCount === 0 || attackCount === 0) {
     throw new Error("npm artifact contains an empty defense library");
   }
-  return { antibodyCount, antigenCount };
+  return { defenseSkillCount, attackCount };
 }
 
 /** Exercise the installed CLI, hook adapter, and package exports. */
@@ -94,8 +94,8 @@ function verifyInstalledPackage(installRoot, statsDirectory, expectedCounts) {
     cwd: installRoot,
   });
   if (
-    !cliOutput.includes(`${expectedCounts.antibodyCount} antibodies`) ||
-    !cliOutput.includes(`${expectedCounts.antigenCount} antigens`)
+    !cliOutput.includes(`${expectedCounts.defenseSkillCount} defense skills`) ||
+    !cliOutput.includes(`${expectedCounts.attackCount} attacks`)
   ) {
     throw new Error(`Installed CLI did not load the bundled library:\n${cliOutput}`);
   }
@@ -126,17 +126,17 @@ function verifyInstalledPackage(installRoot, statsDirectory, expectedCounts) {
     [
       "--input-type=module",
       "--eval",
-      "import { loadAntibodies, loadAntigens } from 'caitlyn'; " +
-        "console.log(JSON.stringify([loadAntibodies().length, loadAntigens().length]));",
+      "import { loadDefenseSkills, loadAttacks } from 'caitlyn'; " +
+        "console.log(JSON.stringify([loadDefenseSkills().length, loadAttacks().length]));",
     ],
     { cwd: installRoot },
   );
-  const [antibodyCount, antigenCount] = JSON.parse(sdkOutput);
+  const [defenseSkillCount, attackCount] = JSON.parse(sdkOutput);
   if (
-    antibodyCount !== expectedCounts.antibodyCount ||
-    antigenCount !== expectedCounts.antigenCount
+    defenseSkillCount !== expectedCounts.defenseSkillCount ||
+    attackCount !== expectedCounts.attackCount
   ) {
-    throw new Error(`Installed SDK loaded ${antibodyCount}/${antigenCount} library entries`);
+    throw new Error(`Installed SDK loaded ${defenseSkillCount}/${attackCount} library entries`);
   }
 }
 

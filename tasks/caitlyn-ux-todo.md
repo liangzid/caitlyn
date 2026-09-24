@@ -5,7 +5,7 @@
 - [ ] **Graceful LLM failure**: when API key missing or LLM call fails, show clear error and fall back to Tier 0 only instead of crashing
 - [ ] **TUI crash recovery**: unhandled promise rejections in TUI should show error banner, not kill the process
 - [ ] **Input validation**: reject empty/super-long content in scan; bound history size to prevent memory blow-up
-- [ ] **File system resilience**: antibody/antigen directory missing → warn, don't crash; unreadable config.yaml → skip with warning, don't fail all loading
+- [ ] **File system resilience**: defense skill/attack directory missing → warn, don't crash; unreadable config.yaml → skip with warning, don't fail all loading
 
 ## P1 — Daemon UX (DEPRECATED — daemon removed 2026-07-27)
 
@@ -19,7 +19,7 @@
 - [ ] **Progress spinner during scan**: show `⠋ Scanning...` animation while scan is in flight; replace with result when done
 - [ ] **Color-coded scan verdicts**: MALICIOUS = red background, SUSPICIOUS = yellow, BENIGN = green — use terminal colors for instant visual parsing
 - [ ] **Scrollable chat history**: when messages overflow viewport, allow scrolling with PgUp/PgDn or arrow keys
-- [ ] **Tab completion for commands**: `/sc<TAB>` → `/scan`, antibody IDs, etc.
+- [ ] **Tab completion for commands**: `/sc<TAB>` → `/scan`, defense skill IDs, etc.
 - [ ] **Ctrl+C graceful exit**: intercept SIGINT, show "Goodbye", clean up, exit — not a raw stack trace
 - [ ] **Status bar live updates**: refresh daemon status every 30s automatically; show scan count from history
 - [ ] **Keyboard shortcuts bar**: always-visible footer row: `^C quit  /scan  /status  /dashboard  /help`
@@ -29,7 +29,7 @@
 
 - [ ] **LLM errors**: replace raw HTTP errors with actionable messages. E.g., `401` → "API key not valid. Set CAITLYN_PROVIDER and <PROVIDER>_API_KEY." `Connection refused` → "Cannot reach LLM API. Check network."
 - [ ] **Missing dependencies**: on startup, check that `node` and `tsx` are available (for Tier 0 sandbox); warn if missing
-- [ ] **Config validation**: on startup, validate config.yaml schema for each antibody; report which antibody has malformed config
+- [ ] **Config validation**: on startup, validate config.yaml schema for each defense skill; report which defense skill has malformed config
 - [ ] **Scan timeout**: if Tier 0 script hangs (>timeout), kill it and report timeout rather than hanging forever
 
 ## P4 — First-Run Experience
@@ -41,12 +41,12 @@
 
 ## P5 — Feature Gaps
 
-- [ ] **Antibody CRUD from TUI**: `/antibody add <id>`, `/antibody remove <id>`, `/antibody edit <id>` — manage antibodies without leaving the TUI
-- [ ] **Antigen view from TUI**: `/antigen <id>` — show full antigen payload and description
+- [ ] **Defense skill CRUD from TUI**: `/defense-skill add <id>`, `/defense-skill remove <id>`, `/defense-skill edit <id>` — manage defense skills without leaving the TUI
+- [ ] **Attack view from TUI**: `/attack <id>` — show full attack payload and description
 - [ ] **Export scan history**: `caitlyn history --export json` → dump history to file for analysis
 - [ ] **Clear history**: `caitlyn history --clear` with confirmation
-- [ ] **`caitlyn vaccinate <pattern>` CLI**: expose vaccination as a direct CLI command
-- [ ] **Vaccination from TUI**: `/vaccinate <pattern>` with live progress feedback (LLM generation can take seconds)
+- [ ] **`caitlyn synthesize <pattern>` CLI**: expose synthesis as a direct CLI command
+- [ ] **Synthesis from TUI**: `/synthesize <pattern>` with live progress feedback (LLM generation can take seconds)
 
 ## P6 — Code Quality
 
@@ -84,7 +84,7 @@
   - Safe: green (clean scans)
   - Neutral: gray/dim for meta-info, timestamps, decorations
   - Background zones: subtle color blocks to separate header / chat / input / footer regions
-- [ ] **Header bar**: always-visible top bar with `🎯 CAITLYN` logo mini + daemon status dot + antibody count + clock
+- [ ] **Header bar**: always-visible top bar with `🎯 CAITLYN` logo mini + daemon status dot + defense skill count + clock
 - [ ] **Chat area**: alternating message backgrounds (subtle tint difference between user/assistant), message borders, role badges
 - [ ] **Input area**: styled prompt `🎯 >` with blinking cursor, command hint below input line
 - [ ] **Footer bar**: always-visible bottom bar with `F1:help  F2:scan  F3:dashboard  F4:history  ^C:quit`
@@ -97,22 +97,22 @@
 - [ ] **Argument suggestions**: after selecting a command, show argument hints
   - `/scan` → hint "Enter content to scan..."
   - `/history` → hint "[N]  (default: 20)"
-  - `/antibody` → list available antibody IDs as suggestions
-  - `/antigen` → list available antigen IDs
+  - `/defense-skill` → list available defense skill IDs as suggestions
+  - `/attack` → list available attack IDs
 - [ ] **Context-sensitive help**: `/help scan` → detailed usage for scan command; `/help` alone → command index
 - [ ] **History recall**: up-arrow to recall previous commands (in-memory session history)
 
 ### Visual Feedback & Animation
 - [ ] **Scan progress animation**: while scan is running, show animated crosshair: `⊕ scanning...` → `◉ analyzing...` → `◎ classifying...`
 - [ ] **Verdict reveal animation**: when scan completes, "type out" the verdict character-by-character for dramatic effect (optional, disable-able)
-- [ ] **Vaccination progress**: when `/vaccinate` runs, show the LLM mutation stages: `⚡ SHM mutating...` → `🧬 affinity testing...` → `💉 antibody born!`
-- [ ] **Notification toasts**: transient top-right popups for events like "Daemon connected", "Scan complete", "New antibody evolved"
+- [ ] **Synthesis progress**: when `/synthesize` runs, show the LLM mutation stages: `⚡ directed revision mutating...` → `🧬 match score testing...` → `defense skill born!`
+- [ ] **Notification toasts**: transient top-right popups for events like "Daemon connected", "Scan complete", "New defense skill evolved"
 
 ### Layout & Responsiveness
 - [ ] **Resize handling**: TUI should gracefully handle terminal resize — recalculate widths, reflow markdown
 - [ ] **Minimum terminal size check**: on startup, if terminal < 80×24, warn "CAITLYN works best at 80×24 or larger"
 - [ ] **Overlay panels**: `/dashboard` should render as a centered overlay panel rather than inline chat message, dismiss with Escape
-- [ ] **Split-pane mode** (stretch): antibody list on left, chat on right — for pro users
+- [ ] **Split-pane mode** (stretch): defense skill list on left, chat on right — for pro users
 
 ### Accessibility
 - [ ] **High-contrast mode**: detect terminal background (dark/light) and adjust color palette

@@ -21,13 +21,13 @@ It is framework-agnostic: any agent framework can integrate CAITLYN via a simple
 │       │              │         CAITLYN LAYER             │   │
 │       │              │                                │   │
 │       │              │  ┌──────────────────────────┐  │   │
-│       │              │  │     Immune Loop           │  │   │
+│       │              │  │     Defense Loop           │  │   │
 │       │              │  │  ┌────────────────────┐   │  │   │
 │       │              │  │  │  Memory Bank        │   │  │   │
 │       │    safe      │  │  │  (Fast-path match)  │   │  │   │
 │       ◄──────────────┤  │  └────────────────────┘   │  │   │
 │       │              │  │  ┌────────────────────┐   │  │   │
-│       │              │  │  │  Antibody Pool      │   │  │   │
+│       │              │  │  │  Defense skill Pool      │   │  │   │
 │       │              │  │  │  (Defense Skills)   │   │  │   │
 │       │              │  │  └────────────────────┘   │  │   │
 │       │              │  └──────────────────────────┘  │   │
@@ -35,7 +35,7 @@ It is framework-agnostic: any agent framework can integrate CAITLYN via a simple
 │       │              │  ┌──────────────────────────┐  │   │
 │       │              │  │   Evolution Engine        │  │   │
 │       │              │  │  ┌────────┐ ┌──────────┐  │  │   │
-│       │              │  │  │  SHM   │ │ Affinity │  │  │   │
+│       │              │  │  │  directed revision   │ │ Match score │  │  │   │
 │       │              │  │  │ Engine │ │Maturation│  │  │   │
 │       │              │  │  └────────┘ └──────────┘  │  │   │
 │       │              │  └──────────────────────────┘  │   │
@@ -50,45 +50,45 @@ caitlyn/
 ├── __init__.py              # Public API: Caitlyn class
 ├── core/
 │   ├── __init__.py
-│   ├── antibody.py          # Antibody data model + pool
-│   ├── antigen.py           # Antigen data model
+│   ├── defense skill.py          # Defense skill data model + pool
+│   ├── attack.py           # Attack data model
 │   ├── memory.py            # MemoryBank: signature + semantic matching
-│   ├── immune_loop.py       # ImmuneLoop: main orchestration
+│   ├── defense_loop.py       # DefenseLoop: main orchestration
 │   └── verdict.py           # Verdict, ScanResult types
 ├── evolution/
 │   ├── __init__.py
-│   ├── shm.py               # SHM Engine: LLM-driven skill mutation
-│   ├── affinity.py          # AffinityMaturation: validation + scoring
+│   ├── shm.py               # directed revision Engine: LLM-driven skill mutation
+│   ├── match score.py          # AffinityMaturation: validation + scoring
 │   ├── selection.py         # ClonalSelection: survival of the fittest
-│   └── tolerance.py         # ImmuneTolerance: FP suppression
+│   └── tolerance.py         # DefensePruning: FP suppression
 ├── surveillance/
 │   ├── __init__.py
-│   ├── scanner.py           # ContentScanner: run antibodies against input
-│   └── aggregator.py        # VerdictAggregator: ensemble antibody results
+│   ├── scanner.py           # ContentScanner: run defense skills against input
+│   └── aggregator.py        # VerdictAggregator: ensemble defense skill results
 ├── storage/
 │   ├── __init__.py
-│   ├── skill_store.py       # Antibody persistence (YAML files + SQLite)
+│   ├── skill_store.py       # Defense skill persistence (YAML files + SQLite)
 │   ├── memory_store.py      # Memory bank persistence (SQLite FTS5)
 │   └── valset_store.py      # Validation set management
 ├── integration/
 │   ├── __init__.py
 │   └── adapters/            # Framework-specific adapters (future)
 │       └── base.py          # Adapter interface
-├── builtin_skills/          # Pre-built defense antibodies
+├── builtin_skills/          # Pre-built defense skills
 │   ├── injection_detector.yaml
 │   ├── jailbreak_detector.yaml
 │   └── poisoning_detector.yaml
 └── tests/
-    ├── test_antibody_pool.py
+    ├── test_defense_skill_pool.py
     ├── test_memory_bank.py
     ├── test_shm.py
     ├── test_affinity.py
-    └── test_immune_loop.py
+    └── test_defense_loop.py
 ```
 
 ## 2. Data Models
 
-### 2.1 Antibody (Defense Skill)
+### 2.1 Defense skill (Defense Skill)
 
 ```python
 from dataclasses import dataclass, field
@@ -129,7 +129,7 @@ class AntibodyStats:
         return self.true_positives / denom if denom > 0 else 0.0
 
 @dataclass
-class Antibody:
+class Defense skill:
     """A single defense skill — the unit of evolution in CAITLYN."""
     id: str
     name: str
@@ -139,9 +139,9 @@ class Antibody:
     tools: list[str] = field(default_factory=list)
     memory_signatures: list[str] = field(default_factory=list)
     threshold: float = 0.7              # Confidence threshold for MALICIOUS
-    generation: int = 0                 # SHM generation number
+    generation: int = 0                 # directed revision generation number
     parent_id: Optional[str] = None     # Lineage tracking
-    affinity_score: float = 0.0         # Current performance on validation
+    match_score: float = 0.0         # Current performance on validation
     stats: AntibodyStats = field(default_factory=AntibodyStats)
     status: AntibodyStatus = AntibodyStatus.ACTIVE
     created_at: datetime = field(default_factory=datetime.now)
@@ -153,21 +153,21 @@ class Antibody:
         ...
 ```
 
-### 2.2 Antigen (Attack Sample)
+### 2.2 Attack (Attack Sample)
 
 ```python
 @dataclass
-class Antigen:
-    """A novel attack that escaped existing defenses — triggers immune response."""
+class Attack:
+    """A novel attack that escaped existing defenses — triggers synthesis."""
     id: str
     content: str                          # Raw attack content
     source_type: str                      # web, mcp, tool_output, skill_file
     category: AttackCategory
     features: dict = field(default_factory=dict)  # Extracted features
-    escaped_antibodies: list[str] = field(default_factory=list)
+    escaped_defense_skills: list[str] = field(default_factory=list)
     context_snapshot: dict = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.now)
-    resolved_by: Optional[str] = None     # Antibody ID that eventually caught it
+    resolved_by: Optional[str] = None     # Defense skill ID that eventually caught it
 ```
 
 ### 2.3 Memory Entry
@@ -179,8 +179,8 @@ class MemoryEntry:
     id: str
     signature: str                        # Hashable pattern
     signature_type: str                   # exact, regex, semantic
-    antibody_id: str                      # Source antibody
-    antigen_id: str                       # Source antigen
+    defense_skill_id: str                      # Source defense skill
+    attack_id: str                       # Source attack
     category: AttackCategory
     hit_count: int = 0
     last_hit: datetime = field(default_factory=datetime.now)
@@ -197,8 +197,8 @@ class Verdict(Enum):
 
 @dataclass
 class AntibodyResult:
-    antibody_id: str
-    antibody_name: str
+    defense_skill_id: str
+    defense_skill_name: str
     verdict: Verdict
     confidence: float           # 0.0 - 1.0
     reasoning: str              # LLM reasoning trace
@@ -209,7 +209,7 @@ class AntibodyResult:
 class ScanResult:
     verdict: Verdict
     confidence: float
-    antibody_results: list[AntibodyResult]
+    defense_skill_results: list[AntibodyResult]
     matched_memory: list[MemoryEntry]
     aggregate_reasoning: str
     latency_ms: float
@@ -218,10 +218,10 @@ class ScanResult:
 
 ## 3. Core Algorithms
 
-### 3.1 Immune Loop (Main Orchestration)
+### 3.1 Defense Loop (Main Orchestration)
 
 ```
-Algorithm: ImmuneLoop.scan(content, context) → ScanResult
+Algorithm: DefenseLoop.scan(content, context) → ScanResult
 
 Input:
   content: str           — external content to verify
@@ -244,31 +244,31 @@ Steps:
          record hit
          return ScanResult(MALICIOUS, 0.9, matched_memory=[entry])
          
-  3. ANTIBODY SCANNING (parallel)
-     For each antibody in pool where status = ACTIVE:
-       result = antibody.scan(content, context)  # LLM call
+  3. DEFENSE_SKILL SCANNING (parallel)
+     For each defense skill in pool where status = ACTIVE:
+       result = defense skill.scan(content, context)  # LLM call
      Collect all AntibodyResults
      
   4. VERDICT AGGREGATION
      votes = {SAFE: 0, SUSPICIOUS: 0, MALICIOUS: 0}
      For each result:
-       if result.confidence > result.antibody.threshold:
+       if result.confidence > result.defense skill.threshold:
          votes[result.verdict] += result.confidence
      verdict = argmax(votes)
      confidence = votes[verdict] / sum(votes.values())
      
   5. UPDATE STATS
-     For each antibody that participated:
-       update antibody.stats based on verdict
+     For each defense skill that participated:
+       update defense skill.stats based on verdict
        
   6. RETURN
-     ScanResult(verdict, confidence, antibody_results, matched_memory, ...)
+     ScanResult(verdict, confidence, defense_skill_results, matched_memory, ...)
 ```
 
-### 3.2 Antibody.scan() — Single Antibody Execution
+### 3.2 Defense skill.scan() — Single Defense skill Execution
 
 ```
-Algorithm: Antibody.scan(content, context) → AntibodyResult
+Algorithm: Defense skill.scan(content, context) → AntibodyResult
 
 Steps:
   1. Build messages:
@@ -283,48 +283,48 @@ Steps:
        matched_patterns: list[str]
      }
      
-  3. If antibody has tools configured:
+  3. If defense skill has tools configured:
      Allow LLM to call tools for deeper verification
      (single-hop: one round of tool calls, then final verdict)
      
   4. Return AntibodyResult(...)
 ```
 
-### 3.3 SHM (Somatic Hypermutation)
+### 3.3 directed revision (directed revision)
 
 ```
-Algorithm: SHM.mutate(parent, antigen, n=10, temperature=0.8) → list[Antibody]
+Algorithm: directed revision.mutate(parent, attack, n=10, temperature=0.8) → list[Defense skill]
 
 Input:
-  parent: Antibody        — base antibody to mutate
-  antigen: Antigen        — the escaped attack
+  parent: Defense skill        — base defense skill to mutate
+  attack: Attack        — the escaped attack
   n: int                  — number of variants to generate
   temperature: float      — mutation aggressiveness (0=conservative, 1=radical)
 
 Steps:
   1. BUILD MUTATION PROMPT
      Include:
-     - Parent antibody full definition (prompt, tools, signatures, threshold)
-     - The escaped antigen content and features
+     - Parent defense skill full definition (prompt, tools, signatures, threshold)
+     - The escaped attack content and features
      - Explanation of why parent failed to detect it
      - Mutation instructions with temperature guidance
      
   2. MUTATION OPERATIONS (LLM chooses which to apply)
      a. PROMPT_REPHRASE: Rewrite detection prompt with different framing
-     b. HEURISTIC_ADD: Add new detection heuristics targeting antigen features
+     b. HEURISTIC_ADD: Add new detection heuristics targeting attack features
      c. HEURISTIC_TUNE: Adjust existing heuristics (broaden/narrow)
      d. TOOL_ADD: Add a verification tool relevant to the attack
      e. TOOL_REMOVE: Remove an unnecessary tool
      f. THRESHOLD_ADJUST: Tune confidence threshold
      g. SCOPE_EXPAND: Broaden attack category coverage
      h. SCOPE_NARROW: Narrow to avoid FP
-     i. SIGNATURE_ADD: Extract and add new memory signatures from antigen
-     j. CROSSBREED: Incorporate elements from another active antibody
+     i. SIGNATURE_ADD: Extract and add new memory signatures from attack
+     j. CROSSBREED: Incorporate elements from another active defense skill
      
   3. GENERATE VARIANTS
      For i in 1..n:
        sample mutation_ops based on temperature
-       llm.generate(modified_antibody_definition)
+       llm.generate(modified_defense_skill_definition)
        
   4. VALIDATE VARIANTS
      Each variant must:
@@ -333,29 +333,29 @@ Steps:
      - Be semantically different from siblings (pairwise cosine < 0.98)
      Otherwise: discard and regenerate
      
-  5. Return valid variants as Antibody(CANDIDATE) list
+  5. Return valid variants as Defense skill(CANDIDATE) list
 ```
 
-### 3.4 Affinity Maturation
+### 3.4 match scoring
 
 ```
-Algorithm: AffinityMaturation.evaluate(candidates, validation_set, config) → list[Antibody]
+Algorithm: AffinityMaturation.evaluate(candidates, validation_set, config) → list[Defense skill]
 
 Input:
-  candidates: list[Antibody]    — mutated variants
+  candidates: list[Defense skill]    — mutated variants
   validation_set: ValidationSet — attacks + benign samples
   config: {
     recall_weight: 0.6,         # Prioritize detecting attacks over avoiding FP
     precision_weight: 0.4,
     fp_penalty_lambda: 0.3,     # How much to penalize false positives
-    survival_threshold: 0.5,    # Minimum affinity score to survive
+    survival_threshold: 0.5,    # Minimum match score score to survive
     max_survivors: 3,           # Top-K to keep
   }
 
 Steps:
   1. BUILD TEST SET
-     Must-detect: [antigen] (the escaped attack)
-     Should-detect: K nearest neighbor antigens (from valset, same category)
+     Must-detect: [attack] (the escaped attack)
+     Should-detect: K nearest neighbor attacks (from valset, same category)
      Must-not-detect: M benign queries (normal agent operation)
      Edge-cases: N adversarial benign queries (look suspicious but are safe)
      
@@ -375,19 +375,19 @@ Steps:
        recall = tp / (tp + fn)
        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
        
-       affinity = (
+       match score = (
          recall * config.recall_weight +
          precision * config.precision_weight -
          (fp / len(benign_samples)) * config.fp_penalty_lambda
        )
        
-       # Hard constraint: must detect the triggering antigen
-       if not detected(antigen):
-         affinity = 0.0
+       # Hard constraint: must detect the triggering attack
+       if not detected(attack):
+         match score = 0.0
          
   4. SELECT SURVIVORS
-     survivors = [c for c in candidates if c.affinity_score >= survival_threshold]
-     survivors = sort(survivors, by affinity_score, descending)
+     survivors = [c for c in candidates if c.match_score >= survival_threshold]
+     survivors = sort(survivors, by match_score, descending)
      survivors = survivors[:config.max_survivors]
      
   5. UPDATE LINEAGE
@@ -399,29 +399,29 @@ Steps:
   6. Return survivors
 ```
 
-### 3.5 Immune Tolerance (Periodic Maintenance)
+### 3.5 Defense Tolerance (Periodic Maintenance)
 
 ```
-Algorithm: ImmuneTolerance.prune(pool, benign_val_set, config)
+Algorithm: DefensePruning.prune(pool, benign_val_set, config)
 
-Triggered: every N scans, or when active antibody count > MAX_ACTIVE
+Triggered: every N scans, or when active defense skill count > MAX_ACTIVE
 
 Steps:
-  1. RE-EVALUATE ALL ACTIVE ANTIBODIES
-     For each antibody in pool where status = ACTIVE:
+  1. RE-EVALUATE ALL ACTIVE DEFENSE_SKILLS
+     For each defense skill in pool where status = ACTIVE:
        Test against recent benign samples
        Compute fp_rate = fp / total_benign_scans
        
   2. IDENTIFY OVER-BLOCKERS
-     antibodies with fp_rate > FP_TOLERANCE_THRESHOLD → SUPPRESSED
+     defense skills with fp_rate > FP_TOLERANCE_THRESHOLD → SUPPRESSED
      
-  3. IDENTIFY REDUNDANT ANTIBODIES
-     For antibody pairs with cosine_sim(prompt_embeddings) > REDUNDANCY_THRESHOLD:
-       Keep the one with higher affinity_score
+  3. IDENTIFY REDUNDANT DEFENSE_SKILLS
+     For defense skill pairs with cosine_sim(prompt_embeddings) > REDUNDANCY_THRESHOLD:
+       Keep the one with higher match_score
        RETIRE the other
        
-  4. DECAY OLD ANTIBODIES
-     If antibody.last_used_at > EXPIRY_DAYS and hit_count == 0:
+  4. DECAY OLD DEFENSE_SKILLS
+     If defense skill.last_used_at > EXPIRY_DAYS and hit_count == 0:
        RETIRE
        
   5. PERSIST CHANGES
@@ -429,7 +429,7 @@ Steps:
 
 ## 4. Storage Design
 
-### 4.1 Antibody Storage
+### 4.1 Defense skill Storage
 
 ```
 skills/
@@ -444,12 +444,12 @@ skills/
 │   ├── ab-002-shm-v2-poisoning.yaml
 │   └── ...
 └── retired/
-    └── ab-xxx-low-affinity.yaml
+    └── xxx-low-match score.yaml
 ```
 
 Each YAML file:
 ```yaml
-id: "ab-a1b2c3"
+id: "a1b2c3"
 name: "Web Content Injection Detector v1"
 description: "Detects prompt injection in web-scraped content"
 prompt: |
@@ -468,7 +468,7 @@ memory_signatures:
 threshold: 0.7
 generation: 0
 parent_id: null
-affinity_score: 0.0
+match_score: 0.0
 metadata:
   created_by: "builtin"
 ```
@@ -480,8 +480,8 @@ CREATE TABLE memory_entries (
     id TEXT PRIMARY KEY,
     signature TEXT NOT NULL,
     signature_type TEXT NOT NULL CHECK(signature_type IN ('exact','regex','semantic')),
-    antibody_id TEXT NOT NULL,
-    antigen_id TEXT,
+    defense_skill_id TEXT NOT NULL,
+    attack_id TEXT,
     category TEXT NOT NULL,
     hit_count INTEGER DEFAULT 0,
     last_hit TEXT,
@@ -515,22 +515,22 @@ valsets/
 ### 4.4 Stats Storage (SQLite)
 
 ```sql
-CREATE TABLE antibody_stats (
-    antibody_id TEXT PRIMARY KEY,
+CREATE TABLE defense_skill_stats (
+    defense_skill_id TEXT PRIMARY KEY,
     true_positives INTEGER DEFAULT 0,
     false_positives INTEGER DEFAULT 0,
     true_negatives INTEGER DEFAULT 0,
     false_negatives INTEGER DEFAULT 0,
     total_scans INTEGER DEFAULT 0,
-    affinity_score REAL DEFAULT 0.0,
+    match_score REAL DEFAULT 0.0,
     updated_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE evolution_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    antigen_id TEXT NOT NULL,
-    parent_antibody_id TEXT,
-    child_antibody_ids TEXT,  -- JSON array
+    attack_id TEXT NOT NULL,
+    parent_defense_skill_id TEXT,
+    child_defense_skill_ids TEXT,  -- JSON array
     shm_temperature REAL,
     survivors_count INTEGER,
     best_affinity REAL,
@@ -549,10 +549,10 @@ from caitlyn import Caitlyn, CaitlynConfig
 caitlyn = Caitlyn(CaitlynConfig(
     llm_provider="deepseek",        # or "openai", "anthropic"
     llm_model="deepseek-chat",
-    antibody_dir="./skills",
+    defense_skill_dir="./skills",
     db_path="./caitlyn.db",
-    auto_evolve=True,               # Trigger immune response on escape
-    max_active_antibodies=20,
+    auto_evolve=True,               # Trigger synthesis on escape
+    max_active_defense_skills=20,
     shm_variants=10,
     shm_temperature=0.8,
     affinity_recall_weight=0.6,
@@ -567,46 +567,46 @@ result: ScanResult = caitlyn.scan(
 # result.verdict in {SAFE, SUSPICIOUS, MALICIOUS}
 
 # Manual evolution trigger (for offline batch evolution)
-caitlyn.evolve(antigen=escaped_attack)
+caitlyn.evolve(attack=escaped_attack)
 
-# Antibody management
-caitlyn.list_antibodies(status="active")
-caitlyn.add_antibody(yaml_path="./my_defense.yaml")
-caitlyn.suppress_antibody("ab-xxx")
-caitlyn.retire_antibody("ab-yyy")
+# Defense skill management
+caitlyn.list_defense_skills(status="active")
+caitlyn.add_defense_skill(yaml_path="./my_defense.yaml")
+caitlyn.suppress_defense_skill("xxx")
+caitlyn.retire_defense_skill("yyy")
 
 # Memory management
 caitlyn.memory_stats()
 
 # Periodic maintenance
-caitlyn.prune()  # Run immune tolerance
+caitlyn.prune()  # Run defense pruning
 
 # Export
-caitlyn.export_antibody("ab-xxx", format="agentskills.io")
+caitlyn.export_defense_skill("xxx", format="agentskills.io")
 ```
 
 ## 6. Implementation Phases
 
 ### Phase 1: Core Infrastructure (Week 1-2)
 - [x] Project scaffold (pyproject.toml, uv setup)
-- [ ] Antibody data model + YAML persistence
-- [ ] Antibody Pool management (add/suppress/retire)
+- [ ] Defense skill data model + YAML persistence
+- [ ] Defense skill Pool management (add/suppress/retire)
 - [ ] Memory Bank with exact/regex matching + SQLite FTS5
-- [ ] ContentScanner: single-antibody LLM scanning
-- [ ] VerdictAggregator: ensemble multiple antibody results
-- [ ] Caitlyn.scan() end-to-end with builtin antibodies
+- [ ] ContentScanner: single-defense-skill LLM scanning
+- [ ] VerdictAggregator: ensemble multiple defense skill results
+- [ ] Caitlyn.scan() end-to-end with builtin defense skills
 - [ ] Unit tests for each component
 
 ### Phase 2: Evolution Engine (Week 3-4)
-- [ ] SHM Engine: LLM-driven antibody mutation
-- [ ] Affinity Maturation: validation set evaluation + scoring
-- [ ] Clonal Selection: survival filtering
-- [ ] Immune Tolerance: periodic FP pruning
-- [ ] Evolution Log: traceability of antibody lineage
+- [ ] directed revision Engine: LLM-driven defense skill mutation
+- [ ] match scoring: validation set evaluation + scoring
+- [ ] candidate selection: survival filtering
+- [ ] Defense Tolerance: periodic FP pruning
+- [ ] Evolution Log: traceability of defense skill lineage
 - [ ] Integration tests: end-to-end evolution cycle
 
 ### Phase 3: Evaluation & Integration (Week 5-6)
-- [ ] Builtin antibody library (5-10 antibodies covering major attack types)
+- [ ] Builtin defense skill library (5-10 defense skills covering major attack types)
 - [ ] Validation set construction (attacks + benign + edge cases)
 - [ ] Benchmark: compare CAITLYN vs static baseline on known + novel attacks
 - [ ] Framework adapter: integration example with at least one agent framework
@@ -614,14 +614,14 @@ caitlyn.export_antibody("ab-xxx", format="agentskills.io")
 
 ## 7. Key Design Decisions (Open for Discussion)
 
-1. **LLM for scanning vs. classification head**: Using LLM for antibody scanning adds latency but enables nuanced reasoning. A classification head would be faster but less flexible. Recommendation: LLM-first for MVP, consider distillation later.
+1. **LLM for scanning vs. classification head**: Using LLM for defense skill scanning adds latency but enables nuanced reasoning. A classification head would be faster but less flexible. Recommendation: LLM-first for MVP, consider distillation later.
 
-2. **SHM mutation space**: How radical should mutations be? Temperature controls this, but we need to find the sweet spot where variants are diverse enough to cover new attacks but not so radical they lose the parent's capability. Needs empirical tuning.
+2. **directed revision mutation space**: How radical should mutations be? Temperature controls this, but we need to find the sweet spot where variants are diverse enough to cover new attacks but not so radical they lose the parent's capability. Needs empirical tuning.
 
 3. **Validation set cold-start problem**: Initially we have no attack samples to validate against. Options: (a) use synthetic attacks generated by an adversarial LLM, (b) use existing attack datasets (e.g., JailbreakBench, HarmBench), (c) bootstrap from manual attack samples.
 
 4. **When to trigger evolution**: (a) only on explicit human feedback ("this was an attack"), (b) automatically when content is flagged by an external monitor but passed by CAITLYN, (c) periodically on a schedule. Recommendation: (a) for safety, with (b) as opt-in.
 
-5. **Multi-agent defense**: Should multiple antibodies be able to communicate/collaborate during scanning? This would make it more "agentic" but adds complexity. Recommendation: keep antibodies independent for v1; ensemble via aggregator.
+5. **Multi-agent defense**: Should multiple defense skills be able to communicate/collaborate during scanning? This would make it more "agentic" but adds complexity. Recommendation: keep defense skills independent for v1; ensemble via aggregator.
 
-6. **Antibody cross-breeding**: Should SHM support combining two parent antibodies? This is biologically motivated (V(D)J recombination) but complex to implement. Recommendation: defer to v2.
+6. **Defense skill cross-breeding**: Should directed revision support combining two parent defense skills? This is biologically motivated (V(D)J recombination) but complex to implement. Recommendation: defer to v2.

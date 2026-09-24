@@ -9,24 +9,24 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { createInterface } from "node:readline";
-import type { AntibodyEntry, AntigenEntry } from "../schema.js";
-import { loadAntibodies, loadAntigens } from "../library.js";
+import type { DefenseSkillEntry, AttackEntry } from "../schema.js";
+import { loadDefenseSkills, loadAttacks } from "../library.js";
 import { loadSyncSettings, saveSyncSettings } from "./settings.js";
 import {
   hashPayload,
-  sanitizeAntibodyConfig,
-  sanitizeAntigenConfig,
+  sanitizeDefenseSkillConfig,
+  sanitizeAttackConfig,
   scrubLocalPaths,
 } from "./sanitize.js";
 import {
-  verifyAntigenForContribute,
+  verifyAttackForContribute,
   verifyDefenseForContribute,
 } from "./contribute-verify.js";
 
 export interface ContributeSelection {
-  antibodyIds: string[];
-  antigenIds: string[];
-  /** Antigen ids for which the full payload.txt is included. */
+  defenseSkillIds: string[];
+  attackIds: string[];
+  /** Attack ids for which the full payload.txt is included. */
   includePayloadIds: string[];
 }
 
@@ -34,10 +34,10 @@ export interface ContributeBundleResult {
   contribId: string;
   bundleRoot: string;
   incomingDir: string;
-  antibodiesPacked: string[];
-  antigensPacked: string[];
-  blockedAntibodies: Array<{ id: string; errors: string[] }>;
-  antigenWarnings: Array<{ id: string; warnings: string[] }>;
+  defenseSkillsPacked: string[];
+  attacksPacked: string[];
+  blockedDefenseSkills: Array<{ id: string; errors: string[] }>;
+  attackWarnings: Array<{ id: string; warnings: string[] }>;
 }
 
 function contributeHome(): string {
@@ -61,9 +61,9 @@ function yamlEscape(value: unknown): string {
   return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n")}"`;
 }
 
-function writeAntibodyConfigYaml(
+function writeDefenseSkillConfigYaml(
   destDir: string,
-  config: ReturnType<typeof sanitizeAntibodyConfig>,
+  config: ReturnType<typeof sanitizeDefenseSkillConfig>,
 ): void {
   const lines: string[] = [];
   for (const [key, value] of Object.entries(config)) {
@@ -100,9 +100,9 @@ function writeAntibodyConfigYaml(
   fs.writeFileSync(path.join(destDir, "config.yaml"), lines.join("\n"), "utf-8");
 }
 
-function writeAntigenConfigYaml(
+function writeAttackConfigYaml(
   destDir: string,
-  config: ReturnType<typeof sanitizeAntigenConfig>,
+  config: ReturnType<typeof sanitizeAttackConfig>,
 ): void {
   const lines: string[] = [];
   for (const [key, value] of Object.entries(config)) {
@@ -136,32 +136,32 @@ async function askYesNo(prompt: string, defaultYes: boolean): Promise<boolean> {
  * Interactive picker over the full local library (paper Option C).
  */
 export async function pickContributeSelectionInteractive(): Promise<ContributeSelection | null> {
-  const antibodies = loadAntibodies();
-  const antigens = loadAntigens();
-  if (antibodies.length === 0 && antigens.length === 0) {
-    console.log("No local antibodies or antigens to contribute.");
+  const defenseSkills = loadDefenseSkills();
+  const attacks = loadAttacks();
+  if (defenseSkills.length === 0 && attacks.length === 0) {
+    console.log("No local defense skills or attacks to contribute.");
     return null;
   }
 
   console.log("\nSelect entries to contribute (everything local is listed).\n");
-  const antibodyIds: string[] = [];
-  for (const ab of antibodies) {
+  const defenseSkillIds: string[] = [];
+  for (const ab of defenseSkills) {
     const take = await askYesNo(
-      `  [antibody] ${ab.config.id} (${ab.config.category}, tier ${ab.config.tier})`,
+      `  [defense skill] ${ab.config.id} (${ab.config.category}, tier ${ab.config.tier})`,
       false,
     );
-    if (take) antibodyIds.push(ab.config.id);
+    if (take) defenseSkillIds.push(ab.config.id);
   }
 
-  const antigenIds: string[] = [];
+  const attackIds: string[] = [];
   const includePayloadIds: string[] = [];
-  for (const ag of antigens) {
+  for (const ag of attacks) {
     const take = await askYesNo(
-      `  [antigen]  ${ag.config.id} (${ag.config.category})`,
+      `  [attack]  ${ag.config.id} (${ag.config.category})`,
       false,
     );
     if (!take) continue;
-    antigenIds.push(ag.config.id);
+    attackIds.push(ag.config.id);
     const full = await askYesNo(
       `            include full payload.txt for ${ag.config.id}? (default: hashed)`,
       false,
@@ -169,11 +169,11 @@ export async function pickContributeSelectionInteractive(): Promise<ContributeSe
     if (full) includePayloadIds.push(ag.config.id);
   }
 
-  if (antibodyIds.length === 0 && antigenIds.length === 0) {
+  if (defenseSkillIds.length === 0 && attackIds.length === 0) {
     console.log("Nothing selected.");
     return null;
   }
-  return { antibodyIds, antigenIds, includePayloadIds };
+  return { defenseSkillIds, attackIds, includePayloadIds };
 }
 
 /**
@@ -200,44 +200,44 @@ export async function ensureContributeOptIn(): Promise<boolean> {
 
 /**
  * Pack selected entries into ~/.caitlyn/contribute/<id>/library/incoming/<id>/.
- * Defense failures hard-block those entries; antigen warnings are recorded only.
+ * Defense failures hard-block those entries; attack warnings are recorded only.
  */
 export async function packContributeBundle(
   selection: ContributeSelection,
 ): Promise<ContributeBundleResult> {
-  const antibodies = loadAntibodies();
-  const antigens = loadAntigens();
-  const byAb = new Map(antibodies.map((a) => [a.config.id, a]));
-  const byAg = new Map(antigens.map((a) => [a.config.id, a]));
+  const defenseSkills = loadDefenseSkills();
+  const attacks = loadAttacks();
+  const byAb = new Map(defenseSkills.map((a) => [a.config.id, a]));
+  const byAg = new Map(attacks.map((a) => [a.config.id, a]));
 
-  const blockedAntibodies: ContributeBundleResult["blockedAntibodies"] = [];
-  const antigenWarnings: ContributeBundleResult["antigenWarnings"] = [];
-  const acceptedAbs: AntibodyEntry[] = [];
-  const acceptedAgs: Array<{ entry: AntigenEntry; includePayload: boolean }> = [];
+  const blockedDefenseSkills: ContributeBundleResult["blockedDefenseSkills"] = [];
+  const attackWarnings: ContributeBundleResult["attackWarnings"] = [];
+  const acceptedAbs: DefenseSkillEntry[] = [];
+  const acceptedAgs: Array<{ entry: AttackEntry; includePayload: boolean }> = [];
 
-  for (const id of selection.antibodyIds) {
+  for (const id of selection.defenseSkillIds) {
     const entry = byAb.get(id);
     if (!entry) {
-      blockedAntibodies.push({ id, errors: ["not found in local library"] });
+      blockedDefenseSkills.push({ id, errors: ["not found in local library"] });
       continue;
     }
     const result = await verifyDefenseForContribute(entry);
     if (!result.ok) {
-      blockedAntibodies.push({ id, errors: result.errors });
+      blockedDefenseSkills.push({ id, errors: result.errors });
       continue;
     }
     acceptedAbs.push(entry);
   }
 
-  for (const id of selection.antigenIds) {
+  for (const id of selection.attackIds) {
     const entry = byAg.get(id);
     if (!entry) {
-      antigenWarnings.push({ id, warnings: ["not found in local library"] });
+      attackWarnings.push({ id, warnings: ["not found in local library"] });
       continue;
     }
-    const soft = verifyAntigenForContribute(entry);
+    const soft = verifyAttackForContribute(entry);
     if (soft.warnings.length > 0) {
-      antigenWarnings.push({ id, warnings: soft.warnings });
+      attackWarnings.push({ id, warnings: soft.warnings });
     }
     acceptedAgs.push({
       entry,
@@ -250,11 +250,11 @@ export async function packContributeBundle(
   const incomingDir = path.join(bundleRoot, "library", "incoming", contribId);
   fs.mkdirSync(incomingDir, { recursive: true });
 
-  const antibodiesPacked: string[] = [];
+  const defenseSkillsPacked: string[] = [];
   for (const entry of acceptedAbs) {
-    const dest = path.join(incomingDir, "antibodies", entry.config.id);
+    const dest = path.join(incomingDir, "skills", entry.config.id);
     fs.mkdirSync(dest, { recursive: true });
-    writeAntibodyConfigYaml(dest, sanitizeAntibodyConfig(entry.config));
+    writeDefenseSkillConfigYaml(dest, sanitizeDefenseSkillConfig(entry.config));
     fs.writeFileSync(
       path.join(dest, "README.md"),
       scrubLocalPaths(entry.readme || `# ${entry.config.id}\n`),
@@ -266,14 +266,14 @@ export async function packContributeBundle(
         fs.copyFileSync(src, path.join(dest, name));
       }
     }
-    antibodiesPacked.push(entry.config.id);
+    defenseSkillsPacked.push(entry.config.id);
   }
 
-  const antigensPacked: string[] = [];
+  const attacksPacked: string[] = [];
   for (const { entry, includePayload } of acceptedAgs) {
-    const dest = path.join(incomingDir, "antigens", entry.config.id);
+    const dest = path.join(incomingDir, "attacks", entry.config.id);
     fs.mkdirSync(dest, { recursive: true });
-    writeAntigenConfigYaml(dest, sanitizeAntigenConfig(entry.config));
+    writeAttackConfigYaml(dest, sanitizeAttackConfig(entry.config));
     fs.writeFileSync(
       path.join(dest, "README.md"),
       scrubLocalPaths(entry.readme || `# ${entry.config.id}\n`),
@@ -283,21 +283,21 @@ export async function packContributeBundle(
       ? entry.payload
       : hashPayload(entry.payload || "");
     fs.writeFileSync(path.join(dest, "payload.txt"), payloadBody, "utf-8");
-    antigensPacked.push(entry.config.id);
+    attacksPacked.push(entry.config.id);
   }
 
   const manifest = {
     contrib_id: contribId,
     created_at: new Date().toISOString(),
-    antibodies: antibodiesPacked,
-    antigens: antigensPacked,
+    defenseSkills: defenseSkillsPacked,
+    attacks: attacksPacked,
     include_full_payload: selection.includePayloadIds.filter((id) =>
-      antigensPacked.includes(id),
+      attacksPacked.includes(id),
     ),
-    blocked_antibodies: blockedAntibodies,
-    antigen_warnings: antigenWarnings,
+    blocked_defense_skills: blockedDefenseSkills,
+    attack_warnings: attackWarnings,
     note:
-      "Staging layout for human audit. Maintainers promote approved entries into antibodies/ and antigens/.",
+      "Staging layout for human audit. Maintainers promote approved entries into skills/ and attacks/.",
   };
   fs.writeFileSync(
     path.join(incomingDir, "MANIFEST.json"),
@@ -309,10 +309,10 @@ export async function packContributeBundle(
     contribId,
     bundleRoot,
     incomingDir,
-    antibodiesPacked,
-    antigensPacked,
-    blockedAntibodies,
-    antigenWarnings,
+    defenseSkillsPacked,
+    attacksPacked,
+    blockedDefenseSkills,
+    attackWarnings,
   };
 }
 
@@ -327,8 +327,8 @@ export async function runContributeCommand(args: string[]): Promise<void> {
   let selection: ContributeSelection | null = null;
   const idsFlag = args.find((a) => a.startsWith("--ids="));
   if (idsFlag || args.includes("--all")) {
-    const antibodies = loadAntibodies();
-    const antigens = loadAntigens();
+    const defenseSkills = loadDefenseSkills();
+    const attacks = loadAttacks();
     const includePayload = new Set(
       args
         .filter((a) => a.startsWith("--include-payload="))
@@ -338,8 +338,8 @@ export async function runContributeCommand(args: string[]): Promise<void> {
     );
     if (args.includes("--all")) {
       selection = {
-        antibodyIds: antibodies.map((a) => a.config.id),
-        antigenIds: antigens.map((a) => a.config.id),
+        defenseSkillIds: defenseSkills.map((a) => a.config.id),
+        attackIds: attacks.map((a) => a.config.id),
         includePayloadIds: [...includePayload],
       };
     } else if (idsFlag) {
@@ -348,11 +348,11 @@ export async function runContributeCommand(args: string[]): Promise<void> {
         .split(",")
         .map((s) => s.trim())
         .filter(Boolean);
-      const abSet = new Set(antibodies.map((a) => a.config.id));
-      const agSet = new Set(antigens.map((a) => a.config.id));
+      const abSet = new Set(defenseSkills.map((a) => a.config.id));
+      const agSet = new Set(attacks.map((a) => a.config.id));
       selection = {
-        antibodyIds: ids.filter((id) => abSet.has(id)),
-        antigenIds: ids.filter((id) => agSet.has(id)),
+        defenseSkillIds: ids.filter((id) => abSet.has(id)),
+        attackIds: ids.filter((id) => agSet.has(id)),
         includePayloadIds: ids.filter((id) => includePayload.has(id)),
       };
     }
@@ -368,17 +368,17 @@ export async function runContributeCommand(args: string[]): Promise<void> {
   console.log(`\nPacked contribution ${result.contribId}`);
   console.log(`  Bundle: ${result.bundleRoot}`);
   console.log(`  Incoming: ${result.incomingDir}`);
-  console.log(`  Antibodies: ${result.antibodiesPacked.join(", ") || "(none)"}`);
-  console.log(`  Antigens:   ${result.antigensPacked.join(", ") || "(none)"}`);
-  if (result.blockedAntibodies.length > 0) {
+  console.log(`  Defense skills: ${result.defenseSkillsPacked.join(", ") || "(none)"}`);
+  console.log(`  Attacks:   ${result.attacksPacked.join(", ") || "(none)"}`);
+  if (result.blockedDefenseSkills.length > 0) {
     console.log("\nBlocked defenses (hard gate):");
-    for (const b of result.blockedAntibodies) {
+    for (const b of result.blockedDefenseSkills) {
       console.log(`  - ${b.id}: ${b.errors.join("; ")}`);
     }
   }
-  if (result.antigenWarnings.length > 0) {
-    console.log("\nAntigen warnings (soft):");
-    for (const w of result.antigenWarnings) {
+  if (result.attackWarnings.length > 0) {
+    console.log("\nAttack warnings (soft):");
+    for (const w of result.attackWarnings) {
       console.log(`  - ${w.id}: ${w.warnings.join("; ")}`);
     }
   }
@@ -387,8 +387,8 @@ export async function runContributeCommand(args: string[]): Promise<void> {
       "`gh pr create` automation lands in a follow-up; for now copy the incoming folder.",
   );
   if (
-    result.antibodiesPacked.length === 0 &&
-    result.antigensPacked.length === 0
+    result.defenseSkillsPacked.length === 0 &&
+    result.attacksPacked.length === 0
   ) {
     process.exit(1);
   }

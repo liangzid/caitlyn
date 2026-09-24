@@ -5,7 +5,7 @@
  * all evolution logic now lives in src/evolution/.
  */
 import { scan as localScan, type LlmCallFn } from "./scanner.js";
-import { loadAntibodies, loadAntigens } from "./library.js";
+import { loadDefenseSkills, loadAttacks } from "./library.js";
 import type { ScanResult } from "./schema.js";
 import { loadScanningConfig } from "./config.js";
 import type { EscalationPolicy, SourceTrust } from "./escalation.js";
@@ -43,8 +43,8 @@ export async function hybridScan(options: HybridScanOptions): Promise<HybridScan
   const result = await localScan({
     content: options.content,
     llmCall: options.llmCall,
-    antibodies: loadAntibodies(),
-    antigens: loadAntigens(),
+    defenseSkills: loadDefenseSkills(),
+    attacks: loadAttacks(),
     tier1Mode: options.tier1Mode ?? scanning.tier1Mode,
     mergedScope: options.mergedScope ?? scanning.mergedScope,
     skipTier0: options.skipTier0 ?? scanning.skipTier0,

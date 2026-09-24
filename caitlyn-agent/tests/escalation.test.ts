@@ -12,7 +12,7 @@ function input(overrides: Partial<EscalationInput> = {}): EscalationInput {
   return {
     t0Results: [],
     policy: "safe",
-    fastDetectorIds: ["ab-a", "ab-b"],
+    fastDetectorIds: ["a", "b"],
     weakSignalThreshold: 0.6,
     sourceTrust: "medium",
     highRisk: false,
@@ -22,7 +22,7 @@ function input(overrides: Partial<EscalationInput> = {}): EscalationInput {
 
 function result(verdict: "benign" | "suspicious" | "malicious", confidence: number) {
   return {
-    antibody_id: "ab-x",
+    defense_skill_id: "x",
     verdict,
     confidence,
     reason: null,

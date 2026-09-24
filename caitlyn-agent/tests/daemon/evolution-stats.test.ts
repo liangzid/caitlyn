@@ -1,5 +1,5 @@
 /**
- * Tests for the daemon stats collection and immune response wiring.
+ * Tests for the daemon stats collection and synthesis wiring.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import * as fs from "node:fs";
@@ -22,8 +22,8 @@ function queuedLlm(...responses: string[]): (s: string, u: string) => Promise<st
 
 const CANDIDATE = JSON.stringify([
   {
-    id: "ab-stats-1",
-    name: "Stats Antibody",
+    id: "stats-1",
+    name: "Stats Defense skill",
     description: "unknown-threat candidate",
     category: "unknown",
     tier: 0,
@@ -88,7 +88,7 @@ describe("daemon stats collection", () => {
     expect(triggers).toEqual([]);
   });
 
-  it("triggers on an anomaly and runs an immune response", async () => {
+  it("triggers on an anomaly and runs an synthesis", async () => {
     collector.appendEvent({
       source: "agent_behavior",
       metric: "tool_payload_bytes",
@@ -104,11 +104,11 @@ describe("daemon stats collection", () => {
     const line = fs.readFileSync(triggerLog, "utf-8").trim();
     expect(line).toContain("tool_payload_bytes");
 
-    // The immune response should have materialized a shadow candidate.
+    // The synthesis should have materialized a shadow candidate.
     const dagFile = path.join(evoDir, "nodes.json");
     expect(fs.existsSync(dagFile)).toBe(true);
     const dag = JSON.parse(fs.readFileSync(dagFile, "utf-8"));
-    const node = dag.nodes.find((n: { id: string }) => n.id === "ab-stats-1");
+    const node = dag.nodes.find((n: { id: string }) => n.id === "stats-1");
     expect(node).toBeTruthy();
     expect(node.status).toBe("shadow");
   });

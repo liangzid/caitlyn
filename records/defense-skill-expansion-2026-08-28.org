@@ -2,7 +2,7 @@
 #+date: 2026-08-28
 
 * Objective
-- Audit whether the shipped antibody library contains substantive and executable defenses.
+- Audit whether the shipped defense skill library contains substantive and executable defenses.
 - Search recent defense research and add non-duplicate methods that fit the CAITLYN defense-skill model.
 
 * Current library findings
@@ -11,7 +11,7 @@
 - Only 2 Tier 1 entries execute as independent detectors.
 - Eight non-detectors contribute prompt knowledge only in merged execution.
 - Two Tier 0 non-detectors are not reachable from the scanner.
-- All 24 shipped antibody directories lack the README required by the documented skill format.
+- All 24 shipped defense skill directories lack the README required by the documented skill format.
 
 * Research scope
 - Established 2024--2025 candidates: Task Shield, CaMeL, IPIGuard,

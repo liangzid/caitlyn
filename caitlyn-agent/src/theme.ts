@@ -162,7 +162,7 @@ export function verdictMeta(verdict: string): { icon: string; fg: number; bg: nu
   }
 }
 
-/** Antibody category → accent color. */
+/** Defense skill category → accent color. */
 export function categoryColor(category: string): number {
   switch (category) {
     case "injection": return PAL.cyan;

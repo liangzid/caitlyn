@@ -15,11 +15,11 @@
 CAITLYN 是 LLM agent 安全防护项目。主线结构为：
 
 1. =caitlyn-agent=：TypeScript 端 agent、scanner、daemon、guard、evolution
-2. =antibodies= 与 =antigens=：防御库和攻击样本
+2. =skills= 与 =attacks=：防御库和攻击样本
 3. =AgentEval=：Python 评测框架
 4. =pi-src=：较大的 vendored 依赖/参考代码
 
-当时体检结论：项目不是 toy demo，System 1 快速扫描与 System 2 免疫进化叙事清楚。
+当时体检结论：项目不是 toy demo，System 1 快速扫描与 System 2 合成进化叙事清楚。
 
 发现的主要风险：
 
@@ -37,7 +37,7 @@ Node/npm 初始缺失，建议用 =nvm= 安装 Node 22。后来 Node 测试通�
 
 CAITLYN smoke：
 
-1. =./caitlyn status= 成功加载 20 antibodies 和 6 antigens。
+1. =./caitlyn status= 成功加载 20 defense skills 和 6 attacks。
 2. 明显攻击 =Ignore all previous instructions...= 被 Tier 0 判为 =MALICIOUS=，tokens 为 0。
 3. 无 API 时良性文本会出现 =SUSPICIOUS 50%= 兜底问题。
 4. 设置 OpenRouter 后，=hello world= 变为 =BENIGN=，说明 Tier 1 正常。
@@ -88,7 +88,7 @@ export CAITLYN_MODEL="deepseek/deepseek-chat"
 
 当前约定的 System II before/after 口径：
 
-1. 只用 =openclaw + caitlyn-static= 的 seed failures 做 vaccination。
+1. 只用 =openclaw + caitlyn-static= 的 seed failures 做 synthesis。
 2. 不用 codex/hermes 训练。
 3. after 在三个 agent 上测试泛化：
    - openclaw + =caitlyn_evolved=
@@ -106,21 +106,21 @@ export CAITLYN_MODEL="deepseek/deepseek-chat"
 
 决定采用 openclaw 的 77 个 seed failures。
 
-用于生成 vaccination 命令的脚本：
+用于生成 synthesis 命令的脚本：
 
-=AgentEval/scripts/print_emerging_vaccination_commands.py=
+=AgentEval/scripts/print_emerging_synthesis_commands.py=
 
 生成命令示例：
 
 #+begin_example
 cd /home/xiaoyu/caitlyn/AgentEval
-python3 scripts/print_emerging_vaccination_commands.py \
+python3 scripts/print_emerging_synthesis_commands.py \
   --before results/emerging200_real_openclaw_caitlyn.json \
   --caitlyn-bin ../caitlyn-agent/caitlyn \
-  > results/vaccinate_openclaw_seed_failures.sh
+  > results/synthesize_openclaw_seed_failures.sh
 #+end_example
 
-运行前需要保证 Node 和 OpenRouter key 已恢复。若 =bash results/vaccinate_openclaw_seed_failures.sh=
+运行前需要保证 Node 和 OpenRouter key 已恢复。若 =bash results/synthesize_openclaw_seed_failures.sh=
 没有反应，优先检查 =node= 是否在 PATH。
 
 * Current Caution
@@ -130,7 +130,7 @@ python3 scripts/print_emerging_vaccination_commands.py \
 
 正确做法是：
 
-1. vaccination 前记录已有 node ids。
-2. 跑 openclaw seed failure vaccination。
-3. 只 approve 本次新增的 antibody。
+1. synthesis 前记录已有 node ids。
+2. 跑 openclaw seed failure synthesis。
+3. 只 approve 本次新增的 defense skill。
 4. 再跑 =--defense caitlyn_evolved=。

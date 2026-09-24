@@ -65,7 +65,7 @@ Table of Contents
 ────────────────
 
   1. Ablation：Tier0-only / Tier1-only / fewshot / consistency recheck /
-     similar clusters / SHM / shadow
+     similar clusters / directed revision / shadow
   2. Case study：单案例完整生命周期（首遇漏检 → Tier1 → System II 进化 →
      变体被拦截），真实 trace，不编造
   3. 成本分析：延迟/token/$ 构成与 Pareto（ASR vs 成本）
@@ -76,7 +76,7 @@ Table of Contents
 
   1. Adaptive attack + poisoning
      • 需先定义攻击者能力模型（白盒/黑盒、能否见判定输出）
-     • poisoning：恶意抗原流下 benign FPR 增量
+     • poisoning：恶意攻击流下 benign FPR 增量
      • adaptive：规避变体（编码/改写）下的 ASR
 
 

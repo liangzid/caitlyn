@@ -1,7 +1,7 @@
 /**
  * CAITLYN Evolution — Stats Collector
  *
- * Trigger layer of immune System 2. Event producers append observations
+ * Trigger layer of System 2. Event producers append observations
  * to events.jsonl; the daemon-side collector incrementally builds an
  * EWMA + p99 baseline per metric and raises anomaly triggers when a new
  * observation far exceeds the baseline. Baseline and trigger state are

@@ -6,7 +6,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 // Isolate HOME and stub recordScanFeedback so real ~/.caitlyn state and
-// antibody configs are never modified by the scanning under test.
+// defense skill configs are never modified by the scanning under test.
 const { testHomeId } = vi.hoisted(() => ({
   testHomeId: "caitlyn-ahooks-home-" + Date.now().toString(36),
 }));

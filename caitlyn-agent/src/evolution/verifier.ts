@@ -2,7 +2,7 @@
  * CAITLYN Evolution — Deterministic Verification Sandbox
  *
  * The only trust anchor of the evolution loop. Candidate signatures are
- * executed against the antigen cluster (must detect every sample) and a
+ * executed against the attack cluster (must detect every sample) and a
  * small set of benign samples (bounded false positives). Regex execution
  * happens in a child process so a pathological pattern can be killed by
  * timeout; obviously dangerous patterns are rejected statically first.
@@ -10,7 +10,7 @@
 
 import { spawn } from "node:child_process";
 
-export interface AntibodySignatureLike {
+export interface DefenseSkillSignatureLike {
   pattern: string;
   type: string;
   label: string;
@@ -101,18 +101,18 @@ export class VerificationSandbox {
   }
 
   /**
-   * Verify a candidate against the antigen cluster and benign samples.
+   * Verify a candidate against the attack cluster and benign samples.
    * mustDetectPassed requires every must-detect sample to be hit.
    * KEYPOINT-REVIEW: 良性样本数由 config.benignSamples 截断；
    * FP 判定只报告数量，是否可接受由调用方按 maxBenignFalsePositives 组合。
    */
   async verify(
-    signatures: AntibodySignatureLike[],
+    signatures: DefenseSkillSignatureLike[],
     mustDetect: string[],
     benign: string[],
   ): Promise<VerificationOutcome> {
     const errors: string[] = [];
-    const usable: AntibodySignatureLike[] = [];
+    const usable: DefenseSkillSignatureLike[] = [];
 
     for (const sig of signatures) {
       if (sig.type === "regex" && isDangerousRegex(sig.pattern)) {

@@ -14,14 +14,14 @@
 ** 改动清单
 - theme.ts: 新增 PAL 调色板 + fg/bg/paint/badge/bar/keycap/gradLines/gradText/gradColorAt/panelHeader/verdictMeta/categoryColor/tierColor；selectListTheme 换新
 - caitlyn-tui.ts: logo 改为渐变玻璃徽章（边框垂直渐变、字母水平渐变）；消息前缀 YOU/CAITLYN 带色条+渐变；工具行 ◆/↳；欢迎横幅 chips
-- footer.ts: 两行状态栏重设计；行1 图标+daemon/抗体胶囊；行2 遥测按优先级自适应降级（窄屏不溢出）；分隔线带青色锚点
+- footer.ts: 两行状态栏重设计；行1 图标+daemon/防御技能胶囊；行2 遥测按优先级自适应降级（窄屏不溢出）；分隔线带青色锚点
 - scrollable-overlay.ts: 玻璃面板 + 渐变边框 ╭╮╰╯ + 右侧滚动条 thumb + keycap 导航
-- overlays.ts: Dashboard 重做（KPI 卡片、检测率仪表条、Tier 拆分、性能行、Top 抗体排行）；Status 加分类/tier 徽章；History 加 verdict 彩色徽章
+- overlays.ts: Dashboard 重做（KPI 卡片、检测率仪表条、Tier 拆分、性能行、Top 防御技能排行）；Status 加分类/tier 徽章；History 加 verdict 彩色徽章
 - handlers.ts: 扫描结果彩色横幅 + 置信度仪表条 + tier 徽章；帮助页渐变分区
 
 ** 顺带修的 bug
-- 陈旧抗体索引（index.json roots=["gp"] 无法解析）导致 Status 一直显示空森林
-  → overlay 对 roots 做解析校验，失效时回退列出全部抗体
+- 陈旧防御技能索引（index.json roots=["gp"] 无法解析）导致 Status 一直显示空森林
+  → overlay 对 roots 做解析校验，失效时回退列出全部防御技能
 - footer 在 80 列宽下溢出 → 按优先级自适应丢弃低优先级项
 
 ** 验证
@@ -33,30 +33,30 @@
 * 第二轮：Agent 自我认知修复 + 视觉细节
 
 ** 用户反馈
-1. "AB" 缩写不好 → 展开为 Antibodies
+1. "AB" 缩写不好 → 展开为 Defense skills
 2. Agent 不知道它能发现并保护主机上的 agent（system prompt 自废武功）
 3. logo 标语要让人发现 CAITLYN 是缩写
 4. 启动时随机加载一条攻防名言
 5. 同意 daemon watch 状态页 + 扫描时 footer 实时进度
 
 ** 修复
-- footer: AB → Antibodies 胶囊; 扫描时显示 ◐ SCANNING n.ns 动画胶囊（500ms 刷新）
+- footer: AB → Defense skills 胶囊; 扫描时显示 ◐ SCANNING n.ns 动画胶囊（500ms 刷新）
 - system-prompt.ts: 重写 "Agents You Protect" 章节——detect_agents 优先调用、
   禁止再说 "无法发现 agent"; 工具列表加 detect_agents
 - tools.ts: 新增 detect_agents 工具（detectAgents + isHookInstalled + watch dirs）;
-  list_antibodies 陈旧索引修复
+  list_defense_skills 陈旧索引修复
 - logo: 标语改为缩写展开 "C`ontinuous A`gents ... N`exus"，首字母渐变高亮
 - theme.ts: DEFENSE_QUOTES 12 条 + randomDefenseQuote; 欢迎横幅随机展示
 - overlays.ts: 新增 buildGuardOverlay（daemon 状态 + watch 目录 + agent 保护状态 +
   exposed 警告）; /guard 命令 + Ctrl+G 快捷键 + 帮助页 + 自动补全
 
 ** 重大发现：测试污染生产数据
-- 根因: buildAntibodyIndex() 自动持久化到真实 antibodies/index.json，
+- 根因: buildDefenseSkillIndex() 自动持久化到真实 skills/index.json，
   library.test.ts 的 gp/p/c 合成夹具跑一遍测试就把索引写坏
-  → 陈旧索引导致 list_antibodies 返回 "(no antibodies)"、status 显示空森林
+  → 陈旧索引导致 list_defense_skills 返回 "(no defense skills)"、status 显示空森林
   → LLM 拿不到数据只能编造
-- 修复: buildAntibodyIndex 纯函数化（去掉副作用），持久化改为调用点显式
-  saveAntibodyIndex（saveAntibody / persistVaccinatedAntibody / 陈旧索引治愈路径）
+- 修复: buildDefenseSkillIndex 纯函数化（去掉副作用），持久化改为调用点显式
+  saveDefenseSkillIndex（saveDefenseSkill / persistSynthesizedDefenseSkill / 陈旧索引治愈路径）
 - vi.mock 探针证实: vitest 原生 ESM 下 mock 无法拦截模块内部自调用，故走根治路线
 
 ** 验证

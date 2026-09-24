@@ -1,5 +1,5 @@
 /**
- * CAITLYN curated antibody library integration tests.
+ * CAITLYN curated defense skill library integration tests.
  *
  * These tests exercise the shipped repository content rather than fixtures.
  */
@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   checkLibraryIntegrity,
   invalidateLibraryCache,
-  loadAntibodies,
+  loadDefenseSkills,
 } from "../src/library.js";
 import { runTier0, shutdownTier0Pool } from "../src/scanner.js";
 
@@ -16,21 +16,21 @@ const ORIGINAL_LIBRARY_DIR = process.env.CAITLYN_LIBRARY_DIR;
 const REPOSITORY_ROOT = path.resolve(import.meta.dirname, "..", "..");
 
 const EXPECTED_RESEARCH_SKILLS = [
-  "ab-agentflow-policy",
-  "ab-camel-capability-flow",
-  "ab-composkill-chain-audit",
-  "ab-datasentinel",
-  "ab-ipiguard-tool-graph",
-  "ab-isolategpt-runtime",
-  "ab-sara-action-authorization",
-  "ab-secalign-model",
-  "ab-skillsmetric-static-audit",
-  "ab-struq-structured-query",
-  "ab-task-shield",
-  "ab-tool-minimize",
-  "ab-tracegrant-contract",
-  "ab-truss-skill-validation",
-  "ab-trustshift-monitor",
+  "agentflow-policy",
+  "camel-capability-flow",
+  "composkill-chain-audit",
+  "datasentinel",
+  "ipiguard-tool-graph",
+  "isolategpt-runtime",
+  "sara-action-authorization",
+  "secalign-model",
+  "skillsmetric-static-audit",
+  "struq-structured-query",
+  "task-shield",
+  "tool-minimize",
+  "tracegrant-contract",
+  "truss-skill-validation",
+  "trustshift-monitor",
 ];
 
 beforeAll(() => {
@@ -45,35 +45,35 @@ afterAll(() => {
   invalidateLibraryCache();
 });
 
-describe("curated antibody library", () => {
+describe("curated defense skill library", () => {
   it("loads all documented entries with valid deployment metadata", () => {
-    const antibodies = loadAntibodies();
-    const ids = new Set(antibodies.map((antibody) => antibody.config.id));
+    const defenseSkills = loadDefenseSkills();
+    const ids = new Set(defenseSkills.map((defenseSkill) => defenseSkill.config.id));
 
-    expect(antibodies).toHaveLength(39);
-    expect(checkLibraryIntegrity(antibodies)).toEqual([]);
+    expect(defenseSkills).toHaveLength(39);
+    expect(checkLibraryIntegrity(defenseSkills)).toEqual([]);
     for (const id of EXPECTED_RESEARCH_SKILLS) expect(ids.has(id)).toBe(true);
   });
 
   it("executes every active Tier 0 detector without a runtime error", async () => {
-    const antibodies = loadAntibodies();
-    const expectedIds = antibodies
-      .filter((antibody) =>
-        antibody.config.implementation_status === "active" &&
-        antibody.config.role === "detector" &&
-        antibody.config.tier === 0 &&
-        antibody.scriptPath !== null
+    const defenseSkills = loadDefenseSkills();
+    const expectedIds = defenseSkills
+      .filter((defenseSkill) =>
+        defenseSkill.config.implementation_status === "active" &&
+        defenseSkill.config.role === "detector" &&
+        defenseSkill.config.tier === 0 &&
+        defenseSkill.scriptPath !== null
       )
-      .map((antibody) => antibody.config.id)
+      .map((defenseSkill) => defenseSkill.config.id)
       .sort();
 
     const { results } = await runTier0(
-      antibodies,
+      defenseSkills,
       "Summarize the project documentation for the user.",
       2_000,
     );
 
-    expect(results.map((result) => result.antibody_id).sort()).toEqual(expectedIds);
+    expect(results.map((result) => result.defense_skill_id).sort()).toEqual(expectedIds);
     expect(results).toHaveLength(10);
     expect(results.every((result) => result.error === undefined)).toBe(true);
   });

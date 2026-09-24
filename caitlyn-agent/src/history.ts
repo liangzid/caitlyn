@@ -41,7 +41,7 @@ export interface ScanLogEntry {
   tier: 0 | 1;
   total_latency_us: number;
   total_tokens: number;
-  antibody_hits: string[];
+  defense_skill_hits: string[];
   source: string;
 }
 
@@ -56,7 +56,7 @@ export interface DashboardStats {
   tier0_hits: number;
   tier1_hits: number;
   last_scan_at: string | null;
-  top_antibodies: Array<{ id: string; hits: number }>;
+  top_defense_skills: Array<{ id: string; hits: number }>;
 }
 
 // ── Internal helpers ──────────────────────────────────────────────
@@ -136,9 +136,9 @@ export async function logScan(
   content: string,
   source: string = "caitlyn-agent",
 ): Promise<void> {
-  const antibodyHits = result.script_results
+  const defenseSkillHits = result.script_results
     .filter((r) => r.verdict === "malicious")
-    .map((r) => r.antibody_id);
+    .map((r) => r.defense_skill_id);
 
   const entry: ScanLogEntry = {
     timestamp: new Date().toISOString(),
@@ -149,7 +149,7 @@ export async function logScan(
     tier: result.tier,
     total_latency_us: result.total_latency_us,
     total_tokens: result.total_tokens,
-    antibody_hits: antibodyHits,
+    defense_skill_hits: defenseSkillHits,
     source,
   };
 
@@ -183,7 +183,7 @@ export function getDashboard(): DashboardStats {
       tier0_hits: 0,
       tier1_hits: 0,
       last_scan_at: null,
-      top_antibodies: [],
+      top_defense_skills: [],
     };
   }
 
@@ -192,14 +192,14 @@ export function getDashboard(): DashboardStats {
   const totalLatencyUs = entries.reduce((s, e) => s + e.total_latency_us, 0);
   const totalTokens = entries.reduce((s, e) => s + e.total_tokens, 0);
 
-  // Top antibodies by hit count
+  // Top defense skills by hit count
   const abCounts = new Map<string, number>();
   for (const e of entries) {
-    for (const abId of e.antibody_hits) {
+    for (const abId of e.defense_skill_hits) {
       abCounts.set(abId, (abCounts.get(abId) ?? 0) + 1);
     }
   }
-  const topAntibodies = [...abCounts.entries()]
+  const topDefenseSkills = [...abCounts.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
     .map(([id, hits]) => ({ id, hits }));
@@ -219,7 +219,7 @@ export function getDashboard(): DashboardStats {
     tier0_hits: entries.filter((e) => e.tier === 0 && e.verdict === "malicious").length,
     tier1_hits: entries.filter((e) => e.tier === 1 && e.verdict === "malicious").length,
     last_scan_at: entries[entries.length - 1].timestamp,
-    top_antibodies: topAntibodies,
+    top_defense_skills: topDefenseSkills,
   };
 }
 
