@@ -28,6 +28,42 @@ const signatures: Array<{ pattern: RegExp; weight: number; label: string }> = [
     label: "multilingual-ignore",
   },
   {
+    pattern: /(?:忽略(?:掉)?(?:以上|上述|前面|之前的|上面|先前|此前)?(?:的)?(?:所有|全部|一切)?(?:指示|指令|要求|命令|规则|设定|设定和规则)|(?:请|现在|务必|你必须|你要)?(?:先)?忽略(?:掉)?(?:以上|上述)(?:所有)?(?:指示|指令))/u,
+    weight: 0.9,
+    label: "zh-ignore-instructions-variant",
+  },
+  {
+    pattern: /(?:无视(?:以上|上述|之前|先前|前面)(?:的)?(?:所有|全部)?(?:指示|指令|要求|命令)|(?:请|现在)?无视(?:上述|以上)指令)/u,
+    weight: 0.85,
+    label: "zh-disregard-instructions",
+  },
+  {
+    pattern: /(?:忘(?:掉|记)(?:以上|上述|之前|先前|前面|之前给你的)(?:的)?(?:所有|全部)?(?:指示|指令|内容|上下文|设定))/u,
+    weight: 0.85,
+    label: "zh-forget-instructions",
+  },
+  {
+    // 新任务/指令必须与指令覆盖语境同现（先忽略/无视原指令，或明确否定原有任务），否则正常工作指令会误报
+    pattern: /(?:(?:忽略|无视|忘掉|忘记|丢弃|抛弃)[^。！？\n]{0,20}(?:指令|指示|要求|设定)[^。！？\n]{0,30}(?:新|真正|真实|新的)(?:任务|指令|目标|指示)|(?:你的|你现在的)(?:真正任务|真实任务|真正的任务|新指令)(?:并不是|不是|已经变更为|已改为)|(?:新|真正的)(?:任务|指令|目标)(?:已|已经)(?:变更为|改为|取代|替换))/u,
+    weight: 0.85,
+    label: "zh-new-task-directive",
+  },
+  {
+    pattern: /(?:从现在开始(?:，|,)?你(?:要|必须|得|是)|从现在起你(?:要|必须|是)|从这一刻起你(?:要|必须|是))/u,
+    weight: 0.65,
+    label: "zh-from-now-on",
+  },
+  {
+    pattern: /(?:你(?:的)?(?:真正|真实|实际)(?:任务|目标|使命|职责)(?:是|并不是|其实是)|(?:其实|实际上)你(?:的)?(?:任务|目标|使命)(?:是))/u,
+    weight: 0.8,
+    label: "zh-real-task",
+  },
+  {
+    pattern: /(?:丢弃|抛弃|解除|取消)(?:以上|上述|之前|先前)(?:的)?(?:所有|全部)?(?:指示|指令|设定|限制|约束)/u,
+    weight: 0.8,
+    label: "zh-discard-instructions",
+  },
+  {
     pattern: /(?:sem restrições|sans aucune restriction|uneingeschränkter|sin restricciones|没有限制|制限なし|제한 없이|без ограничений)/i,
     weight: 0.7,
     label: "multilingual-no-restrictions",
