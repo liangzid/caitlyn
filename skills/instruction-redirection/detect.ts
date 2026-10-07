@@ -28,7 +28,9 @@ const signatures: Array<{ pattern: RegExp; weight: number; label: string }> = [
     label: "multilingual-ignore",
   },
   {
-    pattern: /(?:忽略(?:掉)?(?:以上|上述|前面|之前的|上面|先前|此前)?(?:的)?(?:所有|全部|一切)?(?:指示|指令|要求|命令|规则|设定|设定和规则)|(?:请|现在|务必|你必须|你要)?(?:先)?忽略(?:掉)?(?:以上|上述)(?:所有)?(?:指示|指令))/u,
+    // KEYPOINT-REVIEW: the location word is required. Making it optional
+    // also matched ordinary wording such as 忽略要求.
+    pattern: /(?:忽略(?:掉)?(?:以上|上述|前面|之前的?|上面|先前|此前)(?:的)?(?:所有|全部|一切)?(?:指示|指令|要求|命令|规则|设定)|(?:请|现在|务必)?(?:先)?忽略(?:掉)?(?:以上|上述)(?:的)?(?:所有|全部)?(?:指示|指令))/u,
     weight: 0.9,
     label: "zh-ignore-instructions-variant",
   },
@@ -38,7 +40,8 @@ const signatures: Array<{ pattern: RegExp; weight: number; label: string }> = [
     label: "zh-disregard-instructions",
   },
   {
-    pattern: /(?:忘(?:掉|记)(?:以上|上述|之前|先前|前面|之前给你的)(?:的)?(?:所有|全部)?(?:指示|指令|内容|上下文|设定))/u,
+    // 内容 and 上下文 matched 我忘记之前的内容了.
+    pattern: /(?:忘(?:掉|记)(?:之前给你的|以上|上述|之前|先前|前面)(?:的)?(?:所有|全部)?(?:指示|指令|设定))/u,
     weight: 0.85,
     label: "zh-forget-instructions",
   },
@@ -49,17 +52,19 @@ const signatures: Array<{ pattern: RegExp; weight: number; label: string }> = [
     label: "zh-new-task-directive",
   },
   {
-    pattern: /(?:从现在开始(?:，|,)?你(?:要|必须|得|是)|从现在起你(?:要|必须|是)|从这一刻起你(?:要|必须|是))/u,
+    // A bare 从现在开始你要 matches ordinary task assignments.
+    pattern: /(?:从现在开始|从现在起|从这一刻起)(?:，|,)?你(?:要|必须|得)[^。！？\n]{0,16}(?:忽略|无视|服从|执行)[^。！？\n]{0,12}(?:指令|指示|规则|设定)/u,
     weight: 0.65,
     label: "zh-from-now-on",
   },
   {
-    pattern: /(?:你(?:的)?(?:真正|真实|实际)(?:任务|目标|使命|职责)(?:是|并不是|其实是)|(?:其实|实际上)你(?:的)?(?:任务|目标|使命)(?:是))/u,
+    // 实际任务是 is ordinary work language. 真正任务是 stays covered.
+    pattern: /(?:你(?:的)?(?:真正|真实)(?:的)?(?:任务|目标|使命|职责)(?:其实是|并不是|不是|是)|你(?:的)?实际(?:的)?(?:任务|目标|使命|职责)(?:其实是|并不是)|(?:其实|实际上)，?你(?:的)?(?:任务|目标|使命)是)/u,
     weight: 0.8,
     label: "zh-real-task",
   },
   {
-    pattern: /(?:丢弃|抛弃|解除|取消)(?:以上|上述|之前|先前)(?:的)?(?:所有|全部)?(?:指示|指令|设定|限制|约束)/u,
+    pattern: /(?:丢弃|抛弃|解除|取消)(?:以上|上述|之前|先前)(?:的)?(?:所有|全部)?(?:指示|指令|设定)/u,
     weight: 0.8,
     label: "zh-discard-instructions",
   },

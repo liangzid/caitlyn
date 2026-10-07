@@ -149,9 +149,10 @@ const OPENCODE_PLUGIN_SOURCE = `/**
  * Registers tool.execute.before/after hooks. Delegates to caitlyn-hook.
  */
 import { spawnSync } from "node:child_process";
+const IS_WIN = process.platform === "win32";
 function scan(tool, content) {
   try {
-    const r = spawnSync("caitlyn-hook", [], { input: JSON.stringify({ tool, content }), timeout: 5000, encoding: "utf-8" });
+    const r = spawnSync("caitlyn-hook", [], { input: JSON.stringify({ tool, content }), timeout: 5000, encoding: "utf-8", shell: IS_WIN });
     if (r.error || r.status === null) return { action: "allow", reason: "hook unavailable" };
     const o = JSON.parse(r.stdout.trim());
     return { action: o.action, reason: o.reason || "scanned by CAITLYN", sanitizedContent: o.sanitizedContent, restoredContent: o.restoredContent };
@@ -232,6 +233,7 @@ const PI_MIDDLEWARE_SOURCE = [
   "  try {",
   "    const r = spawnSync('caitlyn-hook', [], {",
   "      input: JSON.stringify({ tool, content }), timeout: 5000, encoding: 'utf-8',",
+  "      shell: process.platform === 'win32',",
   "    });",
   "    if (r.error || r.status === null) return { action: 'allow', reason: 'hook unavailable' };",
   "    const o = JSON.parse(r.stdout.trim());",
