@@ -14,3 +14,4 @@
 
 * Published artifacts
 - Git tag: v0.5.0.
+- GitHub Release: https://github.com/liangzid/caitlyn/releases/tag/v0.5.0
