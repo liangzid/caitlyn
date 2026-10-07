@@ -30,8 +30,21 @@ import {
 } from "../theme.js";
 
 import { ScrollableBox } from "./scrollable-overlay.js";
+import { RELEASE_NOTES } from "../releases.js";
 
 // ── Overlay Helpers ───────────────────────────────────────────────
+
+/**
+ * Release page. Dates lead each entry, newest first.
+ */
+export function buildReleaseOverlay(): Component {
+  const lines = RELEASE_NOTES.flatMap((note) => [
+    `${fg(PAL.cyan)}${note.date}${C.reset}  ${fg(PAL.text)}${C.bold}${note.version}${C.reset}`,
+    `  ${fg(PAL.faint)}${note.summary}${C.reset}`,
+    "",
+  ]);
+  return makeBox("WHAT'S NEW", lines, 24);
+}
 
 export function makeBox(title: string, lines: string[], maxHeight = 20): ScrollableBox {
   const visibleLines = Math.min(maxHeight - 4, lines.length + 4);

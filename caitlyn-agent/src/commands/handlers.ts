@@ -560,6 +560,7 @@ export function showHelp(self: TUIHost): void {
     `  /settings            Open settings`,
     ``,
     section("META"),
+    `  /releases            Dated What's New page`,
     `  /help                Show this help`,
     `  /clear               Clear screen`,
     `  /quit                Exit CAITLYN`,

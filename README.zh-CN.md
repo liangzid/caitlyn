@@ -9,7 +9,8 @@
 面向多种智能体的安全中间件：在运行时检查不可信内容，并将新出现的提示注入失效样本转化为经过验证、可复用的防御技能。
 
 [项目网站](https://xiaoyuxu1.github.io/Caitlyn-project/) ·
-[快速开始](#快速开始) ·
+[What's New](#whats-new) ·
+[安装](#安装) ·
 [评测](#评测) ·
 [English](README.md)
 
@@ -23,9 +24,43 @@
 
 ---
 
+## What's New
+
+- **2026-10-07** · 0.5.2 — What's New 改成按日期排列。`caitlyn releases` 和终端里的 `/releases` 打开同一页。
+- **2026-10-07** · 0.5.1 — 在 Windows 上，技能构建以及 OpenClaw、OpenCode、pi 的钩子会用 shell 启动 `.cmd` 垫片。第一个外部 pull request 里的中文指令签名已收紧，普通工作句子保持良性。
+- **2026-10-07** · 0.5.0 — 隐私保护可用，默认关闭。引导会先询问。`standard` 隐藏凭据和格式型标识，`strict` 再扰动带标签的年龄和金额。
+- **2026-09-24** · 0.4.2 — npm 包改为统计 `skills/`，新安装不再是空的。
+- **2026-09-24** · 0.4.1 — 重命名之后 TypeScript 可以重新编译。v0.4.0 打过标签，npm 发布停在残留的旧名字上。
+- **2026-09-24** · 0.4.0 — 技能在 `skills/`，攻击在 `attacks/`，`caitlyn synthesize` 接替了 `caitlyn vaccinate`。
+- **2026-09-02** · 0.3.1 — 终端 logo 的右边缘对齐，论文致谢移入 Acknowledgments。
+- **2026-08-31** · 0.3.0 — `caitlyn setup` 逐步询问 provider、API key、已检测到的智能体和 detection 深度。最终确认前不写配置。
+- **2026-08-28** · 0.2.0 — 防御库发布到 npm，包括正在使用的技能、研究条目，以及本页致谢里的论文。
+
 CAITLYN 保护大语言模型智能体消费网页、文件、搜索结果、API 响应、用户后续输入和 Model Context Protocol（MCP）工具输出时的信任边界。其核心思想是将安全控制表示为一组可执行技能，使这些技能能够被检查、测试、版本化，并在部署后持续扩展。
 
 本仓库包含可运行的 TypeScript 中间件、39 个防御技能条目、6 个攻击条目、终端界面、智能体集成、System II 合成引擎，以及论文实验使用的 Python 评测框架。
+
+## 安装
+
+需要 Node.js 22.19 或更新版本。一条命令安装最新版本，并把 `caitlyn` 和 `caitlyn-hook` 放进可执行路径。不需要克隆仓库，也不需要从源码构建：
+
+```bash
+npm install -g caitlyn@latest
+caitlyn
+```
+
+如果要装成项目依赖：
+
+```bash
+npm install caitlyn
+npx caitlyn status
+```
+
+全局安装用于终端界面和智能体 hook。项目内安装用于在程序里调用扫描接口，并在自己的 `package.json` 里固定版本。
+
+接着运行 `caitlyn setup`。它会询问 provider、API key、已检测到的智能体、detection 深度，以及是否开启隐私保护。隐私保护默认关闭。开启后可选 `standard` 或 `strict`。最终确认前不会写入配置。终端界面里的 `/setup` 是同一流程。
+
+源码构建、智能体接入和评测环境见[快速开始](#快速开始)。
 
 ## 帮助我们覆盖更多防御方法
 
@@ -141,26 +176,7 @@ System II 从已观察到的漏检中保留了 4 个经过验证的技能。加�
 
 Tier 0 扫描不需要 API key。
 
-### npm 一键安装
-
-CAITLYN 已发布至 npm，不需要克隆仓库或从源码构建。全局安装最新版本后，`caitlyn` 与 `caitlyn-hook` 两个命令都会进入可执行路径：
-
-```bash
-npm install -g caitlyn@latest
-caitlyn status
-caitlyn
-```
-
-如果需要安装为项目依赖：
-
-```bash
-npm install caitlyn
-npx caitlyn status
-```
-
-全局安装适合使用交互式终端和智能体 hook。项目内安装适合通过程序调用扫描 API，并在自身的 `package.json` 中固定 CAITLYN 版本。
-
-安装完成后，`caitlyn setup` 会逐步询问 provider、API key、已检测到的智能体、detection 深度，以及是否开启隐私保护。隐私保护默认关闭。开启后可选 standard 或 strict。最终确认前不会写入配置。TUI 中的 `/setup` 使用同一流程。
+npm 一键安装在[安装](#安装)。
 
 ### 从源码构建
 
@@ -412,7 +428,24 @@ uv run pytest -q
   title  = {CAITLYN: Can LLM Agents Autonomously Synthesize Defenses against Emerging Injection Attacks?},
   author = {Liang, Zi and Xu, Xiaoyu and Wang, Yanyun and Du, Minxin and Ye, Qingqing and Hu, Haibo},
   year   = {2026},
-  note   = {Project paper}
+  note   = {Project paper},
+  url    = {https://arxiv.org/abs/2608.27990}
+}
+
+@inproceedings{roychowdhury2025preempt,
+  title     = {Pr$\epsilon\epsilon$mpt: Sanitizing Sensitive Prompts for LLMs},
+  author    = {Roy Chowdhury, Amrita and Glukhov, David and Anshumaan, Divyam and Chalasani, Prasad and Papernot, Nicolas and Jha, Somesh and Bellare, Mihir},
+  booktitle = {Network and Distributed System Security Symposium (NDSS)},
+  year      = {2025},
+  url       = {https://arxiv.org/abs/2504.05147}
+}
+
+@misc{liang2026gemfilter,
+  title        = {GemFilter},
+  author       = {Liang, Zi},
+  year         = {2026},
+  howpublished = {Repository},
+  url          = {https://github.com/liangzid/GemFilter}
 }
 ```
 
@@ -435,6 +468,8 @@ uv run pytest -q
 | AgentWard: A Lifecycle Security Architecture for Autonomous AI Agents | 2026 | 执行轨迹分析知识 | [arXiv:2604.24657](https://arxiv.org/abs/2604.24657) |
 | ClawGuard: A Runtime Security Framework for Tool-Augmented LLM Agents Against Indirect Prompt Injection | 2026 | 权限门控知识 | [arXiv:2604.11790](https://arxiv.org/abs/2604.11790) |
 | SafeMCP: Proactive Power Regulation for LLM Agent Defense via Environment-Grounded Look-Ahead Reasoning | 2026 | 权限门控知识 | [arXiv:2606.01991](https://arxiv.org/abs/2606.01991) |
+| Prεεmpt: Sanitizing Sensitive Prompts for LLMs | 2025 | 隐私净化。格式相关字段使用保格式加密，数值字段使用度量差分隐私。引导里不开启则保持关闭 | [NDSS, arXiv:2504.05147](https://arxiv.org/abs/2504.05147) |
+| GemFilter | 2026 | 隐私运行时使用的本地检测、替身与还原边界 | [代码仓库](https://github.com/liangzid/GemFilter) |
 
 ### 防御技能库中的研究条目
 

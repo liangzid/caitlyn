@@ -23,6 +23,7 @@
  *   caitlyn contribute                      Pack local library into library/incoming bundle
  *   caitlyn setup [--config <path>] [--no-connection-test]
  *                                           Guided provider, Agent, and detection setup
+ *   caitlyn releases          Dated release page (whats-new is the same command)
  */
 
 import * as fs from "node:fs";
@@ -62,6 +63,7 @@ import {
 import { runUpdateCommand } from "./sync/update.js";
 import { runContributeCommand } from "./sync/contribute.js";
 import { runPrivacyCommand } from "./privacy/protect.js";
+import { formatReleaseNotes } from "./releases.js";
 import {
   runSetupWizard,
   SetupCancelledError,
@@ -490,6 +492,11 @@ memory_limit = 10000
         process.exit(1);
       }
     }
+    case "releases":
+    case "whats-new": {
+      console.log(formatReleaseNotes());
+      process.exit(0);
+    }
     case "help":
     case "--help":
     case "-h": {
@@ -512,6 +519,7 @@ memory_limit = 10000
       console.log("  init                       Generate default config.toml");
       console.log("  setup [--config p] [--no-connection-test]");
       console.log("                             Guided provider, Agent, and detection setup");
+      console.log("  releases                   Dated What's New page");
       console.log("  synthesize <pattern>        Submit synthesis pattern");
       console.log("  update [--check] [--yes]   Check GitHub release / npm update");
       console.log("  contribute                 Pack library into library/incoming bundle");
@@ -529,7 +537,7 @@ memory_limit = 10000
     }
     default: {
       console.log(`Unknown command: ${command}`);
-      console.log("Usage: caitlyn [tui|repl|scan|status|dashboard|history|detect|install|uninstall|providers|init|setup|synthesize|update|contribute]");
+      console.log("Usage: caitlyn [tui|repl|scan|status|dashboard|history|detect|install|uninstall|providers|init|setup|releases|synthesize|update|contribute]");
       process.exit(1);
     }
   }

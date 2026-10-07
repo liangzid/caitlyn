@@ -10,8 +10,9 @@ Agent-agnostic middleware that inspects untrusted content at runtime and turns
 new prompt-injection failures into verified, reusable defense skills.
 
 [Project website](https://xiaoyuxu1.github.io/Caitlyn-project/) ·
-[Preprint Paper](https://arxiv.org/abs/2608.27990) .
-[Quick start](#quick-start) ·
+[Preprint Paper](https://arxiv.org/abs/2608.27990) ·
+[What's New](#whats-new) ·
+[Install](#install) ·
 [Evaluation](#evaluation) ·
 [中文说明](README.zh-CN.md)
 
@@ -25,6 +26,18 @@ new prompt-injection failures into verified, reusable defense skills.
 
 ---
 
+## What's New
+
+- **2026-10-07** · 0.5.2 — What's New is this dated list. `caitlyn releases`, and `/releases` in the terminal, open the same page.
+- **2026-10-07** · 0.5.1 — On Windows, skill builds and the OpenClaw, OpenCode, and pi hooks start `.cmd` shims with a shell. Chinese instruction signatures from the first outside pull request were tightened so ordinary work sentences stay benign.
+- **2026-10-07** · 0.5.0 — Privacy protection is available and off by default. Setup asks first. `standard` hides credentials and format-dependent identifiers. `strict` also perturbs labeled ages and amounts.
+- **2026-09-24** · 0.4.2 — The npm package counts `skills/`, so a fresh install is no longer empty.
+- **2026-09-24** · 0.4.1 — TypeScript compiles again after the rename. v0.4.0 had been tagged, and npm publish had stopped on the leftover name.
+- **2026-09-24** · 0.4.0 — Skills live in `skills/`, attacks live in `attacks/`, and `caitlyn synthesize` replaced `caitlyn vaccinate`.
+- **2026-09-02** · 0.3.1 — The terminal logo's right edge lines up, and paper credits moved into Acknowledgments.
+- **2026-08-31** · 0.3.0 — `caitlyn setup` walks through provider, API key, detected agents, and detection depth. Nothing is written until the final confirmation.
+- **2026-08-28** · 0.2.0 — The defense library is on npm: active skills, research entries, and the papers named below.
+
 CAITLYN protects the boundary where an LLM agent consumes webpages, files,
 search results, application programming interface responses, user follow-ups,
 and Model Context Protocol tool outputs. Its core idea is to represent security
@@ -35,6 +48,35 @@ The repository contains the runnable TypeScript middleware, 39 defense-skill
 entries, six attack entries, a terminal interface, agent integrations, the
 System II synthesis engine, and the Python evaluation framework used for the
 paper experiments.
+
+## Install
+
+Node.js 22.19 or newer. One command installs the latest release and puts both
+`caitlyn` and `caitlyn-hook` on your path. No clone and no source build:
+
+```bash
+npm install -g caitlyn@latest
+caitlyn
+```
+
+For a project-local install:
+
+```bash
+npm install caitlyn
+npx caitlyn status
+```
+
+Use the global command for the terminal interface and agent hooks. Use the
+local install when an application imports the scanner and pins the version in
+its own `package.json`.
+
+`caitlyn setup` then asks for the provider, API key, detected agents, detection
+depth, and whether to enable privacy protection. Privacy stays off unless you
+turn it on and choose `standard` or `strict`. Nothing is written until the
+final confirmation. The same flow is `/setup` in the terminal interface.
+
+Source builds, agent wiring, and the evaluation setup are in
+[Quick start](#quick-start).
 
 ## Help us cover more defenses
 
@@ -199,32 +241,7 @@ from 0.4% to 2.0%.
 
 Tier 0 scanning does not require an API key.
 
-### One-command npm installation
-
-CAITLYN is published on npm. No repository clone or source build is required.
-Install the latest release globally to make both `caitlyn` and `caitlyn-hook`
-available:
-
-```bash
-npm install -g caitlyn@latest
-caitlyn status
-caitlyn
-```
-
-For a project-local installation:
-
-```bash
-npm install caitlyn
-npx caitlyn status
-```
-
-The global installation is recommended for the interactive terminal and agent
-hooks. The local installation is useful when an application imports the
-scanner API and pins CAITLYN in its own `package.json`.
-
-After installation, `caitlyn setup` walks through provider choice, API key
-entry, detected Agents, and detection depth. Nothing is written until the
-final confirmation. The same flow is available as `/setup` in the TUI.
+The one-command npm install is in [Install](#install).
 
 ### Build from source
 
@@ -521,7 +538,24 @@ and pull requests.
   title  = {CAITLYN: Can LLM Agents Autonomously Synthesize Defenses against Emerging Injection Attacks?},
   author = {Liang, Zi and Xu, Xiaoyu and Wang, Yanyun and Du, Minxin and Ye, Qingqing and Hu, Haibo},
   year   = {2026},
-  note   = {Project paper}
+  note   = {Project paper},
+  url    = {https://arxiv.org/abs/2608.27990}
+}
+
+@inproceedings{roychowdhury2025preempt,
+  title     = {Pr$\epsilon\epsilon$mpt: Sanitizing Sensitive Prompts for LLMs},
+  author    = {Roy Chowdhury, Amrita and Glukhov, David and Anshumaan, Divyam and Chalasani, Prasad and Papernot, Nicolas and Jha, Somesh and Bellare, Mihir},
+  booktitle = {Network and Distributed System Security Symposium (NDSS)},
+  year      = {2025},
+  url       = {https://arxiv.org/abs/2504.05147}
+}
+
+@misc{liang2026gemfilter,
+  title        = {GemFilter},
+  author       = {Liang, Zi},
+  year         = {2026},
+  howpublished = {Repository},
+  url          = {https://github.com/liangzid/GemFilter}
 }
 ```
 
@@ -550,6 +584,8 @@ section.
 | AgentWard: A Lifecycle Security Architecture for Autonomous AI Agents | 2026 | Execution-tracing knowledge | [arXiv:2604.24657](https://arxiv.org/abs/2604.24657) |
 | ClawGuard: A Runtime Security Framework for Tool-Augmented LLM Agents Against Indirect Prompt Injection | 2026 | Permission-gating knowledge | [arXiv:2604.11790](https://arxiv.org/abs/2604.11790) |
 | SafeMCP: Proactive Power Regulation for LLM Agent Defense via Environment-Grounded Look-Ahead Reasoning | 2026 | Permission-gating knowledge | [arXiv:2606.01991](https://arxiv.org/abs/2606.01991) |
+| Prεεmpt: Sanitizing Sensitive Prompts for LLMs | 2025 | Privacy sanitizer. Format-preserving encryption for format-dependent tokens, metric differential privacy for numeric values. Off unless setup enables it | [NDSS, arXiv:2504.05147](https://arxiv.org/abs/2504.05147) |
+| GemFilter | 2026 | Local detect, surrogate, and restore boundary used by the privacy runtime | [Repository](https://github.com/liangzid/GemFilter) |
 
 ### Research entries in the defense library
 

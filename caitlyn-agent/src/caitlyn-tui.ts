@@ -53,6 +53,7 @@ import {
   buildHistoryOverlay,
   buildModelSelectorOverlay,
   buildGuardOverlay,
+  buildReleaseOverlay,
 } from "./components/overlays.js";
 import {
   doScan,
@@ -735,6 +736,11 @@ export class CaitlynTUI {
       }
 
       // ── Meta ────────────────────────────────────────────────
+      case "/releases":
+      case "/whats-new": {
+        this.tui.showOverlay(buildReleaseOverlay(), { anchor: "center", width: "70%", maxHeight: "70%" });
+        break;
+      }
       case "/help": {
         showHelp(this);
         break;

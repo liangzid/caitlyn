@@ -186,6 +186,14 @@ export const CAITLYN_COMMANDS: CaitlynCommand[] = [
 
   // ── Meta ────────────────────────────────────────────────────────
   {
+    name: "releases",
+    description: "Dated What's New page",
+  },
+  {
+    name: "whats-new",
+    description: "Dated What's New page",
+  },
+  {
     name: "help",
     description: "Show commands",
   },
