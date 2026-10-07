@@ -1,0 +1,19 @@
+#+title: CAITLYN 0.5.1 Release
+#+date: 2026-10-07
+
+* Windows
+- Node 在修复 CVE-2024-27980 之后，不带 =shell: true= 就不会执行 =.cmd= 垫片。
+- =npm run build-skills= 直接启动 =node_modules/.bin/tsc=。在 Windows 上那是一个 shell 脚本，真正的入口是 =tsc.cmd=。启动失败时 =stderr= 还可能为空，旧代码再调用 =toString()= 会把构建打崩。
+- OpenClaw、OpenCode 和 pi 的插件用 =spawnSync("caitlyn-hook")=。Windows 上这个调用失败后按放行处理，钩子等于没有安装。
+- 0.5.1 只在 win32 上为这些固定命令补上 =shell: true=。预编译改为调用 =tsc.cmd=。
+- =build-plugins= 仍使用 =mkdir= 和 =cp=。在 cmd.exe 里这一步还会失败。运行时钩子不依赖这一步。
+
+* Chinese signatures
+- PR #1 补上的中文指令覆盖签名已经合入，随后收紧。
+- 位置词改为必填，避免「忽略要求」「从现在开始，你要负责写日报」这类正常句子被判为恶意。
+
+* Release boundary
+- Version: 0.5.1.
+- Git tag: v0.5.1.
+- GitHub Release: https://github.com/liangzid/caitlyn/releases/tag/v0.5.1
+- Pull request: https://github.com/liangzid/caitlyn/pull/1
