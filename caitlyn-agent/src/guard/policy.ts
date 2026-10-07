@@ -92,7 +92,7 @@ function buildReason(
   if (action === "block") {
     const matched = result.script_results
       .filter((r) => r.verdict === "malicious")
-      .map((r) => r.antibody_id)
+      .map((r) => r.defense_skill_id)
       .join(", ");
     return `Malicious content detected by: ${matched || "Tier 1 LLM"} (confidence=${confidence})`;
   }

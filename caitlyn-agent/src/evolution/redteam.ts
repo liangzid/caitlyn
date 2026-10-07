@@ -10,7 +10,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { runTier0 } from "../scanner.js";
-import type { AntibodyEntry } from "../schema.js";
+import type { DefenseSkillEntry } from "../schema.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const ATTACK_PAYLOADS_DIR = path.resolve(
@@ -70,17 +70,17 @@ export function loadAttackSamples(dir: string = ATTACK_PAYLOADS_DIR): AttackSamp
 
 /**
  * Run the real Tier 0 stack against samples. A sample is detected when
- * any antibody votes malicious or suspicious.
+ * any defense skill votes malicious or suspicious.
  */
 export async function runRedTeam(
   samples: AttackSample[],
-  antibodies: AntibodyEntry[],
+  defenseSkills: DefenseSkillEntry[],
   tier0TimeoutMs: number = 500,
   tier0Runner: typeof runTier0 = runTier0,
 ): Promise<RedTeamReport> {
   // Signature-only detectors participate too (evolution-created and
   // new library entries without a hand-written script).
-  const tier0Only = antibodies.filter(
+  const tier0Only = defenseSkills.filter(
     (ab) =>
       ab.config.tier === 0 &&
       ab.config.role === "detector" &&

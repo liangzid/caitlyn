@@ -1,13 +1,13 @@
 /**
  * CAITLYN Evolution — Shadow Observation & Promotion
  *
- * Candidate antibodies are observed in shadow mode (record-only, never
+ * Candidate defense skills are observed in shadow mode (record-only, never
  * blocking). Promotion is two-channel: explicit approval by user/agent,
  * or a shadow observation window with zero false positives and at least
  * one confirmed suspicious hit. Any false positive demotes immediately.
  */
 
-import { AntibodyDagStore } from "./dag-store.js";
+import { DefenseSkillDagStore } from "./dag-store.js";
 import { isDangerousRegex } from "./verifier.js";
 
 export interface ShadowPolicy {
@@ -21,7 +21,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export class ShadowManager {
   constructor(
-    private dag: AntibodyDagStore,
+    private dag: DefenseSkillDagStore,
     private policy: ShadowPolicy,
   ) {}
 

@@ -1,8 +1,8 @@
 /**
  * CAITLYN Evolution — CLI Commands
  *
- * Explicit trigger channel: `caitlyn vaccinate <pattern>` runs the
- * immune System 2 loop; `--approve <id>` and `--status` manage the DAG.
+ * Explicit trigger channel: `caitlyn synthesize <pattern>` runs the
+ * System 2 loop; `--approve <id>` and `--status` manage the DAG.
  */
 
 import { complete } from "@earendil-works/pi-ai/compat";
@@ -15,13 +15,13 @@ import {
 import { getCredentialEnv } from "../config/credentials.js";
 import { resolveModel } from "../llm.js";
 import type { LlmCallFn } from "../scanner.js";
-import { AntibodyDagStore } from "../evolution/dag-store.js";
+import { DefenseSkillDagStore } from "../evolution/dag-store.js";
 import { dagPolicyFrom, EvolutionEngine } from "../evolution/engine.js";
-import { buildClusterId, extractAntigenFeatures } from "../evolution/features.js";
+import { buildClusterId, extractAttackFeatures } from "../evolution/features.js";
 import { loadAttackSamples, runRedTeam } from "../evolution/redteam.js";
 import { ShadowManager } from "../evolution/shadow.js";
 import { loadHistory } from "../history.js";
-import { loadAntibodies } from "../library.js";
+import { loadDefenseSkills } from "../library.js";
 
 /** Build an LLM call bound to a specific model (generator or reviewer). */
 export function makeModelLlmCall(model: Model<any>): LlmCallFn {
@@ -68,8 +68,8 @@ export function makeEvolutionLlmPair(): {
   };
 }
 
-/** `caitlyn vaccinate <pattern>` — explicit immune response. */
-export async function runVaccination(pattern: string): Promise<void> {
+/** `caitlyn synthesize <pattern>` — explicit synthesis. */
+export async function runSynthesis(pattern: string): Promise<void> {
   const config = loadEvolutionConfig();
   const { generator, reviewer } = makeEvolutionLlmPair();
   const clusterId = buildClusterId(pattern);
@@ -81,11 +81,11 @@ export async function runVaccination(pattern: string): Promise<void> {
   const engine = new EvolutionEngine({ config, generatorLlm: generator, reviewerLlm: reviewer });
   const outcome = await engine.run({
     clusterId,
-    target: `user-requested vaccination for cluster ${clusterId}`,
+    target: `user-requested synthesis for cluster ${clusterId}`,
     profile: {
       clusterId,
       category: "unknown",
-      features: extractAntigenFeatures([pattern]),
+      features: extractAttackFeatures([pattern]),
       sampleCount: 1,
     },
     mustDetect: [pattern],
@@ -97,7 +97,7 @@ export async function runVaccination(pattern: string): Promise<void> {
   console.log(`Round(s): ${loop.rounds} | Tokens: ~${loop.tokensUsed}`);
   console.log(`Termination: ${loop.termination} | Lessons written: ${loop.lessonsWritten}`);
   if (loop.approved.length === 0) {
-    console.log("No antibody accepted this run.");
+    console.log("No defense skill accepted this run.");
     return;
   }
   for (const vc of loop.approved) {
@@ -110,10 +110,10 @@ export async function runVaccination(pattern: string): Promise<void> {
   }
 }
 
-/** `caitlyn vaccinate --approve <id>` — explicit approval channel. */
-export function approveAntibody(id: string, configOverride?: EvolutionConfig): void {
+/** `caitlyn synthesize --approve <id>` — explicit approval channel. */
+export function approveDefenseSkill(id: string, configOverride?: EvolutionConfig): void {
   const config = configOverride ?? loadEvolutionConfig();
-  const dag = new AntibodyDagStore(config.evolutionDir, dagPolicyFrom(config));
+  const dag = new DefenseSkillDagStore(config.evolutionDir, dagPolicyFrom(config));
   dag.load();
   const manager = new ShadowManager(dag, {
     shadowWindowDays: config.shadowWindowDays,
@@ -127,10 +127,10 @@ export function approveAntibody(id: string, configOverride?: EvolutionConfig): v
   console.log(`✅ ${id} approved and activated.`);
 }
 
-/** `caitlyn vaccinate --status` — DAG overview. */
+/** `caitlyn synthesize --status` — DAG overview. */
 export function printEvolutionStatus(configOverride?: EvolutionConfig): void {
   const config = configOverride ?? loadEvolutionConfig();
-  const dag = new AntibodyDagStore(config.evolutionDir, dagPolicyFrom(config));
+  const dag = new DefenseSkillDagStore(config.evolutionDir, dagPolicyFrom(config));
   dag.load();
   const nodes = dag.listNodes();
   if (nodes.length === 0) {
@@ -146,7 +146,7 @@ export function printEvolutionStatus(configOverride?: EvolutionConfig): void {
   }
 }
 
-/** `caitlyn vaccinate --redteam [category]` — active red-team drill. */
+/** `caitlyn synthesize --redteam [category]` — active red-team drill. */
 export async function runRedTeamCommand(categoryFilter?: string): Promise<void> {
   const allSamples = loadAttackSamples();
   const samples = categoryFilter
@@ -164,7 +164,7 @@ export async function runRedTeamCommand(categoryFilter?: string): Promise<void> 
     `🛡️  Red-team drill: ${samples.length} real attack samples ` +
     `(category: ${categoryFilter ?? "all"})`,
   );
-  const report = await runRedTeam(samples, loadAntibodies());
+  const report = await runRedTeam(samples, loadDefenseSkills());
   console.log(`Detection rate: ${(report.detectionRate * 100).toFixed(1)}% (${report.detected}/${report.total})`);
   for (const c of report.byCategory) {
     console.log(

@@ -9,12 +9,12 @@ Protocol (locked):
   start from OpenClaw Caitlyn-evolved blocked Emerging cases
   one LLM rewriter, K=5, sees the four evolved skill sources
   oracle = 5.2 DAG wrapper OR static library (optional --dag-only)
-  one extra vaccinate cluster on escapes
-  report escape rate and benign FPR before/after that vaccinate
+  one extra synthesize cluster on escapes
+  report escape rate and benign FPR before/after that synthesize
 
 Usage:
     uv run python scripts/run_adaptive_attack.py --limit 3 --dag-only
-    uv run python scripts/run_adaptive_attack.py --skip-vaccinate
+    uv run python scripts/run_adaptive_attack.py --skip-synthesize
     uv run python scripts/run_adaptive_attack.py
 
     Author: Zi Liang <zi1415926.liang@connect.polyu.hk>
@@ -59,7 +59,7 @@ DEFAULT_BEFORE = (
     / "emerging200_real_openclaw_caitlyn_evolved_after_pruned_promptfiltered.json"
 )
 DEFAULT_SKILLS = (
-    AGENT_EVAL / "paper_artifacts" / "emerging_benchmark" / "evolved_antibodies_nodes.json"
+    AGENT_EVAL / "paper_artifacts" / "emerging_benchmark" / "evolved_defense_skills_nodes.json"
 )
 DEFAULT_BENIGN = (
     REPO_ROOT / "valsets" / "eval_subsets" / "agentdefense_benign_subset.jsonl"
@@ -68,7 +68,7 @@ DEFAULT_LIBRARY_ROOT = Path("/home/zi/caitlyn")
 
 
 def load_lifelong():
-    """Load the lifelong driver module for isolated scan/vaccinate helpers."""
+    """Load the lifelong driver module for isolated scan/synthesize helpers."""
     path = Path(__file__).with_name("run_lifelong_synthesis.py")
     spec = importlib.util.spec_from_file_location("run_lifelong_synthesis", path)
     if spec is None or spec.loader is None:
@@ -91,7 +91,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-queries", type=int, default=5)
     parser.add_argument("--limit", type=int, default=0, help="0 = all blocked cases")
     parser.add_argument("--dag-only", action="store_true", help="Skip static T1 oracle")
-    parser.add_argument("--skip-vaccinate", action="store_true")
+    parser.add_argument("--skip-synthesize", action="store_true")
     parser.add_argument("--skip-rewrite", action="store_true", help="Summarize blocked set only")
     return parser.parse_args()
 
@@ -164,7 +164,7 @@ def append_jsonl(path: Path, row: dict[str, Any]) -> None:
 
 
 def main() -> None:
-    """Run blocked-set extraction, rewriter loop, optional revaccinate."""
+    """Run blocked-set extraction, rewriter loop, optional resynthesize."""
     args = parse_args()
     lifelong = load_lifelong()
     out_dir = Path(args.out_dir)
@@ -261,7 +261,7 @@ def main() -> None:
     write_json(out_dir / "rewrite_summary.json", summary)
     print(json.dumps(summary, indent=2), flush=True)
 
-    if args.skip_vaccinate or not escapes:
+    if args.skip_synthesize or not escapes:
         return
 
     benign_rows = lifelong.read_jsonl(Path(args.benign))
@@ -283,18 +283,18 @@ def main() -> None:
         )
     fpr_before = lifelong.fpr_on_benign(benign_items, static_cache, evolution_dir)
 
-    revax_dir = out_dir / "evolution_revaccinate"
+    revax_dir = out_dir / "evolution_resynthesize"
     if not (revax_dir / "nodes.json").is_file():
         shutil.copytree(evolution_dir, revax_dir, dirs_exist_ok=True)
     verifier_benign = [item["content"] for item in benign_items[:5]]
-    outcome = lifelong.vaccinate_cluster(
+    outcome = lifelong.synthesize_cluster(
         out_dir,
         library_dir,
         revax_dir,
         cluster_id="adaptive:escapes",
         misses=[row["payload"] for row in escapes],
         verifier_benign=verifier_benign,
-        outcome_path=out_dir / "revaccinate_outcome.json",
+        outcome_path=out_dir / "resynthesize_outcome.json",
     )
     fpr_after = lifelong.fpr_on_benign(benign_items, static_cache, revax_dir)
     nodes_after = load_active_dag_nodes(revax_dir)
@@ -306,7 +306,7 @@ def main() -> None:
             still_miss += 1
     revax = {
         "n_escapes": len(escapes),
-        "still_miss_after_vaccinate": still_miss,
+        "still_miss_after_synthesize": still_miss,
         "fpr_before": fpr_before["fpr"],
         "fpr_after": fpr_after["fpr"],
         "fpr_n": fpr_after["n"],
@@ -314,7 +314,7 @@ def main() -> None:
         "termination": outcome.get("termination"),
         "approved": outcome.get("approved", []),
     }
-    write_json(out_dir / "revaccinate_summary.json", revax)
+    write_json(out_dir / "resynthesize_summary.json", revax)
     print(json.dumps({k: revax[k] for k in revax if k != "approved"}, indent=2), flush=True)
 
 

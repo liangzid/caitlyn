@@ -7,7 +7,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 // Isolate HOME and stub recordScanFeedback so real ~/.caitlyn state and
-// antibody configs are never modified by the scan endpoints under test.
+// defense skill configs are never modified by the scan endpoints under test.
 const { testHomeId } = vi.hoisted(() => ({
   testHomeId: "caitlyn-dserver-home-" + Date.now().toString(36),
 }));
@@ -194,7 +194,7 @@ describe("GET /v1/status", () => {
     const body = await res.json();
     expect(body).toHaveProperty("pid");
     expect(body).toHaveProperty("uptime_ms");
-    expect(body).toHaveProperty("antibodies_loaded");
+    expect(body).toHaveProperty("defense_skills_loaded");
     expect(body).toHaveProperty("scans_total");
     expect(body.scans_total).toBeGreaterThanOrEqual(0);
   });

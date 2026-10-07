@@ -108,6 +108,6 @@ describe("getDaemonStatus via direct HTTP", () => {
     const body = await res.json();
     expect(body.pid).toBeGreaterThan(0);
     expect(typeof body.uptime_ms).toBe("number");
-    expect(typeof body.antibodies_loaded).toBe("number");
+    expect(typeof body.defense_skills_loaded).toBe("number");
   });
 });

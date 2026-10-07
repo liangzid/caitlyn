@@ -23,7 +23,13 @@ vi.mock("../src/guard/agent-hooks.js", () => ({
   DEFAULT_AGENT_HOOKS_CONFIG: { before_enabled: true, after_enabled: true },
 }));
 
-import { decideHook, type HookDecision } from "../src/hook-bin.js";
+import {
+  decideHook,
+  normalizeHookInput,
+  parseHookArgv,
+  renderHostHookResponse,
+  type HookDecision,
+} from "../src/hook-bin.js";
 
 describe("decideHook", () => {
   beforeEach(() => {
@@ -83,6 +89,18 @@ describe("decideHook", () => {
     });
   });
 
+  it("forwards sanitized tool output from the engine", async () => {
+    engineMock.processHook.mockResolvedValue({
+      action: "allow",
+      reason: "ok",
+      sanitizedContent: "safe output",
+    });
+    const d = await decideHook({ tool: "bash", post: true, content: "hello" });
+    expect(d.output.sanitizedContent).toBe("safe output");
+    expect(d.post).toBe(true);
+    expect(d.exitCode).toBe(0);
+  });
+
   it("maps allow to exit 0", async () => {
     engineMock.processHook.mockResolvedValue({ action: "allow", reason: "ok" });
     const d = await decideHook({ tool: "web_search", content: "weather forecast" });
@@ -100,5 +118,104 @@ describe("decideHook", () => {
     expect(engineMock.processHook).toHaveBeenCalledWith(
       expect.objectContaining({ content: huge }),
     );
+  });
+});
+
+describe("host hook protocol", () => {
+  it("keeps the plugin JSON and exit 1 on block", () => {
+    const rendered = renderHostHookResponse("plugin", {
+      output: { action: "block", reason: "malicious detected" },
+      exitCode: 1,
+    });
+    expect(rendered.exitCode).toBe(1);
+    expect(JSON.parse(rendered.stdout)).toEqual({
+      action: "block",
+      reason: "malicious detected",
+    });
+  });
+
+  it("denies Claude and Codex with a reason the model can read, and exits 0", () => {
+    for (const host of ["claude", "codex"] as const) {
+      const rendered = renderHostHookResponse(host, {
+        output: { action: "block", reason: "malicious detected" },
+        exitCode: 1,
+      });
+      expect(rendered.exitCode).toBe(0);
+      expect(JSON.parse(rendered.stdout)).toEqual({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "deny",
+          permissionDecisionReason: "[CAITLYN] malicious detected",
+        },
+      });
+    }
+  });
+
+  it("rewrites Claude and Codex tool output when privacy sanitized it", () => {
+    for (const host of ["claude", "codex"] as const) {
+      const rendered = renderHostHookResponse(host, {
+        output: { action: "allow", reason: "passed", sanitizedContent: "Contact <OPENAI_KEY_ab12cd34>" },
+        exitCode: 0,
+        post: true,
+      });
+      expect(rendered.exitCode).toBe(0);
+      expect(JSON.parse(rendered.stdout)).toEqual({
+        hookSpecificOutput: {
+          hookEventName: "PostToolUse",
+          updatedToolOutput: "Contact <OPENAI_KEY_ab12cd34>",
+        },
+      });
+    }
+  });
+
+  it("restores tool input on a pre-tool allow", () => {
+    const rendered = renderHostHookResponse("claude", {
+      output: {
+        action: "allow",
+        reason: "passed",
+        restoredContent: JSON.stringify({ command: "echo real-secret" }),
+      },
+      exitCode: 0,
+      post: false,
+    });
+    expect(JSON.parse(rendered.stdout)).toEqual({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "allow",
+        updatedInput: { command: "echo real-secret" },
+      },
+    });
+  });
+
+  it("stays silent when a host hook allows", () => {
+    const rendered = renderHostHookResponse("claude", {
+      output: { action: "allow", reason: "passed" },
+      exitCode: 0,
+    });
+    expect(rendered).toEqual({ stdout: "", exitCode: 0 });
+  });
+
+  it("reads a Claude PreToolUse event as the tool payload", () => {
+    const input = normalizeHookInput({
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "rm -rf /" },
+    }, false);
+    expect(input).toMatchObject({
+      tool: "Bash",
+      content: JSON.stringify({ command: "rm -rf /" }),
+      post: false,
+    });
+  });
+
+  it("treats --post and PostToolUse as an after hook", () => {
+    expect(parseHookArgv(["claude", "--post"])).toEqual({ host: "claude", post: true });
+    const input = normalizeHookInput({
+      hook_event_name: "PostToolUse",
+      tool_name: "Bash",
+      tool_response: "secret",
+    }, false);
+    expect(input.post).toBe(true);
+    expect(input.content).toBe("secret");
   });
 });

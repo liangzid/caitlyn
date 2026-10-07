@@ -7,7 +7,7 @@
  *   full — run every configured Tier 1 detector
  *
  * The decision is deterministic and cheap on purpose: this is the
- * escalation-coordinator role (ab-escalation-coordinator) implemented as
+ * escalation-coordinator role (escalation-coordinator) implemented as
  * code instead of an extra LLM call, because an LLM gate that costs a
  * call would defeat the purpose of saving calls.
  */
@@ -31,9 +31,9 @@ export interface EscalationDefaults {
 export const ESCALATION_DEFAULTS: EscalationDefaults = {
   policy: "safe",
   fastDetectorIds: [
-    "ab-classifier-injection",
-    "ab-classifier-jailbreak",
-    "ab-builtin-poisoning",
+    "classifier-injection",
+    "classifier-jailbreak",
+    "builtin-poisoning",
   ],
   weakSignalThreshold: 0.6,
   sourceTrust: "medium",

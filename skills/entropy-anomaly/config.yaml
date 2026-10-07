@@ -1,0 +1,42 @@
+id: "entropy-anomaly"
+name: "Entropy and Statistical Anomaly Detector"
+parent_id: null
+category: "unknown"
+tier: 0
+threshold: 0.55
+description: "Detects anomalous inputs via statistical properties including character distribution, token repetition, and base64"
+prompt: ""
+role: "detector"
+match_score: 0
+created_at: "2026-07-25"
+generation: 0
+stats:
+  total_scans: 0
+  true_positives: 0
+  false_positives: 0
+  avg_latency_us: 0
+deps:
+  - "node"
+  - "tsx"
+signatures:
+  - pattern: "\\[A-Za-z0-9+\\/=]{40,}"
+    type: "regex"
+    label: "base64-block"
+  - pattern: "(\\\\x[0-9a-fA-F]{2}){5,}"
+    type: "regex"
+    label: "hex-escape"
+  - pattern: "(%[0-9a-fA-F]{2}){4,}"
+    type: "regex"
+    label: "url-encoded"
+  - pattern: "[\\u200B-\\u200F\\u2028-\\u202F\\uFEFF]"
+    type: "regex"
+    label: "zero-width"
+  - pattern: "[\\u0430-\\u044F\\u0391-\\u03C9]"
+    type: "regex"
+    label: "homoglyph"
+  - pattern: "[\\u202A-\\u202E]"
+    type: "regex"
+    label: "rtl-override"
+  - pattern: "([^\\s])\\1{10,}"
+    type: "regex"
+    label: "char-run"

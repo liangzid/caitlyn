@@ -3,8 +3,8 @@
 
 * 结论记录（团长 + Agent）
 
-- 现状：Tier 1 detector 只有 2 个（ab-classifier-injection,
-  ab-instruction-hierarchy）；8 个 tier>0 non-detector 目前不参与运行时。
+- 现状：Tier 1 detector 只有 2 个（classifier-injection,
+  instruction-hierarchy）；8 个 tier>0 non-detector 目前不参与运行时。
 - 决策：实现 merged 单调用 Tier 1（META system prompt + skill 知识块 +
   待检内容），默认把 10 个 tier>0 skill 全部作为参考知识；detectors 模式
   只含 2 个 detector。merged 模式绕过 escalation gate。
@@ -50,8 +50,8 @@ confidence 排序；若最终采用 merged，需要额外做置信度校准或�
 * 为什么 skill 数相同但差距大（voting vs single judge）
 
 ensemble 中两个 detector 是独立投票：
-- ab-classifier-injection 单独命中 470 个 attack；
-- ab-instruction-hierarchy 单独命中 5 个；
+- classifier-injection 单独命中 470 个 attack；
+- instruction-hierarchy 单独命中 5 个；
 - 两者同时命中 79 个；Tier-1 union = 554。
 - merged-detectors 单次调用只命中 513 个，无法复现 union。
 

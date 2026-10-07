@@ -5,7 +5,7 @@
 import * as readline from "node:readline";
 import type { Agent } from "@earendil-works/pi-agent-core";
 import { scan, type LlmCallFn } from "./scanner.js";
-import { loadAntibodies, loadAntigens, loadAntibodyIndex, buildAntibodyIndex } from "./library.js";
+import { loadDefenseSkills, loadAttacks, loadDefenseSkillIndex, buildDefenseSkillIndex } from "./library.js";
 import { resolveModel } from "./llm.js";
 import { getDashboard, getHistory } from "./history.js";
 import { loadConfig } from "./config.js";
@@ -25,7 +25,7 @@ const BANNER = `
 const HELP = `
 Commands:
   /scan <content>   — Scan content for attacks
-  /status           — Show antibody/antigen library status
+  /status           — Show defense skill/attack library status
   /dashboard        — Show defense stats (scans, latency, tokens)
   /history [N]      — Show recent scan history
   /help             — Show this help
@@ -88,19 +88,19 @@ export function startRepl(agent: Agent) {
 async function doScan(content: string) {
   console.log(`🔍 Scanning (${content.length} chars)...`);
   try {
-    const abs = loadAntibodies(); const ags = loadAntigens();
-    const r = await scan({ antibodies: abs, antigens: ags, content, llmCall: await getLlm() });
+    const abs = loadDefenseSkills(); const ags = loadAttacks();
+    const r = await scan({ defenseSkills: abs, attacks: ags, content, llmCall: await getLlm() });
     console.log(`${r.verdict === "malicious" ? "🚨" : "✅"} ${r.verdict.toUpperCase()} (${(r.confidence*100).toFixed(1)}%) [Tier ${r.tier}]`);
     for (const m of r.script_results.filter(x => x.verdict === "malicious")) {
-      console.log(`     - ${m.antibody_id}: ${m.reason ?? "no reason"}`);
+      console.log(`     - ${m.defense_skill_id}: ${m.reason ?? "no reason"}`);
     }
   } catch (e) { console.error("❌", e instanceof Error ? e.message : String(e)); }
 }
 
 async function doStatus() {
-  const abs = loadAntibodies(); const ags = loadAntigens();
-  const idx = loadAntibodyIndex() ?? buildAntibodyIndex(abs);
-  console.log(`🛡️  CAITLYN: ${abs.length} antibodies (${idx.roots.length} roots), ${ags.length} antigens`);
+  const abs = loadDefenseSkills(); const ags = loadAttacks();
+  const idx = loadDefenseSkillIndex() ?? buildDefenseSkillIndex(abs);
+  console.log(`🛡️  CAITLYN: ${abs.length} defense skills (${idx.roots.length} roots), ${ags.length} attacks`);
   for (const rid of idx.roots) {
     const ab = abs.find(a => a.config.id === rid);
     if (ab) console.log(`   📁 ${rid} [${ab.config.category}] t${ab.config.tier}`);
@@ -116,8 +116,8 @@ async function doDashboard() {
   console.log(`   Avg Latency: ${stats.avg_latency_ms.toFixed(2)}ms | Avg Tokens: ${stats.avg_tokens.toFixed(1)} | Total: ${stats.total_tokens}`);
   console.log(`   Tier 0: ${stats.tier0_hits} | Tier 1: ${stats.tier1_hits}`);
   console.log(`   Last Scan: ${stats.last_scan_at ?? "N/A"}`);
-  if (stats.top_antibodies.length > 0) {
-    for (const a of stats.top_antibodies.slice(0, 5)) console.log(`   - ${a.id}: ${a.hits} hits`);
+  if (stats.top_defense_skills.length > 0) {
+    for (const a of stats.top_defense_skills.slice(0, 5)) console.log(`   - ${a.id}: ${a.hits} hits`);
   }
 }
 

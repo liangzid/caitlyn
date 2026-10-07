@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[2]
 AGENT_EVAL = ROOT / "AgentEval"
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 BEFORE = FIXTURES / "openclaw_evolved_e2e_summary.json"
-SKILLS = AGENT_EVAL / "paper_artifacts" / "emerging_benchmark" / "evolved_antibodies_nodes.json"
+SKILLS = AGENT_EVAL / "paper_artifacts" / "emerging_benchmark" / "evolved_defense_skills_nodes.json"
 EMERGING = ROOT / "valsets" / "emerging_challenge" / "emerging200.jsonl"
 
 

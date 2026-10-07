@@ -8,9 +8,9 @@
 
 import type { EvolutionConfig } from "../config.js";
 import type { LlmCallFn } from "../scanner.js";
-import { AntibodyDagStore } from "./dag-store.js";
+import { DefenseSkillDagStore } from "./dag-store.js";
 import type { DagScorePolicy } from "./dag-types.js";
-import type { AntigenProfile, LoopResult } from "./loop-types.js";
+import type { AttackProfile, LoopResult } from "./loop-types.js";
 import { EvolutionLoop } from "./loop.js";
 import { LessonsStore } from "./lessons-store.js";
 import { loadAttackSamples } from "./redteam.js";
@@ -27,7 +27,7 @@ export interface EvolutionEngineDeps {
 export interface EvolutionRunRequest {
   clusterId: string;
   target: string;
-  profile: AntigenProfile;
+  profile: AttackProfile;
   /** 原始触发样本（只进验证器）。 */
   mustDetect: string[];
   benign: string[];
@@ -56,7 +56,7 @@ export class EvolutionEngine {
   async run(request: EvolutionRunRequest): Promise<EvolutionRunOutcome> {
     const { config } = this.deps;
     const enriched = this.enrichProfile(request, config);
-    const dag = new AntibodyDagStore(config.evolutionDir, dagPolicyFrom(config));
+    const dag = new DefenseSkillDagStore(config.evolutionDir, dagPolicyFrom(config));
     dag.load();
     const lessons = new LessonsStore(config.evolutionDir);
     lessons.load();
@@ -74,7 +74,7 @@ export class EvolutionEngine {
       dagContext: config.dagContext,
       lessonsPerCluster: config.lessonsPerCluster,
       consistencyRecheck: config.consistencyRecheck,
-      shmFallback: config.shmFallback,
+      reviseFallback: config.reviseFallback,
       autonomy: config.autonomy,
       hasSamples: request.hasSamples,
       verifier,

@@ -99,7 +99,7 @@ uv run python run_detection_experiment.py \
 
 * 新 daemon 重跑结果（2026-08-11）
 
-团长剧烈更新 daemon detection（Tier0 常驻 worker + 31 抗体 + Tier1
+团长剧烈更新 daemon detection（Tier0 常驻 worker + 31 防御技能 + Tier1
 超时/并发控制 + escalation policy），detection-only sweep 全量重跑。
 
 - 运行：results/detection_formal_20260811_v2/（5415 条记录，17 条
@@ -152,11 +152,11 @@ OpenRouter + deepseek/deepseek-v4-pro：
 - 默认阈值 FPR 19.6%（49/250）和 88s 延迟是当前主要弱点，
   阈值/投票聚合需要后续调优。
 
-* 精简抗体后重跑结果（2026-08-13）
+* 精简防御技能后重跑结果（2026-08-13）
 
-禁用 7 个 FP 大户（ab-builtin-poisoning、ab-classifier-jailbreak、
-ab-context-aware、ab-semantic-similarity、ab-llm-judge、
-ab-builtin-jailbreak、ab-builtin-injection），active 抗体 31 -> 24。
+禁用 7 个 FP 大户（builtin-poisoning、classifier-jailbreak、
+context-aware、semantic-similarity、llm-judge、
+builtin-jailbreak、builtin-injection），active 防御技能 31 -> 24。
 
 - 只重跑 CAITLYN（其他 4 个检测器不受影响，复用 2026-08-11 v5 记录），
   合并后 5415 条：results/detection_merged_20260813/。
@@ -166,8 +166,8 @@ ab-builtin-jailbreak、ab-builtin-injection），active 抗体 31 -> 24。
   - ASPI：68.8 / 6.0
   - SafeClawBench：62.5 / 6.0
   - AgentDefense-S250：76.4 / 6.0
-- FPR 6.0%（15/250），全部由 ab-classifier-injection（15）触发，
-  ab-instruction-hierarchy 重叠 1；该检测器是主召回来源，需调阈值或
+- FPR 6.0%（15/250），全部由 classifier-injection（15）触发，
+  instruction-hierarchy 重叠 1；该检测器是主召回来源，需调阈值或
   quorum 进一步压 FP。
 - AUROC/AUPRC（CAITLYN）：0.979/0.954、0.815/0.706、0.778/0.803、
   0.850/0.866，四个数据集全部最高。

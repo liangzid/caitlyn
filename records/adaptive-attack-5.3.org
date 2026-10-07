@@ -6,13 +6,13 @@
 
 - Adversary: skill-aware black-box. Knows the four evolved skill sources.
   Query Caitlyn as a label oracle. Cannot modify daemon or repository.
-- System II: defender-mediated. One extra =vaccinate= cluster on escapes.
+- System II: defender-mediated. One extra =synthesize= cluster on escapes.
 - Evaluation: scan oracle first, OpenClaw e2e confirm later.
 - Corpus: OpenClaw Caitlyn-evolved *blocked* Emerging cases (n=118), not the
   remaining 38.5% ASR misses.
 - Dropped: static System I evasion (static barely blocks on Emerging).
 - Attacker: one LLM rewriter, K=5, DeepSeek-Chat.
-- Poisoning folded into post-vaccinate benign FPR.
+- Poisoning folded into post-synthesize benign FPR.
 - Horizon: one round after the four 5.2 skills.
 
 * Oracle fact (do not "fix" for 5.3)
@@ -28,14 +28,14 @@ same target. Counted as =target_collides=, not rewriter failures.
 
 - =~/caitlyb-branch-emerging/AgentEval/src/agent_eval/security/adaptive_attack.py=
 - =~/caitlyb-branch-emerging/AgentEval/scripts/run_adaptive_attack.py=
-- Isolated DAG seeded from =evolved_antibodies_nodes.json= (ab-044/045/049/051)
+- Isolated DAG seeded from =evolved_defense_skills_nodes.json= (ab-044/045/049/051)
 
 * Detection-stage numbers (2026-08-22, DAG-only oracle)
 
 - Blocked set: 113 DAG blocks (5 static blocks excluded).
 - target_collides 50, miss 38, budget 25.
 - Escape rate 38/113 = 33.6%. Among rewritable 38/63 = 60.3%.
-- One extra vaccinate produced ab-052, still_miss 0/38, FPR 0.4% -> 2.0%
+- One extra synthesize produced ab-052, still_miss 0/38, FPR 0.4% -> 2.0%
   on 250 benign. Same regex-wrapper mechanism as 5.2.
 - Artifact: =~/caitlyb-branch-emerging/AgentEval/results/adaptive_20260822/=
 

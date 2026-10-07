@@ -1,5 +1,5 @@
 /**
- * Tests for TUI command handlers: /antibody add/remove and /login.
+ * Tests for TUI command handlers: /defense-skill add/remove and /login.
  * The library dir is redirected per-test via CAITLYN_LIBRARY_DIR, which
  * library.ts resolves at call time (no module reload races).
  */
@@ -18,11 +18,11 @@ vi.mock("../src/config/credentials.js", async (importOriginal) => {
 });
 
 import {
-  doAntibodyAddFull,
-  doAntibodyRemove,
+  doDefenseSkillAddFull,
+  doDefenseSkillRemove,
   doLogin,
 } from "../src/commands/handlers.js";
-import { loadAntibodies } from "../src/library.js";
+import { loadDefenseSkills } from "../src/library.js";
 import { persistApiKey } from "../src/config/credentials.js";
 
 function makeHost() {
@@ -32,7 +32,7 @@ function makeHost() {
   } as never;
 }
 
-describe("antibody management handlers", () => {
+describe("defense-skill management handlers", () => {
   let tmpDir: string;
   let previousLibraryDir: string | undefined;
   let host: ReturnType<typeof makeHost>;
@@ -53,56 +53,56 @@ describe("antibody management handlers", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("creates a tier-0 antibody with config, readme and detect script", async () => {
-    await doAntibodyAddFull(host, "ab-new-test", "injection", 0);
-    const dir = path.join(tmpDir, "antibodies", "ab-new-test");
+  it("creates a tier-0 defense skill with config, readme and detect script", async () => {
+    await doDefenseSkillAddFull(host, "new-test", "injection", 0);
+    const dir = path.join(tmpDir, "skills", "new-test");
     expect(fs.existsSync(path.join(dir, "config.yaml"))).toBe(true);
     expect(fs.existsSync(path.join(dir, "README.md"))).toBe(true);
     expect(fs.existsSync(path.join(dir, "detect.ts"))).toBe(true);
 
-    const loaded = loadAntibodies();
-    expect(loaded.map((a) => a.config.id)).toContain("ab-new-test");
+    const loaded = loadDefenseSkills();
+    expect(loaded.map((a) => a.config.id)).toContain("new-test");
     expect(host.showSystemMessage).toHaveBeenCalledWith(
-      expect.stringContaining('Antibody "ab-new-test" created'),
+      expect.stringContaining('Defense skill "new-test" created'),
     );
   });
 
-  it("creates a tier-1 antibody without a detect script", async () => {
-    await doAntibodyAddFull(host, "ab-tier1", "jailbreak", 1);
-    expect(fs.existsSync(path.join(tmpDir, "antibodies", "ab-tier1", "detect.ts"))).toBe(false);
+  it("creates a tier-1 defense skill without a detect script", async () => {
+    await doDefenseSkillAddFull(host, "tier1", "jailbreak", 1);
+    expect(fs.existsSync(path.join(tmpDir, "skills", "tier1", "detect.ts"))).toBe(false);
   });
 
   it("rejects invalid ids, categories and tiers", async () => {
-    await doAntibodyAddFull(host, "Bad Id!", "injection", 0);
-    await doAntibodyAddFull(host, "ab-x", "nonsense", 0);
-    await doAntibodyAddFull(host, "ab-x", "injection", 9);
-    expect(fs.existsSync(path.join(tmpDir, "antibodies", "Bad Id!"))).toBe(false);
-    expect(fs.existsSync(path.join(tmpDir, "antibodies", "ab-x"))).toBe(false);
+    await doDefenseSkillAddFull(host, "Bad Id!", "injection", 0);
+    await doDefenseSkillAddFull(host, "x", "nonsense", 0);
+    await doDefenseSkillAddFull(host, "x", "injection", 9);
+    expect(fs.existsSync(path.join(tmpDir, "skills", "Bad Id!"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, "skills", "x"))).toBe(false);
     expect(host.showSystemMessage).toHaveBeenCalledTimes(3);
   });
 
   it("refuses to duplicate an existing id", async () => {
-    await doAntibodyAddFull(host, "ab-dup", "injection", 0);
-    await doAntibodyAddFull(host, "ab-dup", "injection", 0);
+    await doDefenseSkillAddFull(host, "dup", "injection", 0);
+    await doDefenseSkillAddFull(host, "dup", "injection", 0);
     expect(host.showSystemMessage).toHaveBeenLastCalledWith(
       expect.stringContaining("already exists"),
     );
   });
 
-  it("moves removed antibodies to .trash and hides them from the library", async () => {
-    await doAntibodyAddFull(host, "ab-gone", "injection", 0);
-    await doAntibodyRemove(host, "ab-gone");
+  it("moves removed defense skills to .trash and hides them from the library", async () => {
+    await doDefenseSkillAddFull(host, "gone", "injection", 0);
+    await doDefenseSkillRemove(host, "gone");
 
-    expect(fs.existsSync(path.join(tmpDir, "antibodies", "ab-gone"))).toBe(false);
-    const trashItems = fs.readdirSync(path.join(tmpDir, "antibodies", ".trash"));
-    expect(trashItems.some((f) => f.startsWith("ab-gone-"))).toBe(true);
-    expect(loadAntibodies().map((a) => a.config.id)).not.toContain("ab-gone");
+    expect(fs.existsSync(path.join(tmpDir, "skills", "gone"))).toBe(false);
+    const trashItems = fs.readdirSync(path.join(tmpDir, "skills", ".trash"));
+    expect(trashItems.some((f) => f.startsWith("gone-"))).toBe(true);
+    expect(loadDefenseSkills().map((a) => a.config.id)).not.toContain("gone");
   });
 
-  it("reports missing antibodies on remove", async () => {
-    await doAntibodyRemove(host, "ab-missing");
+  it("reports missing defense skills on remove", async () => {
+    await doDefenseSkillRemove(host, "missing");
     expect(host.showSystemMessage).toHaveBeenCalledWith(
-      'Antibody "ab-missing" not found.',
+      'Defense skill "missing" not found.',
     );
   });
 });

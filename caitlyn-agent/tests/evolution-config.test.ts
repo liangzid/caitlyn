@@ -115,7 +115,7 @@ describe("loadEvolutionConfig", () => {
         "[llm]",
         'model = "other"',
         "",
-        "[vaccination]",
+        "[synthesis]",
         "min_samples = 99",
         "",
       ].join("\n"),

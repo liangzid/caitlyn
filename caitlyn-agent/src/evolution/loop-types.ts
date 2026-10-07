@@ -1,14 +1,14 @@
 /**
  * CAITLYN Evolution — LLM Loop Types
  *
- * Shared types for the generate-verify-review loop (immune System 2).
+ * Shared types for the generate-verify-review loop (System 2).
  */
 
-import type { AntibodySignatureLike } from "./verifier.js";
+import type { DefenseSkillSignatureLike } from "./verifier.js";
 import type { VerificationOutcome } from "./verifier.js";
 
-/** 结构化抗原画像（L1：外部文本不整段进生成器）。 */
-export interface AntigenProfile {
+/** 结构化攻击画像（L1：外部文本不整段进生成器）。 */
+export interface AttackProfile {
   clusterId: string;
   category: string;
   /** 提炼后的特征描述（由 daemon 从触发样本生成）。 */
@@ -18,7 +18,7 @@ export interface AntigenProfile {
   sampleCount: number;
 }
 
-/** 生成器产出的候选抗体草稿。 */
+/** 生成器产出的候选防御技能草稿。 */
 export interface CandidateDraft {
   id: string;
   name: string;
@@ -26,7 +26,7 @@ export interface CandidateDraft {
   category: string;
   tier: number;
   parentIds: string[];
-  signatures: AntibodySignatureLike[];
+  signatures: DefenseSkillSignatureLike[];
   rationale: string;
 }
 
@@ -37,7 +37,7 @@ export interface ReviewSheet {
   verdict: ReviewVerdict;
   reason: string;
   suggestion: string;
-  /** 与库内已有抗体的重复关系；null 表示不重复。 */
+  /** 与库内已有防御技能的重复关系；null 表示不重复。 */
   duplicateOf: string | null;
 }
 

@@ -1,0 +1,435 @@
+{
+  "roots": [
+    "adversarial-suffix",
+    "agentflow-policy",
+    "camel-capability-flow",
+    "classifier-injection",
+    "composkill-chain-audit",
+    "datasentinel",
+    "delimiter-sandwich",
+    "entropy-anomaly",
+    "escalation-coordinator",
+    "execution-tracer",
+    "exfiltration",
+    "hardened-prompt",
+    "injection-general",
+    "instruction-hierarchy",
+    "instruction-redirection",
+    "ipiguard-tool-graph",
+    "isolategpt-runtime",
+    "jailbreak-general",
+    "obfuscation-detector",
+    "output-secrets-guard",
+    "paraphrase-sanitizer",
+    "pattern-injection",
+    "permission-gating",
+    "persona-hijack",
+    "poisoning-general",
+    "re-execution-verifier",
+    "retrieval-hijack",
+    "sara-action-authorization",
+    "secalign-model",
+    "self-examination",
+    "skillsmetric-static-audit",
+    "spotlighting",
+    "struq-structured-query",
+    "task-shield",
+    "tool-firewall",
+    "tool-minimize",
+    "tracegrant-contract",
+    "truss-skill-validation",
+    "trustshift-monitor"
+  ],
+  "trees": {
+    "adversarial-suffix": {
+      "id": "adversarial-suffix",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "agentflow-policy": {
+      "id": "agentflow-policy",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "camel-capability-flow": {
+      "id": "camel-capability-flow",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "classifier-injection": {
+      "id": "classifier-injection",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "composkill-chain-audit": {
+      "id": "composkill-chain-audit",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "datasentinel": {
+      "id": "datasentinel",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "delimiter-sandwich": {
+      "id": "delimiter-sandwich",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "entropy-anomaly": {
+      "id": "entropy-anomaly",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "escalation-coordinator": {
+      "id": "escalation-coordinator",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "execution-tracer": {
+      "id": "execution-tracer",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "exfiltration": {
+      "id": "exfiltration",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "hardened-prompt": {
+      "id": "hardened-prompt",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "injection-general": {
+      "id": "injection-general",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "instruction-hierarchy": {
+      "id": "instruction-hierarchy",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "instruction-redirection": {
+      "id": "instruction-redirection",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "ipiguard-tool-graph": {
+      "id": "ipiguard-tool-graph",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "isolategpt-runtime": {
+      "id": "isolategpt-runtime",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "jailbreak-general": {
+      "id": "jailbreak-general",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "obfuscation-detector": {
+      "id": "obfuscation-detector",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "output-secrets-guard": {
+      "id": "output-secrets-guard",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "paraphrase-sanitizer": {
+      "id": "paraphrase-sanitizer",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "pattern-injection": {
+      "id": "pattern-injection",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "permission-gating": {
+      "id": "permission-gating",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "persona-hijack": {
+      "id": "persona-hijack",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "poisoning-general": {
+      "id": "poisoning-general",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "re-execution-verifier": {
+      "id": "re-execution-verifier",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "retrieval-hijack": {
+      "id": "retrieval-hijack",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "sara-action-authorization": {
+      "id": "sara-action-authorization",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "secalign-model": {
+      "id": "secalign-model",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "self-examination": {
+      "id": "self-examination",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "skillsmetric-static-audit": {
+      "id": "skillsmetric-static-audit",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "spotlighting": {
+      "id": "spotlighting",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "struq-structured-query": {
+      "id": "struq-structured-query",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "task-shield": {
+      "id": "task-shield",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "tool-firewall": {
+      "id": "tool-firewall",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "tool-minimize": {
+      "id": "tool-minimize",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "tracegrant-contract": {
+      "id": "tracegrant-contract",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "truss-skill-validation": {
+      "id": "truss-skill-validation",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    },
+    "trustshift-monitor": {
+      "id": "trustshift-monitor",
+      "children": [],
+      "stats_aggregated": {
+        "total_scans": 0,
+        "true_positives": 0,
+        "false_positives": 0,
+        "avg_latency_us": 0
+      }
+    }
+  }
+}

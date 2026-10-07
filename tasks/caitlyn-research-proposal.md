@@ -2,7 +2,7 @@
 
 ## Research Question
 
-**Can LLM agents autonomously immunize against emerging injection or poisoning attacks?**
+**Can LLM agents autonomously synthesize against emerging injection or poisoning attacks?**
 
 ## Motivation
 
@@ -70,7 +70,7 @@ Manual layer/rule auditing             →  Autonomous defense generation
 ## Key Challenges
 
 1. **Defense generalization**: How to abstract from a concrete attack instance to a reusable defense rule without overfitting or over-blocking.
-2. **Utility-preserving immunity**: Evolved defenses must not degrade task completion rates (cf. isolated protection layers).
+2. **Utility-preserving defense**: Evolved defenses must not degrade task completion rates (cf. isolated protection layers).
 3. **Online adaptation safety**: Learning from attacks at runtime must not itself become an attack surface (adversarial poisoning of the defense mechanism).
 4. **Evaluation methodology**: No standard benchmark exists for adaptive, evolving agent defenses — constructing realistic attack evolution scenarios is an open problem.
 

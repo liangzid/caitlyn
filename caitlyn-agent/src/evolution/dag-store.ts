@@ -1,13 +1,13 @@
 /**
- * CAITLYN Evolution — Antibody DAG Store
+ * CAITLYN Evolution — Defense skill DAG Store
  *
- * Persists the antibody DAG to <evolutionDir>/nodes.json and archives
+ * Persists the defense skill DAG to <evolutionDir>/nodes.json and archives
  * retired nodes to <evolutionDir>/archive.jsonl (append-only).
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { AntibodyNode, DagScorePolicy, NodeStatus } from "./dag-types.js";
+import type { DefenseSkillNode, DagScorePolicy, NodeStatus } from "./dag-types.js";
 
 const NODES_FILE = "nodes.json";
 const ARCHIVE_FILE = "archive.jsonl";
@@ -23,8 +23,8 @@ function daysBetween(fromIso: string, now: Date): number {
   return Math.max(0, (now.getTime() - from) / DAY_MS);
 }
 
-export class AntibodyDagStore {
-  private nodes = new Map<string, AntibodyNode>();
+export class DefenseSkillDagStore {
+  private nodes = new Map<string, DefenseSkillNode>();
   private nodesPath: string;
   private archivePath: string;
   private policy: DagScorePolicy;
@@ -40,7 +40,7 @@ export class AntibodyDagStore {
     this.nodes.clear();
     try {
       const raw = fs.readFileSync(this.nodesPath, "utf-8");
-      const parsed = JSON.parse(raw) as { nodes: AntibodyNode[] };
+      const parsed = JSON.parse(raw) as { nodes: DefenseSkillNode[] };
       for (const node of parsed.nodes ?? []) {
         if (node && typeof node.id === "string") {
           this.nodes.set(node.id, node);
@@ -60,24 +60,24 @@ export class AntibodyDagStore {
     fs.renameSync(tmp, this.nodesPath);
   }
 
-  addNode(node: AntibodyNode): void {
+  addNode(node: DefenseSkillNode): void {
     if (this.nodes.has(node.id)) {
-      throw new Error(`Antibody node already exists: ${node.id}`);
+      throw new Error(`Defense skill node already exists: ${node.id}`);
     }
     this.nodes.set(node.id, { ...node });
   }
 
-  getNode(id: string): AntibodyNode | null {
+  getNode(id: string): DefenseSkillNode | null {
     return this.nodes.get(id) ?? null;
   }
 
-  listNodes(status?: NodeStatus): AntibodyNode[] {
+  listNodes(status?: NodeStatus): DefenseSkillNode[] {
     const all = [...this.nodes.values()];
     return status === undefined ? all : all.filter((n) => n.status === status);
   }
 
   /** Direct children (nodes whose parentIds include the given id). */
-  childrenOf(id: string): AntibodyNode[] {
+  childrenOf(id: string): DefenseSkillNode[] {
     return [...this.nodes.values()].filter((n) => n.parentIds.includes(id));
   }
 
@@ -99,7 +99,7 @@ export class AntibodyDagStore {
    * Derived score: positive contribution decays with inactivity, the
    * false-positive penalty never decays.
    */
-  computeScore(node: AntibodyNode, now: Date = new Date()): number {
+  computeScore(node: DefenseSkillNode, now: Date = new Date()): number {
     const reference = node.evidence.lastUsedAt ?? node.createdAt;
     const inactiveDays = daysBetween(reference, now);
     const decay = Math.max(0, 1 - inactiveDays / this.policy.scoreDecayDays);
@@ -168,7 +168,7 @@ export class AntibodyDagStore {
   }
 
   /**
-   * Demote inactive or harmful active antibodies to dormant.
+   * Demote inactive or harmful active defense skills to dormant.
    * Returns the ids demoted.
    */
   retireInactive(now: Date = new Date()): string[] {
@@ -203,14 +203,14 @@ export class AntibodyDagStore {
   }
 
   /** Read archived nodes (append-only log, oldest first). */
-  listArchived(): Array<{ archivedAt: string; node: AntibodyNode }> {
+  listArchived(): Array<{ archivedAt: string; node: DefenseSkillNode }> {
     try {
       const raw = fs.readFileSync(this.archivePath, "utf-8");
-      const out: Array<{ archivedAt: string; node: AntibodyNode }> = [];
+      const out: Array<{ archivedAt: string; node: DefenseSkillNode }> = [];
       for (const line of raw.split(/\r?\n/)) {
         if (!line.trim()) continue;
         try {
-          const entry = JSON.parse(line) as { archivedAt: string; node: AntibodyNode };
+          const entry = JSON.parse(line) as { archivedAt: string; node: DefenseSkillNode };
           out.push(entry);
         } catch {
           // Skip malformed archive lines.
@@ -238,15 +238,15 @@ export class AntibodyDagStore {
     return max === -Infinity ? -Infinity : max;
   }
 
-  private appendArchive(node: AntibodyNode, now: Date): void {
+  private appendArchive(node: DefenseSkillNode, now: Date): void {
     fs.mkdirSync(path.dirname(this.archivePath), { recursive: true });
     const entry = JSON.stringify({ archivedAt: iso(now), node });
     fs.appendFileSync(this.archivePath, `${entry}\n`, "utf-8");
   }
 
-  private requireNode(id: string): AntibodyNode {
+  private requireNode(id: string): DefenseSkillNode {
     const node = this.nodes.get(id);
-    if (!node) throw new Error(`Unknown antibody node: ${id}`);
+    if (!node) throw new Error(`Unknown defense skill node: ${id}`);
     return node;
   }
 }

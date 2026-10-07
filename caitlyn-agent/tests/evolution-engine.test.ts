@@ -9,7 +9,7 @@ import * as path from "node:path";
 import { EVOLUTION_DEFAULTS, type EvolutionConfig } from "../src/config.js";
 import type { LlmCallFn } from "../src/scanner.js";
 import { EvolutionEngine, type EvolutionRunRequest } from "../src/evolution/engine.js";
-import { AntibodyDagStore } from "../src/evolution/dag-store.js";
+import { DefenseSkillDagStore } from "../src/evolution/dag-store.js";
 import { dagPolicyFrom } from "../src/evolution/engine.js";
 import { LessonsStore } from "../src/evolution/lessons-store.js";
 import { VerificationSandbox } from "../src/evolution/verifier.js";
@@ -40,8 +40,8 @@ function recordingLlm(
 
 const CANDIDATE = JSON.stringify([
   {
-    id: "ab-engine-1",
-    name: "Engine Antibody",
+    id: "engine-1",
+    name: "Engine Defense skill",
     description: "detects trigger preamble",
     category: "injection",
     tier: 0,
@@ -92,7 +92,7 @@ describe("EvolutionEngine", () => {
     ...overrides,
   });
 
-  it("materializes accepted antibodies as active on the explicit path", async () => {
+  it("materializes accepted defense skills as active on the explicit path", async () => {
     const engine = new EvolutionEngine({
       config,
       generatorLlm: queuedLlm(CANDIDATE),
@@ -102,9 +102,9 @@ describe("EvolutionEngine", () => {
 
     expect(outcome.loop.approved).toHaveLength(1);
     expect(outcome.shadowStarted).toEqual([]);
-    const dag = new AntibodyDagStore(dir, dagPolicyFrom(config));
+    const dag = new DefenseSkillDagStore(dir, dagPolicyFrom(config));
     dag.load();
-    expect(dag.getNode("ab-engine-1")!.status).toBe("active");
+    expect(dag.getNode("engine-1")!.status).toBe("active");
   });
 
   it("starts shadow observation for unknown-path candidates", async () => {
@@ -116,10 +116,10 @@ describe("EvolutionEngine", () => {
     const outcome = await engine.run(makeRequest({ hasSamples: false, mustDetect: [] }));
 
     expect(outcome.loop.approved).toHaveLength(1);
-    expect(outcome.shadowStarted).toEqual(["ab-engine-1"]);
-    const dag = new AntibodyDagStore(dir, dagPolicyFrom(config));
+    expect(outcome.shadowStarted).toEqual(["engine-1"]);
+    const dag = new DefenseSkillDagStore(dir, dagPolicyFrom(config));
     dag.load();
-    expect(dag.getNode("ab-engine-1")!.status).toBe("shadow");
+    expect(dag.getNode("engine-1")!.status).toBe("shadow");
   });
 
   it("does nothing in record mode", async () => {
@@ -132,7 +132,7 @@ describe("EvolutionEngine", () => {
 
     expect(outcome.loop.termination).toBe("record_mode");
     expect(outcome.shadowStarted).toEqual([]);
-    const dag = new AntibodyDagStore(dir, dagPolicyFrom(config));
+    const dag = new DefenseSkillDagStore(dir, dagPolicyFrom(config));
     dag.load();
     expect(dag.listNodes()).toEqual([]);
     const lessons = new LessonsStore(dir);
@@ -146,7 +146,7 @@ describe("EvolutionEngine", () => {
       generatorLlm: queuedLlm(
         JSON.stringify([
           {
-            id: "ab-miss",
+            id: "miss",
             name: "Miss",
             description: "misses",
             category: "injection",
@@ -162,9 +162,9 @@ describe("EvolutionEngine", () => {
     const outcome = await engine.run(makeRequest());
 
     expect(outcome.loop.approved).toEqual([]);
-    const dag = new AntibodyDagStore(dir, dagPolicyFrom(config));
+    const dag = new DefenseSkillDagStore(dir, dagPolicyFrom(config));
     dag.load();
-    expect(dag.getNode("ab-miss")).toBeNull();
+    expect(dag.getNode("miss")).toBeNull();
   });
 
   it("persists lessons for rejected rounds", async () => {

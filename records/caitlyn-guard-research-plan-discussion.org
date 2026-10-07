@@ -17,7 +17,7 @@
   7. caitlyn-ux-todo.md — 移除 daemon 全部 P1 项
   8. caitlyn-design-v2.md — 标注历史文档
   9. caitlyn-design-doc.md — 标注历史文档
-- 当前状态：纯 TS，~6,450 行，226 测试，20 抗体，AgentEval 就绪
+- 当前状态：纯 TS，~6,450 行，226 测试，20 防御技能，AgentEval 就绪
 
 * Turn 3: Guard 概念讨论
 - 团长确认四种模式都需要，非常全面
@@ -27,6 +27,6 @@
 - 产出：tasks/caitlyn-guard-research-plan.md (~27KB)
 - 四种模式完整设计：MCP Proxy, FS Watcher, Agent Hooks, Process Sandbox
 - 每个模式：设计 → 攻击场景 → 指标 → baselines → 12-13 个 unit tests
-- 6 个实验 (E1-E6)，5 agents × 4 modes，含 vaccination ablation
+- 6 个实验 (E1-E6)，5 agents × 4 modes，含 synthesis ablation
 - 实现阶段：~13 周，5 个 phase
 - 成功标准：ASR 降 ≥80%，benign 完成率 ≥90%，延迟 <200ms

@@ -26,7 +26,7 @@ We evaluated three real agent environments: OpenClaw, Codex, and Hermes. For eac
 All runs used the same model backend, \texttt{deepseek/deepseek-chat}, through OpenRouter. The final comparison reports ASR on the full 200-case dataset. Lower ASR indicates stronger defense.
 
 \paragraph{System II evolution protocol.}
-We first ran CAITLYN-static on the Emerging 200 benchmark and identified seed failures. The vaccination commands were generated from the seed failures and used to produce evolved antibodies through the CAITLYN System II evolution process. We then pruned antibodies that were overly broad or could be misinterpreted by the current evaluation wrapper as plain regular expressions. This pruning step avoided inflated results caused by length-only or broad keyword matching. The final evolved configuration retained four specific pipe-to-shell and curl-related antibodies:
+We first ran CAITLYN-static on the Emerging 200 benchmark and identified seed failures. The synthesis commands were generated from the seed failures and used to produce evolved defense skills through the CAITLYN System II evolution process. We then pruned defense skills that were overly broad or could be misinterpreted by the current evaluation wrapper as plain regular expressions. This pruning step avoided inflated results caused by length-only or broad keyword matching. The final evolved configuration retained four specific pipe-to-shell and curl-related defense skills:
 
 \begin{itemize}
     \item \texttt{ab-044}
@@ -35,8 +35,8 @@ We first ran CAITLYN-static on the Emerging 200 benchmark and identified seed fa
     \item \texttt{ab-051}
 \end{itemize}
 
-The artifact folder also includes \texttt{evolved\_antibodies\_nodes.json},
-which contains only the four active antibodies used in the final evaluation.
+The artifact folder also includes \texttt{evolved\_defense_skills\_nodes.json},
+which contains only the four active defense skills used in the final evaluation.
 
 For agents whose MCP tool-output path was unreliable, the injected environment content was passed through the active defense before prompt delivery. The final CAITLYN-evolved runs recorded 200 defense events for each agent, confirming that the evolved defense was applied to every benchmark case.
 
@@ -68,7 +68,7 @@ CAITLYN-evolved & 38.5 & 39.5 & 39.5 \\
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{emerging200_real_asr_comparison_panels.pdf}
-\caption{Emerging Benchmark Agent Evaluation. The x-axis shows real agent environments. The legend shows the evaluated defenses. CAITLYN-evolved is the final System II configuration after vaccination and pruning.}
+\caption{Emerging Benchmark Agent Evaluation. The x-axis shows real agent environments. The legend shows the evaluated defenses. CAITLYN-evolved is the final System II configuration after synthesis and pruning.}
 \label{fig:emerging-benchmark-agent-evaluation}
 \end{figure}
 
@@ -85,5 +85,5 @@ The paper-ready artifacts are collected in \texttt{AgentEval/paper\_artifacts/em
     \item \texttt{emerging200\_real\_asr\_comparison\_panels.pdf}
     \item \texttt{emerging200\_real\_asr\_comparison\_panels.svg}
     \item \texttt{emerging200\_real\_asr\_comparison\_panels.png}
-    \item \texttt{evolved\_antibodies\_nodes.json}
+    \item \texttt{evolved\_defense_skills\_nodes.json}
 \end{itemize}

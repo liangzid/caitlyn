@@ -1,0 +1,13 @@
+#+title: Drop the immune metaphor
+#+date: 2026-09-24
+
+* Decision
+- antibody / antibodies → defense skill, directory =skills/=.
+- antigen / antigens → attack, directory =attacks/=.
+- Strip =ab-= and =ag-= id prefixes when the next character is a letter.
+- vaccinate → synthesize. =shm_fallback= → =revise_fallback=. =affinity_score= → =match_score=.
+- Evolved node ids such as =ab-044= stay unchanged.
+
+* Release
+- Breaking for CLI, public exports, skill ids, and on-disk library paths.
+- Version 0.4.0.

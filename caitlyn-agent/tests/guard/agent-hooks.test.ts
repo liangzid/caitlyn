@@ -6,7 +6,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 // Isolate HOME and stub recordScanFeedback so real ~/.caitlyn state and
-// antibody configs are never modified by the scanning under test.
+// defense skill configs are never modified by the scanning under test.
 const { testHomeId } = vi.hoisted(() => ({
   testHomeId: "caitlyn-ahooks-home-" + Date.now().toString(36),
 }));
@@ -82,6 +82,44 @@ describe("AgentHooksEngine", () => {
   });
 
   describe("processHook — after", () => {
+    it("removes an API key from tool output before the model reads it", async () => {
+      engine = new AgentHooksEngine(makeConfig({ privacy_enabled: true, privacy_level: "standard" }), mockBenign);
+      const secret = "sk-proj-abcdefghijklmnopqrstuvwxyz123456";
+      const d = await engine.processHook({
+        hookPoint: "after",
+        toolName: "read_file",
+        content: `OPENAI_API_KEY=${secret}`,
+        toolResult: `OPENAI_API_KEY=${secret}`,
+      });
+      expect(d.action).toBe("allow");
+      expect(d.sanitizedContent).toBeDefined();
+      expect(d.sanitizedContent).not.toContain(secret);
+      expect(d.reason).not.toContain(secret);
+    });
+
+    it("leaves secrets in place when privacy is off", async () => {
+      engine = new AgentHooksEngine(makeConfig(), mockBenign);
+      const secret = "sk-proj-abcdefghijklmnopqrstuvwxyz123456";
+      const d = await engine.processHook({
+        hookPoint: "after",
+        toolName: "read_file",
+        content: `token ${secret}`,
+        toolResult: `token ${secret}`,
+      });
+      expect(d.sanitizedContent).toBeUndefined();
+    });
+
+    it("does not perturb a labeled age at the standard privacy level", async () => {
+      engine = new AgentHooksEngine(makeConfig({ privacy_enabled: true, privacy_level: "standard" }), mockBenign);
+      const d = await engine.processHook({
+        hookPoint: "after",
+        toolName: "read_file",
+        content: "age: 40",
+        toolResult: "age: 40",
+      });
+      expect(d.sanitizedContent).toBeUndefined();
+    });
+
     it("allows benign tool results", async () => {
       engine = new AgentHooksEngine(makeConfig(), mockBenign);
       const d = await engine.processHook({ hookPoint: "after", toolName: "web_search", content: BENIGN_RESULT, toolResult: BENIGN_RESULT });

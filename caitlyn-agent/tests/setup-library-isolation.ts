@@ -1,5 +1,5 @@
 /**
- * Vitest setup: redirect the antibody/antigen library to a private copy
+ * Vitest setup: redirect the defense skill/attack library to a private copy
  * for every worker by default. Tests that need the real repository
  * library (library.test.ts) explicitly remove the env var; tests that
  * need a custom library override it in their own beforeEach.
@@ -17,7 +17,7 @@ const LOCK = `${SHARED}.lock`;
 
 // Copy the real library once into a shared location, guarded by an
 // atomic lock so parallel workers do not race each other.
-if (!fs.existsSync(path.join(SHARED, "antibodies"))) {
+if (!fs.existsSync(path.join(SHARED, "skills"))) {
   for (let i = 0; i < 200; i++) {
     try {
       fs.mkdirSync(LOCK);
@@ -27,12 +27,12 @@ if (!fs.existsSync(path.join(SHARED, "antibodies"))) {
       execSync("sleep 0.05");
     }
   }
-  if (fs.existsSync(LOCK) && !fs.existsSync(path.join(SHARED, "antibodies"))) {
+  if (fs.existsSync(LOCK) && !fs.existsSync(path.join(SHARED, "skills"))) {
     fs.mkdirSync(SHARED, { recursive: true });
-    fs.cpSync(path.join(REPO_ROOT, "antibodies"), path.join(SHARED, "antibodies"), {
+    fs.cpSync(path.join(REPO_ROOT, "skills"), path.join(SHARED, "skills"), {
       recursive: true,
     });
-    fs.cpSync(path.join(REPO_ROOT, "antigens"), path.join(SHARED, "antigens"), {
+    fs.cpSync(path.join(REPO_ROOT, "attacks"), path.join(SHARED, "attacks"), {
       recursive: true,
     });
     try {

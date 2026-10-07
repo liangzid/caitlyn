@@ -13,11 +13,11 @@ import {
 } from "@earendil-works/pi-tui";
 import { getDashboard, loadHistory } from "../history.js";
 import {
-  loadAntibodies,
-  loadAntigens,
-  loadAntibodyIndex,
-  buildAntibodyIndex,
-  saveAntibodyIndex,
+  loadDefenseSkills,
+  loadAttacks,
+  loadDefenseSkillIndex,
+  buildDefenseSkillIndex,
+  saveDefenseSkillIndex,
 } from "../library.js";
 import { getProviders, getModels } from "../llm.js";
 import { getContextWindow, getModelDisplay } from "../config/models.js";
@@ -118,7 +118,7 @@ export async function buildGuardOverlay(): Promise<Component> {
 
 /**
  * Dashboard — defense telemetry in KPI cards, tier-split gauges,
- * performance row, and a top-antibodies ranking.
+ * performance row, and a top-skills ranking.
  */
 export function buildDashboardOverlay(): Component {
   const stats = getDashboard();
@@ -163,12 +163,12 @@ export function buildDashboardOverlay(): Component {
       `   ${fg(PAL.faint)}total tokens${C.reset} ${fg(PAL.ghost)}${stats.total_tokens.toLocaleString()}${C.reset}`,
   );
 
-  // ── Top antibodies ─────────────────────────────────────────
-  if (stats.top_antibodies.length > 0) {
+  // ── Top defense skills ─────────────────────────────────────────
+  if (stats.top_defense_skills.length > 0) {
     lines.push("");
-    lines.push(`${gradText("TOP ANTIBODIES", PAL.cyan, PAL.violet, true)}`);
-    const maxHits = stats.top_antibodies[0]?.hits ?? 1;
-    for (const a of stats.top_antibodies.slice(0, 5)) {
+    lines.push(`${gradText("TOP DEFENSE SKILLS", PAL.cyan, PAL.violet, true)}`);
+    const maxHits = stats.top_defense_skills[0]?.hits ?? 1;
+    for (const a of stats.top_defense_skills.slice(0, 5)) {
       lines.push(
         ` ${fg(PAL.violet)}◆${C.reset} ${fg(PAL.text)}${a.id}${C.reset}  ${bar(a.hits / maxHits, 10, PAL.violet)} ${fg(PAL.ghost)}${a.hits}${C.reset} ${fg(PAL.faint)}hits${C.reset}`,
       );
@@ -184,31 +184,31 @@ export function buildDashboardOverlay(): Component {
 }
 
 /**
- * Status — immune library snapshot: antibody forest with category chips
- * and tier badges, plus antigen counts by category.
+ * Status — defense library snapshot: defense skill forest with category chips
+ * and tier badges, plus attack counts by category.
  */
 export function buildStatusOverlay(): Component {
-  const antibodies = loadAntibodies();
-  const antigens = loadAntigens();
-  let index = loadAntibodyIndex() ?? buildAntibodyIndex(antibodies);
+  const defenseSkills = loadDefenseSkills();
+  const attacks = loadAttacks();
+  let index = loadDefenseSkillIndex() ?? buildDefenseSkillIndex(defenseSkills);
 
   // If the persisted index is stale (roots no longer resolve), rebuild it
   // from the real forest and persist the healed index.
-  if (!index.roots.some((rid) => antibodies.some((a) => a.config.id === rid))) {
-    index = buildAntibodyIndex(antibodies);
-    saveAntibodyIndex(index);
+  if (!index.roots.some((rid) => defenseSkills.some((a) => a.config.id === rid))) {
+    index = buildDefenseSkillIndex(defenseSkills);
+    saveDefenseSkillIndex(index);
   }
   const roots = index.roots;
 
   const lines: string[] = [];
   lines.push(
-    `${badge(`${antibodies.length} ANTIBODIES`, PAL.cyan, PAL.cyanBg)}  ${badge(`${antigens.length} ANTIGENS`, PAL.violet, PAL.violetBg)}`,
+    `${badge(`${defenseSkills.length} DEFENSE SKILLS`, PAL.cyan, PAL.cyanBg)}  ${badge(`${attacks.length} ATTACKS`, PAL.violet, PAL.violetBg)}`,
     "",
-    `${gradText("ANTIBODY FOREST", PAL.cyan, PAL.violet, true)}`,
+    `${gradText("DEFENSE SKILL FOREST", PAL.cyan, PAL.violet, true)}`,
   );
 
   for (const rid of roots) {
-    const ab = antibodies.find((a) => a.config.id === rid);
+    const ab = defenseSkills.find((a) => a.config.id === rid);
     if (ab) {
       const tp = ab.config.stats?.true_positives ?? 0;
       const fp = ab.config.stats?.false_positives ?? 0;
@@ -231,9 +231,9 @@ export function buildStatusOverlay(): Component {
   }
 
   lines.push("");
-  lines.push(`${gradText("ANTIGENS BY CATEGORY", PAL.cyan, PAL.violet, true)}`);
+  lines.push(`${gradText("ATTACKS BY CATEGORY", PAL.cyan, PAL.violet, true)}`);
   const byCat: Record<string, number> = {};
-  for (const ag of antigens) byCat[ag.config.category] = (byCat[ag.config.category] || 0) + 1;
+  for (const ag of attacks) byCat[ag.config.category] = (byCat[ag.config.category] || 0) + 1;
   if (Object.keys(byCat).length === 0) {
     lines.push(`  ${fg(PAL.faint)}(none loaded)${C.reset}`);
   }

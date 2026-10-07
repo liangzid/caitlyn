@@ -5,7 +5,7 @@
 ## 1. Overview
 
 CAITLYN Guard is the deployment/integration layer that places the existing CAITLYN
-evolution engine (scanner + vaccination) between an LLM agent and untrusted external
+evolution engine (scanner + synthesis) between an LLM agent and untrusted external
 content. It provides four complementary defense modes, each targeting a different
 point in the agent's I/O surface.
 
@@ -549,7 +549,7 @@ ProcessSandbox
 | RQ2 | Does CAITLYN Guard preserve benign task completion rate? | All |
 | RQ3 | What is the latency overhead of each mode? | All |
 | RQ4 | How do the four modes complement each other? (defense-in-depth) | Combined |
-| RQ5 | Does vaccination reduce scan cost over repeated attacks? | MCP Proxy + Agent Hooks |
+| RQ5 | Does synthesis reduce scan cost over repeated attacks? | MCP Proxy + Agent Hooks |
 
 ### 6.2 Experiment Matrix
 
@@ -562,7 +562,7 @@ For each mode, run against 5 agents (OpenClaw, Claude Code, Codex CLI, OpenCode,
 | **E3: Agent Hooks alone** | 300 beforeToolCall + 300 afterToolCall attacks | ASR per hook, FPR, hook latency | No hooks, Static tool blocklist |
 | **E4: Process Sandbox alone** | 200 syscall-level attacks | ASR, block rate, overhead | No sandbox, Docker, seccomp-bpf only |
 | **E5: Full stack (all four)** | Combined attacks exercising multiple vectors | ASR, FPR, end-to-end latency | Best single-mode baseline |
-| **E6: Vaccination ablation** | Repeat attack patterns 10×, measure cost before/after vaccination | Latency, token usage, antibody count | MCP Proxy w/o vaccination |
+| **E6: Synthesis ablation** | Repeat attack patterns 10×, measure cost before/after synthesis | Latency, token usage, defense skill count | MCP Proxy w/o synthesis |
 
 ### 6.3 Evaluation Harness
 
@@ -588,7 +588,7 @@ AgentEval/
 │   ├── e3_agent_hooks.py
 │   ├── e4_sandbox.py
 │   ├── e5_full_stack.py
-│   └── e6_vaccination.py
+│   └── e6_synthesis.py
 └── tests/
     └── guard/                    ← NEW
         ├── test_mcp_proxy.py
@@ -625,7 +625,7 @@ For each mode, construct attack cases by adapting existing valset payloads
 | **Phase 5b: FS Watcher** | 2 weeks | inotify watcher + text extractors + 13 unit tests + E2 experiment |
 | **Phase 5c: Agent Hooks** | 3 weeks | Hook interface + 5 framework adapters + 10 unit tests + E3 experiment |
 | **Phase 5d: Process Sandbox** | 4 weeks | ptrace supervisor + seccomp policy + 12 unit tests + E4 experiment |
-| **Phase 5e: Full Stack** | 2 weeks | Mode coordination + E5 experiment + E6 vaccination ablation |
+| **Phase 5e: Full Stack** | 2 weeks | Mode coordination + E5 experiment + E6 synthesis ablation |
 
 Total: ~13 weeks for complete caitlyn-guard.
 
@@ -667,5 +667,5 @@ For the paper:
 1. **CAITLYN Guard (full stack) reduces ASR by ≥80%** compared to no defense, across all 5 agents
 2. **Benign task completion rate remains ≥90%** of no-defense baseline
 3. **Median latency overhead <200ms** for MCP Proxy mode (the most latency-sensitive)
-4. **Vaccination reduces per-scan cost by ≥50%** after 10 repeated encounters with the same attack pattern
+4. **Synthesis reduces per-scan cost by ≥50%** after 10 repeated encounters with the same attack pattern
 5. **At least one mode is deployable without agent modification** (MCP Proxy or FS Watcher)

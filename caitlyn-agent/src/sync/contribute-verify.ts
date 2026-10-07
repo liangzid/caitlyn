@@ -2,18 +2,18 @@
  * CAITLYN — Local verification before packing a contribution.
  *
  * Defenses: hard gate (schema already loaded + ReDoS + regex compile).
- * Antigens: soft warnings only.
+ * Attacks: soft warnings only.
  */
 
 import { isDangerousRegex, VerificationSandbox } from "../evolution/verifier.js";
-import type { AntibodyEntry, AntigenEntry } from "../schema.js";
+import type { DefenseSkillEntry, AttackEntry } from "../schema.js";
 
 export interface DefenseVerifyResult {
   ok: boolean;
   errors: string[];
 }
 
-export interface AntigenVerifyResult {
+export interface AttackVerifyResult {
   warnings: string[];
 }
 
@@ -22,7 +22,7 @@ export interface AntigenVerifyResult {
  * Rejects dangerous or uncompilable regex signatures; requires an implementation artifact.
  */
 export async function verifyDefenseForContribute(
-  entry: AntibodyEntry,
+  entry: DefenseSkillEntry,
   regexTimeoutMs = 200,
 ): Promise<DefenseVerifyResult> {
   const errors: string[] = [];
@@ -79,8 +79,8 @@ export async function verifyDefenseForContribute(
   return { ok: errors.length === 0, errors };
 }
 
-/** Soft-warn antigens; never blocks packing by itself. */
-export function verifyAntigenForContribute(entry: AntigenEntry): AntigenVerifyResult {
+/** Soft-warn attacks; never blocks packing by itself. */
+export function verifyAttackForContribute(entry: AttackEntry): AttackVerifyResult {
   const warnings: string[] = [];
   if (!entry.payload.trim()) {
     warnings.push("empty payload.txt");

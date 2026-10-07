@@ -91,7 +91,7 @@ hooks, plugins, or filesystem observation.
 System II treats a missed attack as a counterexample rather than a permanent
 failure. The synthesis loop:
 
-1. extracts a structured antigen profile without placing raw trigger text in
+1. extracts a structured attack profile without placing raw trigger text in
    the generator prompt
 2. selects relevant library context and prior lessons
 3. asks a generator model for candidate defense skills
@@ -330,10 +330,10 @@ Supported adapters currently include:
 | `./caitlyn uninstall <agent>` | Remove an integration and restore its backup |
 | `./caitlyn daemon start\|stop\|status` | Manage the local scanning daemon |
 | `./caitlyn watch [--add <dir>]` | Add filesystem observation paths |
-| `./caitlyn vaccinate <pattern>` | Submit an explicit System II trigger |
-| `./caitlyn vaccinate --status` | Inspect the evolution lineage |
-| `./caitlyn vaccinate --approve <id>` | Approve a shadow candidate |
-| `./caitlyn vaccinate --redteam [category]` | Evaluate Tier 0 against the attack corpus |
+| `./caitlyn synthesize <pattern>` | Submit an explicit System II trigger |
+| `./caitlyn synthesize --status` | Inspect the evolution lineage |
+| `./caitlyn synthesize --approve <id>` | Approve a shadow candidate |
+| `./caitlyn synthesize --redteam [category]` | Evaluate Tier 0 against the attack corpus |
 | `./caitlyn providers` | List bundled providers and models |
 | `./caitlyn update --check` | Check release metadata |
 | `./caitlyn contribute` | Package a library contribution for review |
@@ -364,7 +364,7 @@ See [`config.toml`](config.toml) for the complete configuration and comments.
 Every defense is a portable directory:
 
 ```text
-antibodies/<skill-id>/
+skills/<skill-id>/
 ├── README.md
 ├── config.yaml
 ├── detect.ts
@@ -396,7 +396,7 @@ have not yet been validated in the CAITLYN evaluation pipeline.
 Attack entries use a parallel structure:
 
 ```text
-antigens/<attack-id>/
+attacks/<attack-id>/
 ├── README.md
 ├── config.yaml
 └── payload.txt
@@ -465,8 +465,8 @@ continuous integration suite does not make paid model calls.
 ```text
 caitlyn/
 ├── caitlyn-agent/       TypeScript CLI, TUI, daemon, guards, and synthesis
-├── antibodies/          Versioned defense-skill library
-├── antigens/            Versioned attack and counterexample library
+├── skills/          Versioned defense-skill library
+├── attacks/            Versioned attack and counterexample library
 ├── library/             Incoming contribution bundles and sync state
 ├── knowledge_base/      Curated payloads, annotations, and source material
 ├── AgentEval/           Python benchmark and experiment framework

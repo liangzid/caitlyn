@@ -11,8 +11,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../src/scanner.js", () => ({ scan: mocks.scan }));
 vi.mock("../src/library.js", () => ({
-  loadAntibodies: () => [],
-  loadAntigens: () => [],
+  loadDefenseSkills: () => [],
+  loadAttacks: () => [],
 }));
 vi.mock("../src/config.js", () => ({ loadScanningConfig: mocks.loadScanningConfig }));
 
@@ -42,7 +42,7 @@ describe("hybridScan persisted scanning configuration", () => {
       skipTier1: false,
       tier0TimeoutMs: 750,
       policy: "off",
-      fastDetectorIds: ["ab-one"],
+      fastDetectorIds: ["one"],
       weakSignalThreshold: 0.7,
       sourceTrust: "low",
       highRisk: true,
@@ -62,7 +62,7 @@ describe("hybridScan persisted scanning configuration", () => {
       skipTier1: false,
       tier0TimeoutMs: 750,
       escalationPolicy: "off",
-      fastDetectorIds: ["ab-one"],
+      fastDetectorIds: ["one"],
       weakSignalThreshold: 0.7,
       sourceTrust: "low",
       highRisk: true,

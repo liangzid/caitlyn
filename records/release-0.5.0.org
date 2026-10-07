@@ -1,0 +1,17 @@
+#+title: CAITLYN 0.5.0 Release
+#+date: 2026-10-07
+
+* Scope
+- Local privacy protection for tool output and tool arguments.
+- Default is off. =caitlyn setup= asks whether to enable it and which level to use.
+- =standard= masks credentials and format-dependent identifiers.
+- =strict= also perturbs labeled ages and money amounts. Those numbers are not restored.
+- Hermes =pre_tool_call= treats a hook block as a block. Exit code 1 no longer becomes an allow.
+
+* Release boundary
+- Version: 0.5.0.
+- New behavior is opt-in. Existing installs stay unmasked until setup enables privacy.
+
+* Published artifacts
+- Git tag: v0.5.0.
+- GitHub Release: https://github.com/liangzid/caitlyn/releases/tag/v0.5.0

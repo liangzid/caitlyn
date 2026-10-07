@@ -66,7 +66,7 @@ def test_empty_node_becomes_dormant() -> None:
     """A node with only over-broad signatures is deactivated, not deleted."""
     nodes = [
         {
-            "id": "ab-test-001",
+            "id": "test-001",
             "status": "active",
             "signatures": [
                 {"pattern": "policy", "type": "exact", "label": "policy_token"},

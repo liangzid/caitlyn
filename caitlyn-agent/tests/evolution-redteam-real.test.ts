@@ -3,13 +3,13 @@
  * samples through the actual Tier 0 detector stack.
  */
 import { describe, it, expect } from "vitest";
-import { loadAntibodies } from "../src/library.js";
+import { loadDefenseSkills } from "../src/library.js";
 import { loadAttackSamples, runRedTeam } from "../src/evolution/redteam.js";
 
 describe("red-team drill (real stack)", () => {
   it("runs a small real sample set through real Tier 0 detectors", async () => {
     const samples = loadAttackSamples().slice(0, 5);
-    const report = await runRedTeam(samples, loadAntibodies());
+    const report = await runRedTeam(samples, loadDefenseSkills());
 
     expect(report.total).toBe(5);
     expect(report.detected).toBeGreaterThanOrEqual(0);

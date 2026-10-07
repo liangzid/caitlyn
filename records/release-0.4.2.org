@@ -1,0 +1,12 @@
+#+title: CAITLYN 0.4.2 Release
+#+date: 2026-09-24
+
+* Scope
+- The package smoke test counted =defenseSkills/= instead of the shipped =skills/= directory, so the npm artifact looked empty.
+- Local =npm run test:package= passes.
+
+* Release boundary
+- Version: 0.4.2.
+- v0.4.0 and v0.4.1 were tagged but did not publish.
+- Git tag: v0.4.2.
+- GitHub Release: https://github.com/liangzid/caitlyn/releases/tag/v0.4.2

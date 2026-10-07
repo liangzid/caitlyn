@@ -37,7 +37,7 @@ On agent_end: remove Loader, finalize, enable input
 
 ** Commands Implemented
 /scan, /status, /dashboard, /history
-/antibody list|add|remove, /antigen <id>, /vaccinate
+/defense-skill list|add|remove, /attack <id>, /synthesize
 /new, /resume, /session, /name, /export, /compact, /tree, /fork, /clone, /delete
 /model, /thinking, /login, /settings
 /help, /quit, /clear

@@ -19,7 +19,7 @@
   shadow -> DAG 谱系/退役, 与 intro 的 CEGIS 叙事基本吻合。
 - 技能数三处不一致: intro 写 three foundational defense skills,
   abstract 写 3 root defense entries, 仓库 24 个 active roots
-  (index.json) + 6 个 attack entries (antigens/)。
+  (index.json) + 6 个 attack entries (attacks/)。
 - Tier 语义冲突: 仓库 config tier=0/1/2 是检测器成本档位,
   intro 的 Tier 2 = System II synthesizer。
 - 实际工程设施: localhost HTTP daemon (scan/watch/status),
@@ -38,7 +38,7 @@
 
 1. 文件结构采用方案 A: 合并为 sections/methodology.tex,
    main.tex 的三个 \input 换成一个。旧文件保留在 git 历史。
-2. 词汇统一为 skill / attack entry, 全篇弃用 antibody/antigen。
+2. 词汇统一为 skill / attack entry, 全篇弃用 defense skill/attack。
 3. Tier 0/1 构成 System I 在线扫描, Tier 2 承载 System II
    (后台合成回路 + 行为监控类 non_detector 技能)。
 
@@ -79,7 +79,7 @@
 - 确定性验证器: must-detect 全部触发样本 + FP 不超过上限 +
   ReDoS 静态拒收/子进程超时。
 - 独立评审 accept/revise/reject, revise 进入下一轮定向微调
-  (SHM fallback 作为多样性机制, 不再称 GA)。
+  (revise fallback 作为多样性机制, 不再称 GA)。
 - 谱系: parentIds 构成的 DAG, generation/status 可追溯。
 - shadow 上线 + 退役经济性。
 - 图: 技能谱系 DAG (替代旧 evolution tree 图)。
@@ -120,7 +120,7 @@
    属 sub-millisecond, methodology 现用 sub-millisecond 保真,
    待团长决定是否回改 intro 或接受。
 2. abstract/conclusion/discussion/related-work/evaluation 仍是旧口径
-   (two-tier / GA crossover / antibody 词汇), 待统一。
+   (two-tier / GA crossover / defense skill 词汇), 待统一。
 3. 旧三文件 (system-design/initial-library/evolution-tree) 已不在
    编译路径, 留盘待删。
 4. paper_zeri 远端已迁移至 paper_caitlyn, 建议 git remote set-url。

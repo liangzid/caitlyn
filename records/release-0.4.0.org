@@ -1,0 +1,17 @@
+#+title: CAITLYN 0.4.0 Release
+#+date: 2026-09-24
+
+* Scope
+- Remove the immune metaphor from the live project.
+- Defense skills live in =skills/=. Attacks live in =attacks/=.
+- Skill and attack ids no longer use =ab-= or =ag-= prefixes.
+- =caitlyn synthesize= replaces =caitlyn vaccinate=.
+- Evolved node ids such as =ab-044= are unchanged.
+
+* Release boundary
+- Version: 0.4.0.
+- Breaking for the CLI, package exports, skill ids, and on-disk library paths.
+
+* Published artifacts
+- Git tag: v0.4.0.
+- GitHub Release: https://github.com/liangzid/caitlyn/releases/tag/v0.4.0

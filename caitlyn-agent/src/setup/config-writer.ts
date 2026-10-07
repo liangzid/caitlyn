@@ -73,6 +73,8 @@ function renderGuardSection(config: GuardRuntimeConfig): string {
     `on_error = ${tomlString(config.onError)}`,
     `suspicious_action = ${tomlString(config.suspiciousAction)}`,
     `malicious_action = ${tomlString(config.maliciousAction)}`,
+    `privacy_enabled = ${config.privacyEnabled}`,
+    `privacy_level = ${tomlString(config.privacyLevel)}`,
   ].join("\n");
 }
 

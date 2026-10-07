@@ -7,11 +7,16 @@
  * scan (regex + precompiled .mjs scripts), writes a JSON decision
  * to stdout.
  *
- * Protocol:
+ * Plugin protocol (no host argument):
  *   stdin  → { "tool": string, "args"?: object, "content"?: string }
  *   stdout → { "action": "allow" | "block" | "flag", "reason": string }
  *   exit 0 → allow/flag
  *   exit 1 → block
+ *
+ * Claude Code and Codex (`caitlyn-hook claude|codex`):
+ *   stdin is the host event (`tool_name`, `tool_input`, `hook_event_name`).
+ *   A block prints PreToolUse `permissionDecision: deny` and exits 0.
+ *   That reason is what the host shows the model. Allow prints nothing.
  *
  * Before hooks block malicious input; post hooks (PostToolUse) can only
  * flag malicious tool output — the tool has already run.
@@ -44,6 +49,10 @@ interface HookInput {
 interface HookOutput {
   action: "allow" | "block" | "flag";
   reason: string;
+  /** Tool output the model should read, with secrets removed. */
+  sanitizedContent?: string;
+  /** Tool arguments with local surrogates restored. */
+  restoredContent?: string;
 }
 
 /** Post hooks flag malicious output; they cannot block a finished tool. */
@@ -56,12 +65,22 @@ const POST_VERDICT_POLICY: VerdictPolicy = {
 export interface HookDecision {
   output: HookOutput;
   exitCode: number;
+  /** True when the event is a post-tool hook. */
+  post?: boolean;
+}
+
+/** Hosts whose command-hook stdout is a permission decision, not the plugin JSON. */
+export type CommandHookHost = "plugin" | "claude" | "codex";
+
+export interface RenderedHookResponse {
+  stdout: string;
+  exitCode: number;
 }
 
 // ── Main ────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
-  // Read stdin
+  const invocation = parseHookArgv(process.argv.slice(2));
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -69,19 +88,147 @@ async function main(): Promise<void> {
 
   const raw = Buffer.concat(chunks).toString("utf-8").trim();
   if (!raw) {
-    respond({ action: "allow", reason: "empty input — allowing" }, 0);
+    emit(invocation.host, { output: { action: "allow", reason: "empty input — allowing" }, exitCode: 0 });
   }
 
-  let input: HookInput;
+  let parsed: unknown;
   try {
-    input = JSON.parse(raw);
+    parsed = JSON.parse(raw);
   } catch {
-    respond({ action: "allow", reason: "invalid JSON input — allowing" }, 0);
+    emit(invocation.host, { output: { action: "allow", reason: "invalid JSON input — allowing" }, exitCode: 0 });
   }
 
-  // Build scan content from hook input
-  const decision = await decideHook(input!);
-  respond(decision.output, decision.exitCode);
+  const input = normalizeHookInput(parsed, invocation.post);
+  const decision = await decideHook(input);
+  emit(invocation.host, decision);
+}
+
+/**
+ * `caitlyn-hook claude --post` selects the host protocol.
+ * KEYPOINT-REVIEW: unknown arguments stay on the plugin JSON protocol.
+ */
+export function parseHookArgv(argv: string[]): { host: CommandHookHost; post: boolean } {
+  const host: CommandHookHost = argv.includes("codex")
+    ? "codex"
+    : argv.includes("claude")
+      ? "claude"
+      : "plugin";
+  return { host, post: argv.includes("--post") };
+}
+
+/**
+ * Map a plugin payload or a Claude/Codex hook event onto HookInput.
+ * Host events carry `tool_name` and `tool_input` rather than `tool` and `content`.
+ */
+export function normalizeHookInput(raw: unknown, postFlag: boolean): HookInput {
+  const record = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+  const eventName = typeof record.hook_event_name === "string" ? record.hook_event_name : "";
+  const post = postFlag || record.post === true || eventName === "PostToolUse";
+  const tool = firstString(record.tool, record.tool_name) || "unknown";
+  if (typeof record.content === "string") {
+    return { tool, content: record.content, args: record.args, post };
+  }
+  const payload = post
+    ? record.tool_response ?? record.tool_input ?? record.args
+    : record.tool_input ?? record.args;
+  const serialized = payload === undefined
+    ? ""
+    : typeof payload === "string"
+      ? payload
+      : JSON.stringify(payload);
+  return { tool, content: serialized, args: record.args ?? record.tool_input, post };
+}
+
+/**
+ * Plugin hosts keep `{action, reason}` and exit 1 on block.
+ * Claude Code and Codex show `permissionDecisionReason` to the model only
+ * when the decision is deny, and they ignore that JSON if the process exits 2.
+ * KEYPOINT-REVIEW: allow and flag therefore write no stdout.
+ */
+export function renderHostHookResponse(
+  host: CommandHookHost,
+  decision: HookDecision,
+): RenderedHookResponse {
+  if (host === "plugin") {
+    return {
+      stdout: JSON.stringify(decision.output) + "\n",
+      exitCode: decision.exitCode,
+    };
+  }
+  if (decision.output.action !== "block") {
+    const rewritten = renderPrivacyRewrite(decision);
+    if (rewritten) return { stdout: rewritten, exitCode: 0 };
+    return { stdout: "", exitCode: 0 };
+  }
+  return {
+    stdout: JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+        permissionDecisionReason: `[CAITLYN] ${decision.output.reason}`,
+      },
+    }) + "\n",
+    exitCode: 0,
+  };
+}
+
+/**
+ * Ask Claude Code or Codex to substitute sanitized tool output or restored
+ * tool input. Allow and flag stay silent when nothing was rewritten.
+ *
+ * KEYPOINT-REVIEW: PreToolUse `updatedInput` is applied only together with
+ * `permissionDecision: "allow"`, and that approves this one call. Codex
+ * receives the same JSON. If a Codex build ignores `updatedToolOutput`,
+ * post-tool secrets are not rewritten on that host.
+ */
+function renderPrivacyRewrite(decision: HookDecision): string | null {
+  if (decision.post && decision.output.sanitizedContent) {
+    return JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PostToolUse",
+        updatedToolOutput: decision.output.sanitizedContent,
+      },
+    }) + "\n";
+  }
+  if (!decision.post && decision.output.restoredContent) {
+    const updatedInput = parseToolInput(decision.output.restoredContent);
+    if (updatedInput === undefined) return null;
+    return JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "allow",
+        updatedInput,
+      },
+    }) + "\n";
+  }
+  return null;
+}
+
+/**
+ * Parse restored tool arguments. A non-object payload is refused so a
+ * partial rewrite cannot drop fields the host still needs.
+ */
+function parseToolInput(text: string): unknown | undefined {
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+  } catch {
+    // Not JSON. The host keeps the original tool input.
+  }
+  return undefined;
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.length > 0) return value;
+  }
+  return undefined;
+}
+
+function emit(host: CommandHookHost, decision: HookDecision): never {
+  const rendered = renderHostHookResponse(host, decision);
+  process.stdout.write(rendered.stdout);
+  process.exit(rendered.exitCode);
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -122,6 +269,8 @@ export async function decideHook(input: HookInput): Promise<HookDecision> {
       scan_timeout_ms: runtime.hookTimeoutMs,
       hook_timeout_ms: runtime.hookTimeoutMs,
       on_error: runtime.onError,
+      privacy_enabled: runtime.privacyEnabled,
+      privacy_level: runtime.privacyLevel,
       verdict_policy: verdictPolicy,
     } as AgentHooksConfig,
     createHookLlmCall(scanning.skipTier1),
@@ -133,9 +282,13 @@ export async function decideHook(input: HookInput): Promise<HookDecision> {
     toolArgs: input.args as Record<string, unknown> | undefined,
     toolResult: input.content,
   });
+  const output: HookOutput = { action: decision.action, reason: decision.reason };
+  if (decision.sanitizedContent) output.sanitizedContent = decision.sanitizedContent;
+  if (decision.restoredContent) output.restoredContent = decision.restoredContent;
   return {
-    output: { action: decision.action, reason: decision.reason },
+    output,
     exitCode: decision.action === "block" ? 1 : 0,
+    post: input.post === true,
   };
 }
 
@@ -166,15 +319,11 @@ function buildContent(input: HookInput): string {
   return parts.join(" ");
 }
 
-function respond(output: HookOutput, exitCode: number): never {
-  process.stdout.write(JSON.stringify(output) + "\n");
-  process.exit(exitCode);
-}
-
 main().catch((err) => {
-  // Fail-open: any crash → allow
-  respond(
-    { action: "allow", reason: `hook error: ${String(err)}` },
-    0,
-  );
+  // Fail-open: a crash allows the tool call. Host adapters stay silent.
+  const invocation = parseHookArgv(process.argv.slice(2));
+  emit(invocation.host, {
+    output: { action: "allow", reason: `hook error: ${String(err)}` },
+    exitCode: 0,
+  });
 });

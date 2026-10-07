@@ -3,7 +3,7 @@
  *
  * Staged scanning:
  *   Tier 0: scripts + in-process signature engine (fast, no LLM)
- *   Tier 1: merged / merged-pair (paper default) or per-antibody ensemble
+ *   Tier 1: merged / merged-pair (paper default) or per-defense-skill ensemble
  *
  * HTTP ablation modes (parseScanMode):
  *   t0-only — skip Tier 1
@@ -17,8 +17,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
-  AntibodyEntry,
-  AntigenEntry,
+  DefenseSkillEntry,
+  AttackEntry,
   ScanResult,
   ScriptResult,
   Verdict,
@@ -40,7 +40,7 @@ import {
 interface RunScriptOptions {
   content: string;
   scriptPath: string;
-  antibodyId: string;
+  defenseSkillId: string;
   timeoutMs: number;
 }
 
@@ -78,7 +78,7 @@ function runScript(opts: RunScriptOptions): Promise<ScriptResult> {
 
   child.on("error", (err) => {
     settle({
-      antibody_id: opts.antibodyId,
+      defense_skill_id: opts.defenseSkillId,
       verdict: "benign",
       confidence: 0,
       reason: null,
@@ -100,7 +100,7 @@ function runScript(opts: RunScriptOptions): Promise<ScriptResult> {
 
     if (killed) {
       settle({
-        antibody_id: opts.antibodyId,
+        defense_skill_id: opts.defenseSkillId,
         verdict: "benign",
         confidence: 0,
         reason: null,
@@ -112,7 +112,7 @@ function runScript(opts: RunScriptOptions): Promise<ScriptResult> {
 
     if (code !== 0) {
       settle({
-        antibody_id: opts.antibodyId,
+        defense_skill_id: opts.defenseSkillId,
         verdict: "benign",
         confidence: 0,
         reason: null,
@@ -126,7 +126,7 @@ function runScript(opts: RunScriptOptions): Promise<ScriptResult> {
       const parsed = JSON.parse(stdout.trim());
       const verdict = parsed.verdict;
       settle({
-        antibody_id: opts.antibodyId,
+        defense_skill_id: opts.defenseSkillId,
         verdict: verdict === "malicious" ? "malicious" : verdict === "suspicious" ? "suspicious" : "benign",
         confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0,
         reason: parsed.reason ?? null,
@@ -135,7 +135,7 @@ function runScript(opts: RunScriptOptions): Promise<ScriptResult> {
       });
     } catch {
       settle({
-        antibody_id: opts.antibodyId,
+        defense_skill_id: opts.defenseSkillId,
         verdict: "benign",
         confidence: 0,
         reason: null,
@@ -150,7 +150,7 @@ function runScript(opts: RunScriptOptions): Promise<ScriptResult> {
     stdin.on("error", (err) => {
       if (!settled) {
         settle({
-          antibody_id: opts.antibodyId,
+          defense_skill_id: opts.defenseSkillId,
           verdict: "benign",
           confidence: 0,
           reason: null,
@@ -184,12 +184,12 @@ interface PendingRequest {
 }
 
 function workerFailure(
-  antibodyId: string,
+  defenseSkillId: string,
   error: string,
   latencyUs: number,
 ): ScriptResult {
   return {
-    antibody_id: antibodyId,
+    defense_skill_id: defenseSkillId,
     verdict: "benign",
     confidence: 0,
     reason: null,
@@ -273,7 +273,7 @@ class Tier0Pool {
             this.pending.delete(msg.reqId);
             req.resolve(
               msg.ok && msg.result
-                ? { ...msg.result, antibody_id: req.id, latency_us: msg.result.latency_us ?? 0 }
+                ? { ...msg.result, defense_skill_id: req.id, latency_us: msg.result.latency_us ?? 0 }
                 : workerFailure(req.id, msg.error ?? "worker error", 0),
             );
           }
@@ -324,7 +324,7 @@ class Tier0Pool {
       return runScript({
         content,
         scriptPath: entry.scriptPath,
-        antibodyId: entry.id,
+        defenseSkillId: entry.id,
         timeoutMs,
       });
     }
@@ -350,7 +350,7 @@ class Tier0Pool {
         return runScript({
           content,
           scriptPath: entry.scriptPath,
-          antibodyId: entry.id,
+          defenseSkillId: entry.id,
           timeoutMs,
         });
       }
@@ -383,25 +383,25 @@ export function shutdownTier0Pool(): void {
 }
 
 export async function runTier0(
-  antibodies: AntibodyEntry[],
+  defenseSkills: DefenseSkillEntry[],
   content: string,
   timeoutMs: number = 500,
 ): Promise<{ results: ScriptResult[]; malicious: boolean }> {
-  const tier0Antibodies = antibodies.filter(
+  const tier0DefenseSkills = defenseSkills.filter(
     (ab) =>
       ab.config.implementation_status === "active" &&
       ab.config.tier === 0 &&
       ab.config.role === "detector",
   );
 
-  if (tier0Antibodies.length === 0) {
+  if (tier0DefenseSkills.length === 0) {
     return { results: [], malicious: false };
   }
 
-  const scriptEntries = tier0Antibodies
+  const scriptEntries = tier0DefenseSkills
     .filter((ab) => ab.scriptPath)
     .map((ab) => ({ id: ab.config.id, scriptPath: ab.scriptPath! }));
-  const signatureOnly = tier0Antibodies.filter((ab) => !ab.scriptPath);
+  const signatureOnly = tier0DefenseSkills.filter((ab) => !ab.scriptPath);
 
   // Pre-warm the resident worker once for this entry set, then fire all
   // detector requests in parallel.
@@ -430,15 +430,15 @@ export async function runTier0(
 }
 
 /**
- * Generic signature engine for Tier 0 antibodies that have config
+ * Generic signature engine for Tier 0 defense skills that have config
  * signatures but no hand-written detect.ts script. This is what makes
- * evolution-created antibodies (signatures only) actually executable.
+ * evolution-created defense skills (signatures only) actually executable.
  *
  * REVIEW(团长): 单签名命中按 0.6 置信度计为恶意票；多签名命中小幅加分。
  * 阈值和置信度公式后续应按 benign 集校准，而不是写死在这里。
  */
 export function matchSignatures(
-  ab: AntibodyEntry,
+  ab: DefenseSkillEntry,
   content: string,
 ): ScriptResult | null {
   const matched: string[] = [];
@@ -458,7 +458,7 @@ export function matchSignatures(
   }
   if (matched.length === 0) return null;
   return {
-    antibody_id: ab.config.id,
+    defense_skill_id: ab.config.id,
     verdict: "malicious",
     confidence: Math.min(1, 0.6 + 0.05 * (matched.length - 1)),
     reason: `matched signatures: ${matched.join(", ")}`,
@@ -570,7 +570,7 @@ function makeTier1ScanResult(params: {
       ...params.t0Results,
       ...t1ScriptResults,
       {
-        antibody_id: "escalation",
+        defense_skill_id: "escalation",
         verdict: "benign" as const,
         confidence: 0,
         reason: `tier1 stage=${params.stage}: ${params.stageReason}`,
@@ -602,7 +602,7 @@ function makeFallbackScanResult(
       script_results: [
         ...t0Results,
         {
-          antibody_id: "llm-fallback",
+          defense_skill_id: "llm-fallback",
           verdict: "benign" as const,
           confidence: 0,
           reason: `LLM unavailable, Tier 1 skipped. Error: ${errorMsg}`,
@@ -618,12 +618,12 @@ function makeFallbackScanResult(
 }
 
 /**
- * Build the prompt pair for ONE antibody. The antibody's own config
+ * Build the prompt pair for ONE defense skill. The defense skill's own config
  * prompt is its executable knowledge; we append a strict output contract
  * so parseTier1Response can consume the answer reliably.
  */
-export function buildAntibodyPrompt(
-  ab: AntibodyEntry,
+export function buildDefenseSkillPrompt(
+  ab: DefenseSkillEntry,
   content: string,
 ): { systemPrompt: string; userPrompt: string } {
   const systemPrompt = `You are the defense skill "${ab.config.name}" (${ab.config.id}).
@@ -642,11 +642,11 @@ Do not output anything else.`;
 
 /** Tier 1 detectors that actually run in the ensemble (optionally a subset). */
 export function selectTier1Detectors(
-  antibodies: AntibodyEntry[],
+  defenseSkills: DefenseSkillEntry[],
   ids?: string[],
-): AntibodyEntry[] {
+): DefenseSkillEntry[] {
   const idSet = ids ? new Set(ids) : null;
-  return antibodies.filter(
+  return defenseSkills.filter(
     (ab) =>
       ab.config.implementation_status === "active" &&
       ab.config.role === "detector" &&
@@ -664,7 +664,7 @@ export interface Tier1Result extends ScriptResult {
 
 /**
  * Tier 1 execution schema:
- * ensemble = per-antibody independent calls;
+ * ensemble = per-defense-skill independent calls;
  * merged = one call over all selected skill knowledge;
  * merged-pair = two merged calls (detectors + knowledge) with OR voting.
  */
@@ -746,28 +746,28 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 /**
  * Run every Tier 1/2 detector as its own parallel LLM call, so each
- * antibody's prompt is genuinely executed and its verdict can be
- * attributed back to the antibody.
+ * defense skill's prompt is genuinely executed and its verdict can be
+ * attributed back to the defense skill.
  *
- * REVIEW(团长): 这是把"一个聚合 LLM + 空库"改成"每个抗体独立投票"的关键
+ * REVIEW(团长): 这是把"一个聚合 LLM + 空库"改成"每个防御技能独立投票"的关键
  * 决策。成本近似等于检测器数量 × 单次调用；并行下延迟与单次调用相当。
  * 若成本不可接受，下一版用 escalation-coordinator 做分级触发。
  */
 export async function runTier1Ensemble(
-  antibodies: AntibodyEntry[],
+  defenseSkills: DefenseSkillEntry[],
   content: string,
   llmCall: LlmCallFn,
   ids?: string[],
   options: { timeoutMs?: number; maxParallel?: number } = {},
 ): Promise<Tier1Result[]> {
-  const detectors = selectTier1Detectors(antibodies, ids);
+  const detectors = selectTier1Detectors(defenseSkills, ids);
   if (detectors.length === 0) return [];
   const timeoutMs = options.timeoutMs ?? 15_000;
   const maxParallel = options.maxParallel ?? detectors.length;
 
-  const jobs = (ab: AntibodyEntry): Promise<Tier1Result> => {
+  const jobs = (ab: DefenseSkillEntry): Promise<Tier1Result> => {
     const start = performance.now();
-    const { systemPrompt, userPrompt } = buildAntibodyPrompt(ab, content);
+    const { systemPrompt, userPrompt } = buildDefenseSkillPrompt(ab, content);
     let costUsd = 0;
     return Promise.resolve()
       .then(() =>
@@ -781,7 +781,7 @@ export async function runTier1Ensemble(
       .then((raw) => {
         const parsed = parseTier1Response(raw.trim());
         return {
-          antibody_id: ab.config.id,
+          defense_skill_id: ab.config.id,
           verdict: parsed.verdict,
           confidence: parsed.confidence,
           reason: null,
@@ -792,7 +792,7 @@ export async function runTier1Ensemble(
         } satisfies Tier1Result;
       })
       .catch((err) => ({
-        antibody_id: ab.config.id,
+        defense_skill_id: ab.config.id,
         verdict: "benign" as const,
         confidence: 0,
         reason: null,
@@ -814,10 +814,10 @@ export async function runTier1Ensemble(
 
 /** Select the skills that contribute knowledge to the merged call. */
 export function selectMergedSkills(
-  antibodies: AntibodyEntry[],
+  defenseSkills: DefenseSkillEntry[],
   scope: MergedScope = "knowledge",
-): AntibodyEntry[] {
-  return antibodies.filter(
+): DefenseSkillEntry[] {
+  return defenseSkills.filter(
     (ab) =>
       ab.config.implementation_status === "active" &&
       ab.config.tier > 0 &&
@@ -836,11 +836,11 @@ export function selectMergedSkills(
  * once. The untrusted content is appended as a delimited user suffix.
  */
 export function buildMergedTier1Prompt(
-  antibodies: AntibodyEntry[],
+  defenseSkills: DefenseSkillEntry[],
   content: string,
   scope: MergedScope = "knowledge",
 ): { systemPrompt: string; userPrompt: string; skillIds: string[] } {
-  const skills = selectMergedSkills(antibodies, scope);
+  const skills = selectMergedSkills(defenseSkills, scope);
   const skillBlocks = skills.map(
     (ab) => `### [${ab.config.id}] ${ab.config.name}\n${ab.config.prompt.trim()}`,
   );
@@ -901,14 +901,14 @@ export function buildMergedTier1Prompt(
  * single model speaks for the merged discriminator, not for each skill.
  */
 export async function runMergedTier1(
-  antibodies: AntibodyEntry[],
+  defenseSkills: DefenseSkillEntry[],
   content: string,
   llmCall: LlmCallFn,
   options: { timeoutMs?: number } = {},
   scope: MergedScope = "knowledge",
 ): Promise<Tier1Result> {
   const { systemPrompt, userPrompt, skillIds } = buildMergedTier1Prompt(
-    antibodies,
+    defenseSkills,
     content,
     scope,
   );
@@ -923,7 +923,7 @@ export async function runMergedTier1(
   );
   const parsed = parseTier1Response(raw.trim());
   return {
-    antibody_id: "merged-tier1",
+    defense_skill_id: "merged-tier1",
     verdict: parsed.verdict,
     confidence: parsed.confidence,
     reason: `merged tier1: ${skillIds.length} skills in one call`,
@@ -949,14 +949,14 @@ export interface MergedPairTier1Result {
  * while keeping the number of LLM calls small (two instead of N).
  */
 export async function runMergedPairTier1(
-  antibodies: AntibodyEntry[],
+  defenseSkills: DefenseSkillEntry[],
   content: string,
   llmCall: LlmCallFn,
   options: { timeoutMs?: number } = {},
 ): Promise<MergedPairTier1Result> {
   const [detectors, knowledge] = await Promise.all([
-    runMergedTier1(antibodies, content, llmCall, options, "detectors"),
-    runMergedTier1(antibodies, content, llmCall, options, "knowledge"),
+    runMergedTier1(defenseSkills, content, llmCall, options, "detectors"),
+    runMergedTier1(defenseSkills, content, llmCall, options, "knowledge"),
   ]);
   const results = [detectors, knowledge];
   const malicious = results.filter((r) => r.verdict === "malicious");
@@ -991,7 +991,7 @@ export async function runMergedPairTier1(
 /**
  * Aggregate the ensemble: any fired malicious vote wins; otherwise any
  * suspicious signal; otherwise benign. "Fired" means the detector said
- * malicious with confidence at or above that antibody's threshold.
+ * malicious with confidence at or above that defense skill's threshold.
  */
 export function aggregateTier1(
   results: Tier1Result[],
@@ -1000,7 +1000,7 @@ export function aggregateTier1(
   const fired = results.filter(
     (r) =>
       r.verdict === "malicious" &&
-      r.confidence >= (thresholds.get(r.antibody_id) ?? 0.6),
+      r.confidence >= (thresholds.get(r.defense_skill_id) ?? 0.6),
   );
   if (fired.length > 0) {
     return {
@@ -1041,7 +1041,7 @@ export interface StagedTier1Result {
  * 静默降级为 full，绝不因为配置错误而跳过检测。
  */
 export async function runStagedTier1(params: {
-  detectors: AntibodyEntry[];
+  detectors: DefenseSkillEntry[];
   content: string;
   llmCall: LlmCallFn;
   stage: EscalationStage;
@@ -1111,8 +1111,8 @@ export async function runStagedTier1(params: {
 // ── Unified Scan Pipeline ─────────────────────────────────────────
 
 export interface ScanOptions {
-  antibodies: AntibodyEntry[];
-  antigens: AntigenEntry[];
+  defenseSkills: DefenseSkillEntry[];
+  attacks: AttackEntry[];
   content: string;
   llmCall: LlmCallFn;
   tier1Mode?: Tier1Mode;
@@ -1152,13 +1152,13 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
   // Tier 0: fast scripts + signature engine (skipped for the none ablation)
   const t0 = options.skipTier0
     ? { results: [] as ScriptResult[], malicious: false }
-    : await runTier0(options.antibodies, options.content, options.tier0TimeoutMs);
+    : await runTier0(options.defenseSkills, options.content, options.tier0TimeoutMs);
   recordShadowScans(options.content);
 
   const t0Feedback = (finalVerdict: Verdict) =>
     recordScanFeedback(
       t0.results.map((r) => ({
-        antibody_id: r.antibody_id,
+        defense_skill_id: r.defense_skill_id,
         verdict: r.verdict,
         confidence: r.confidence,
         latency_us: r.latency_us,
@@ -1194,7 +1194,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       script_results: [
         ...t0.results,
         {
-          antibody_id: "t0-only",
+          defense_skill_id: "t0-only",
           verdict: "benign" as const,
           confidence: 0,
           reason: "Tier 1 skipped by t0-only scan mode",
@@ -1211,10 +1211,10 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
   }
 
   const thresholds = new Map(
-    options.antibodies.map((ab) => [ab.config.id, ab.config.threshold]),
+    options.defenseSkills.map((ab) => [ab.config.id, ab.config.threshold]),
   );
 
-  const detectors = selectTier1Detectors(options.antibodies);
+  const detectors = selectTier1Detectors(options.defenseSkills);
   if (detectors.length === 0) {
     const latency = Math.round(performance.now() - scanStart) * 1000;
     appendStatsEvent("evolution_self", "scan_latency_us", latency);
@@ -1226,10 +1226,10 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       script_results: [
         ...t0.results,
         {
-          antibody_id: "no-tier1-detectors",
+          defense_skill_id: "no-tier1-detectors",
           verdict: "benign" as const,
           confidence: 0,
-          reason: "No Tier 1 detectors configured in the antibody library",
+          reason: "No Tier 1 detectors configured in the defense skill library",
           latency_us: 0,
           error: null,
         },
@@ -1252,7 +1252,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       let stageReason: string;
       if (options.tier1Mode === "merged-pair") {
         const pair = await runMergedPairTier1(
-          options.antibodies,
+          options.defenseSkills,
           options.content,
           options.llmCall,
           { timeoutMs: options.tier1TimeoutMs },
@@ -1263,7 +1263,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
         stageReason = "two merged calls OR ensemble";
       } else {
         const merged = await runMergedTier1(
-          options.antibodies,
+          options.defenseSkills,
           options.content,
           options.llmCall,
           { timeoutMs: options.tier1TimeoutMs },
@@ -1375,7 +1375,7 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
       script_results: [
         ...t0.results,
         {
-          antibody_id: "escalation-skip",
+          defense_skill_id: "escalation-skip",
           verdict: "benign" as const,
           confidence: 0,
           reason: `Tier 1 skipped by escalation policy: ${decision.reason}`,
@@ -1422,25 +1422,25 @@ export async function scan(options: ScanOptions): Promise<ScanResult> {
     // Persist to scan history
     await logScan(result, options.content);
 
-    // Attribute the verdict to every participating antibody so each
+    // Attribute the verdict to every participating defense skill so each
     // detector accumulates real scan counts, TP, and FP independently.
     recordScanFeedback(
       [
         ...t0.results.map((r) => ({
-          antibody_id: r.antibody_id,
+          defense_skill_id: r.defense_skill_id,
           verdict: r.verdict,
           confidence: r.confidence,
           latency_us: r.latency_us,
           fired: r.verdict === "malicious" && r.confidence >= 0.6,
         })),
         ...staged.results.map((r) => ({
-          antibody_id: r.antibody_id,
+          defense_skill_id: r.defense_skill_id,
           verdict: r.verdict,
           confidence: r.confidence,
           latency_us: r.latency_us,
           fired:
             r.verdict === "malicious" &&
-            r.confidence >= (thresholds.get(r.antibody_id) ?? 0.6),
+            r.confidence >= (thresholds.get(r.defense_skill_id) ?? 0.6),
         })),
       ],
       result.verdict,

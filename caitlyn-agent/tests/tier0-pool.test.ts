@@ -7,7 +7,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { runTier0, shutdownTier0Pool } from "../src/scanner.js";
-import type { AntibodyEntry } from "../src/schema.js";
+import type { DefenseSkillEntry } from "../src/schema.js";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-pool-"));
 
@@ -34,7 +34,7 @@ const plainPath = writeFixture(
   'console.log(JSON.stringify({ verdict: "suspicious", confidence: 0.5, reason: "plain" }));',
 );
 
-function makeEntry(id: string, scriptPath: string): AntibodyEntry {
+function makeEntry(id: string, scriptPath: string): DefenseSkillEntry {
   return {
     config: {
       id,
@@ -50,7 +50,7 @@ function makeEntry(id: string, scriptPath: string): AntibodyEntry {
       execution_stages: ["content_scan"],
       references: [],
       runtime_requirements: [],
-      affinity_score: 0,
+      match_score: 0,
       created_at: "2026-08-11",
       generation: 0,
       deps: [],
@@ -70,7 +70,7 @@ afterAll(() => {
 describe("Tier0 resident worker pool", () => {
   it("returns detector verdicts through the resident worker", async () => {
     const { results, malicious } = await runTier0(
-      [makeEntry("ab-good", goodPath)],
+      [makeEntry("good", goodPath)],
       "anything",
       500,
     );
@@ -80,30 +80,30 @@ describe("Tier0 resident worker pool", () => {
   });
 
   it("reuses the same worker across scans", async () => {
-    const ab = makeEntry("ab-good", goodPath);
+    const ab = makeEntry("good", goodPath);
     await runTier0([ab], "first", 500);
     const second = await runTier0([ab], "second", 500);
     expect(second.malicious).toBe(true);
   });
 
   it("kills and restarts the worker after a hung detector times out", async () => {
-    const hung = await runTier0([makeEntry("ab-hung", hungPath)], "x", 100);
+    const hung = await runTier0([makeEntry("hung", hungPath)], "x", 100);
     expect(hung.results[0]?.error).toContain("timeout");
 
-    const after = await runTier0([makeEntry("ab-good", goodPath)], "x", 500);
+    const after = await runTier0([makeEntry("good", goodPath)], "x", 500);
     expect(after.malicious).toBe(true);
   });
 
   it("restarts the worker after a detector crashes the process", async () => {
-    const crashed = await runTier0([makeEntry("ab-crash", crashPath)], "x", 500);
+    const crashed = await runTier0([makeEntry("crash", crashPath)], "x", 500);
     expect(crashed.results[0]?.error).toContain("worker exited");
 
-    const after = await runTier0([makeEntry("ab-good", goodPath)], "x", 500);
+    const after = await runTier0([makeEntry("good", goodPath)], "x", 500);
     expect(after.malicious).toBe(true);
   });
 
   it("falls back to one-shot spawn for plain scripts the worker cannot load", async () => {
-    const { results } = await runTier0([makeEntry("ab-plain", plainPath)], "x", 500);
+    const { results } = await runTier0([makeEntry("plain", plainPath)], "x", 500);
     expect(results[0]?.verdict).toBe("suspicious");
     expect(results[0]?.confidence).toBe(0.5);
   });

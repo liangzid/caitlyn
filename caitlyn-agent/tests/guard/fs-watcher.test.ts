@@ -10,7 +10,7 @@ import * as path from "node:path";
 import * as os from "node:os";
 
 // Isolate HOME so scanning never touches the real ~/.caitlyn state, and
-// stub recordScanFeedback so real antibody configs are never rewritten.
+// stub recordScanFeedback so real defense skill configs are never rewritten.
 const { testHomeId } = vi.hoisted(() => ({
   testHomeId: "caitlyn-fsw-home-" + Date.now().toString(36),
 }));

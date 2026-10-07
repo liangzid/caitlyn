@@ -19,7 +19,7 @@ tier3_timeout_ms = 15000
 # aggressive（信任的干净输入跳过 LLM，低信任/高风险跑 fast 子集）| off（全量）
 escalation_policy = "safe"
 # fast 子集检测器（干净输入也至少跑这些，保证召回不塌方）
-fast_detector_ids = "ab-classifier-injection,ab-classifier-jailbreak,ab-builtin-poisoning"
+fast_detector_ids = "classifier-injection,classifier-jailbreak,builtin-poisoning"
 # Tier 0 malicious 但置信度低于该值视为弱信号（suspicious 恒为弱信号）
 weak_signal_threshold = 0.6
 # 默认来源信任度：high | medium | low（daemon 请求可逐次覆盖）
@@ -27,7 +27,7 @@ source_trust = "medium"
 # 任务是否高风险（代码执行/改数据/网络外发）；safe 下直接升全量
 high_risk = false
 
-[vaccination]
+[synthesis]
 min_samples = 5
 min_success_rate = 0.7
 latency_threshold_us = 2000000
@@ -66,8 +66,8 @@ lessons_per_cluster = 10
 consistency_recheck = false
 # 生成器参考的相似样本簇大小（防过拟合参考上下文，非硬约束）
 similar_samples = 3
-# 候选全部失败时是否做定向微调兜底（SHM fallback）
-shm_fallback = true
+# 候选全部失败时是否做定向微调兜底（revise fallback）
+revise_fallback = true
 cooldown_minutes = 60
 daily_evolution_limit = 10
 # evolution_dir = "./.caitlyn-evolution"
@@ -79,5 +79,5 @@ max_entries = 100000
 
 [storage]
 db_path = "./caitlyn.db"
-antibody_dir = "./antibodies"
+defense_skill_dir = "./skills"
 valset_dir = "./valsets"

@@ -61,9 +61,9 @@ export const SCANNING_DEFAULTS: ScanningConfig = {
   tier0TimeoutMs: 500,
   policy: "safe",
   fastDetectorIds: [
-    "ab-classifier-injection",
-    "ab-classifier-jailbreak",
-    "ab-builtin-poisoning",
+    "classifier-injection",
+    "classifier-jailbreak",
+    "builtin-poisoning",
   ],
   weakSignalThreshold: 0.6,
   sourceTrust: "medium",
@@ -76,6 +76,9 @@ export const SCANNING_DEFAULTS: ScanningConfig = {
 
 export type GuardVerdictAction = "allow" | "flag" | "block";
 export type GuardErrorAction = "allow" | "block";
+export type PrivacyLevel = "off" | "standard" | "strict";
+
+const PRIVACY_LEVEL_VALUES = ["off", "standard", "strict"] as const;
 
 /** Runtime policy applied by caitlyn-hook around Agent tool calls. */
 export interface GuardRuntimeConfig {
@@ -87,6 +90,16 @@ export interface GuardRuntimeConfig {
   onError: GuardErrorAction;
   suspiciousAction: GuardVerdictAction;
   maliciousAction: GuardVerdictAction;
+  /**
+   * Master switch for local privacy protection. Default off.
+   * KEYPOINT-REVIEW: a missing config must not start masking tool output.
+   */
+  privacyEnabled: boolean;
+  /**
+   * standard masks credentials and format-dependent identifiers.
+   * strict also perturbs labeled ages and money amounts.
+   */
+  privacyLevel: PrivacyLevel;
 }
 
 export const GUARD_RUNTIME_DEFAULTS: GuardRuntimeConfig = {
@@ -98,15 +111,17 @@ export const GUARD_RUNTIME_DEFAULTS: GuardRuntimeConfig = {
   onError: "allow",
   suspiciousAction: "flag",
   maliciousAction: "block",
+  privacyEnabled: false,
+  privacyLevel: "off",
 };
 
-// ── Evolution (Immune System 2) Config ─────────────────────────────
+// ── Evolution (System 2) Config ─────────────────────────────
 
 export type EvolutionAutonomy = "record" | "candidate" | "auto";
 export type DagContextMode = "meta" | "full";
 
 /**
- * Configuration for the antibody evolution pipeline.
+ * Configuration for the defense skill evolution pipeline.
  *
  * Fields mirror the [evolution] TOML section; every field has a safe
  * default so the system runs even with no configuration file.
@@ -124,11 +139,11 @@ export interface EvolutionConfig {
   reviewerModel: string | null;
   /** 每轮生成器一次产出的候选数量。 */
   candidatesPerRun: number;
-  /** 单个免疫应答的最大循环轮数。 */
+  /** 单个合成的最大循环轮数。 */
   maxRounds: number;
-  /** 单个免疫应答的 token 预算。 */
+  /** 单个合成的 token 预算。 */
   maxTokensPerRun: number;
-  /** active 抗体数量硬上限，超出时淘汰 score 最低者。 */
+  /** active 防御技能数量硬上限，超出时淘汰 score 最低者。 */
   activeCap: number;
   /** score = hits - fpPenaltyWeight * FP 的误报惩罚权重。 */
   fpPenaltyWeight: number;
@@ -148,17 +163,17 @@ export interface EvolutionConfig {
   shadowWindowDays: number;
   /** shadow 观察窗口的累计扫描次数（与天数先到为准）。 */
   shadowMinScans: number;
-  /** 每抗原簇注入生成器的教训条数上限。 */
+  /** 每攻击簇注入生成器的教训条数上限。 */
   lessonsPerCluster: number;
   /** 评审一致性抽查：accept 候选是否再独立评审一次（成本翻倍）。 */
   consistencyRecheck: boolean;
   /** 生成器参考的相似样本簇大小（防过拟合上下文，不进入硬约束）。 */
   similarSamples: number;
-  /** 候选全部失败时，基于上轮 revise 候选做定向微调兜底（SHM）。 */
-  shmFallback: boolean;
-  /** 同一抗原簇触发免疫应答的冷却时间（分钟）。 */
+  /** 候选全部失败时，基于上轮 revise 候选做定向微调兜底（directed revision）。 */
+  reviseFallback: boolean;
+  /** 同一攻击簇触发合成的冷却时间（分钟）。 */
   cooldownMinutes: number;
-  /** 每日免疫应答次数上限（防成本攻击）。 */
+  /** 每日合成次数上限（防成本攻击）。 */
   dailyEvolutionLimit: number;
   /** evolution 状态目录（DAG / lessons / 归档），默认 ~/.caitlyn/evolution。 */
   evolutionDir: string;
@@ -186,7 +201,7 @@ export const EVOLUTION_DEFAULTS: EvolutionConfig = {
   lessonsPerCluster: 10,
   consistencyRecheck: false,
   similarSamples: 3,
-  shmFallback: true,
+  reviseFallback: true,
   cooldownMinutes: 60,
   dailyEvolutionLimit: 10,
   evolutionDir: path.join(os.homedir(), ".caitlyn", "evolution"),
@@ -417,6 +432,12 @@ export function loadGuardRuntimeConfig(configPath?: string): GuardRuntimeConfig 
     GUARD_ACTION_VALUES,
     cfg.maliciousAction,
   );
+  cfg.privacyLevel = parseEnum(raw, "privacy_level", PRIVACY_LEVEL_VALUES, cfg.privacyLevel);
+  cfg.privacyEnabled = parseBoolean(raw, "privacy_enabled", cfg.privacyLevel !== "off");
+  // The boolean is the master switch. A level without the switch means on.
+  // A switch without a level means standard.
+  if (!cfg.privacyEnabled) cfg.privacyLevel = "off";
+  else if (cfg.privacyLevel === "off") cfg.privacyLevel = "standard";
 
   return cfg;
 }
@@ -466,7 +487,7 @@ export function loadEvolutionConfig(configPath?: string): EvolutionConfig {
   cfg.lessonsPerCluster = parsePositiveNumber(raw, "lessons_per_cluster", cfg.lessonsPerCluster);
   cfg.consistencyRecheck = parseBoolean(raw, "consistency_recheck", cfg.consistencyRecheck);
   cfg.similarSamples = parsePositiveNumber(raw, "similar_samples", cfg.similarSamples);
-  cfg.shmFallback = parseBoolean(raw, "shm_fallback", cfg.shmFallback);
+  cfg.reviseFallback = parseBoolean(raw, "revise_fallback", cfg.reviseFallback);
   cfg.cooldownMinutes = parsePositiveNumber(raw, "cooldown_minutes", cfg.cooldownMinutes);
   cfg.dailyEvolutionLimit = parsePositiveNumber(raw, "daily_evolution_limit", cfg.dailyEvolutionLimit);
 

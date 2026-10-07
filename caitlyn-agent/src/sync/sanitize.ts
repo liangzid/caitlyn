@@ -1,15 +1,15 @@
 /**
  * CAITLYN — Sanitize library entries before contribution packing.
  *
- * Strips operational stats and local paths. Antigen payloads are hashed
+ * Strips operational stats and local paths. Attack payloads are hashed
  * by default; full payload only when the user opts in per entry.
  */
 
 import { createHash } from "node:crypto";
-import type { AntibodyConfig, AntigenConfig } from "../schema.js";
+import type { DefenseSkillConfig, AttackConfig } from "../schema.js";
 
 /** Zero stats and drop fields that are local-only noise. */
-export function sanitizeAntibodyConfig(config: AntibodyConfig): AntibodyConfig {
+export function sanitizeDefenseSkillConfig(config: DefenseSkillConfig): DefenseSkillConfig {
   return {
     ...config,
     stats: {
@@ -21,8 +21,8 @@ export function sanitizeAntibodyConfig(config: AntibodyConfig): AntibodyConfig {
   };
 }
 
-/** Copy antigen config as-is (ids/lineage are intentional). */
-export function sanitizeAntigenConfig(config: AntigenConfig): AntigenConfig {
+/** Copy attack config as-is (ids/lineage are intentional). */
+export function sanitizeAttackConfig(config: AttackConfig): AttackConfig {
   return { ...config };
 }
 
@@ -30,7 +30,7 @@ export function sanitizeAntigenConfig(config: AntigenConfig): AntigenConfig {
 export function hashPayload(payload: string): string {
   const digest = createHash("sha256").update(payload, "utf-8").digest("hex");
   return [
-    "# Redacted antigen payload (sha256 + length). Full text omitted by default.",
+    "# Redacted attack payload (sha256 + length). Full text omitted by default.",
     `sha256: ${digest}`,
     `bytes: ${Buffer.byteLength(payload, "utf-8")}`,
     "",

@@ -21,7 +21,7 @@ export interface LessonVerification {
 
 export interface EvolutionLesson {
   id: string;
-  /** 关联的抗原簇 id（触发样本的稳定标识）。 */
+  /** 关联的攻击簇 id（触发样本的稳定标识）。 */
   clusterId: string;
   /** 循环轮次（1 起）。 */
   round: number;
