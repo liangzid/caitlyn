@@ -1,0 +1,38 @@
+#+TITLE: Caitlyn user privacy protection
+#+DATE: 2026-10-07
+
+* Sources
+- GemFilter :: https://github.com/liangzid/GemFilter
+  Local detect / surrogate / restore boundary for coding agents.
+  Cloned to /tmp/GemFilter for reading. Not vendored into this repo.
+- Prεεmpt :: Anshumaan et al., NDSS, arXiv:2504.05147
+  Category I format-dependent tokens use a reversible format-preserving transform.
+  Category II value-dependent numbers use metric Laplace noise and are not restored.
+
+* What landed
+- Runtime :: caitlyn-agent/src/privacy/
+- Hook :: after tool call sanitizes model-facing text.
+  Before tool call restores vault surrogates into local tool arguments.
+- Hosts :: Claude and Codex PostToolUse ~updatedToolOutput~.
+  PreToolUse ~updatedInput~ requires ~permissionDecision: allow~, which approves that call.
+- CLI :: ~caitlyn privacy sanitize|restore <text>~
+- Config :: ~[guard] privacy_enabled~ defaults to false.
+  ~privacy_level~ is ~off~, ~standard~, or ~strict~.
+- Setup :: ~caitlyn setup~ asks whether to enable privacy, then the level.
+  Declining leaves both fields off. Strict adds metric noise for age and money.
+
+* Review points
+- The format-preserving cipher is keyed Fisher-Yates, not NIST FF1.
+- API keys and passwords are typed placeholders, not format-preserving ciphertext.
+  A format-preserving key would still be a usable credential.
+- IPv4, URLs, passport numbers, and bare long digit strings are not masked.
+- Email keeps the final domain label.
+- Metric noise is not restored.
+- Claude UserPromptSubmit cannot replace the user prompt, so a secret typed
+  directly into the prompt still reaches the model. Tool output is the covered boundary.
+- Vault originals stay in process memory. The on-disk map is AES-GCM.
+- OpenClaw ~after_tool_call~ result mutation depends on that host honoring ~ctx.result~.
+
+* Not done
+- No NER model. Detection is regex, as in GemFilter, not Prεεmpt's NER front end.
+- Codex support for ~updatedToolOutput~ is unconfirmed.

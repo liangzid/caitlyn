@@ -46,6 +46,25 @@ describe("loadGuardRuntimeConfig", () => {
       onError: "block",
       suspiciousAction: "block",
       maliciousAction: "flag",
+      privacyEnabled: false,
+      privacyLevel: "off",
+    });
+  });
+
+  it("treats a privacy level as enabled and an explicit off switch as off", () => {
+    const enabled = writeGuardConfig(['privacy_level = "strict"']);
+    expect(loadGuardRuntimeConfig(enabled)).toMatchObject({
+      privacyEnabled: true,
+      privacyLevel: "strict",
+    });
+
+    const disabled = writeGuardConfig([
+      "privacy_enabled = false",
+      'privacy_level = "strict"',
+    ]);
+    expect(loadGuardRuntimeConfig(disabled)).toMatchObject({
+      privacyEnabled: false,
+      privacyLevel: "off",
     });
   });
 

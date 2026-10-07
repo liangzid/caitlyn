@@ -31,8 +31,9 @@ npx caitlyn status
 ```
 
 Tier 0 scanning works without an API key. Tier 1 and defense synthesis require
-a supported model provider. The guided setup writes provider, Agent, and
-detection settings only after a final confirmation:
+a supported model provider. The guided setup writes provider, Agent,
+detection, and privacy settings only after a final confirmation. Privacy
+protection stays off unless that setup enables it and chooses standard or strict:
 
 ```bash
 caitlyn setup

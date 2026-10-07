@@ -154,14 +154,22 @@ function scan(tool, content) {
     const r = spawnSync("caitlyn-hook", [], { input: JSON.stringify({ tool, content }), timeout: 5000, encoding: "utf-8" });
     if (r.error || r.status === null) return { action: "allow", reason: "hook unavailable" };
     const o = JSON.parse(r.stdout.trim());
-    return { action: o.action, reason: o.reason || "scanned by CAITLYN" };
+    return { action: o.action, reason: o.reason || "scanned by CAITLYN", sanitizedContent: o.sanitizedContent, restoredContent: o.restoredContent };
   } catch { return { action: "allow", reason: "scan error" }; }
+}
+function applyRestored(target, restored) {
+  if (!restored) return;
+  try {
+    const parsed = JSON.parse(restored);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) target.args = parsed;
+  } catch { /* keep original args */ }
 }
 export default function main(api) {
   api.on("tool.execute.before", async (ctx) => {
     const input = (ctx.input || ctx);
     const d = scan(input.tool || "unknown", input.args ? JSON.stringify(input.args) : "");
     if (d.action === "block") throw new Error("[CAITLYN] " + d.reason);
+    applyRestored(input, d.restoredContent);
   });
   api.on("tool.execute.after", async (ctx) => {
     const input = (ctx.input || ctx);
@@ -169,6 +177,7 @@ export default function main(api) {
     const d = scan(input.tool || "unknown", output.output || "");
     if (d.action === "block") output.output = "[CAITLYN BLOCKED] " + d.reason;
     else if (d.action === "flag") output.output = "[CAITLYN FLAGGED] " + (output.output || "");
+    else if (d.sanitizedContent) output.output = d.sanitizedContent;
   });
 }`;
 
@@ -182,19 +191,29 @@ function scan(tool, content) {
     const r = spawnSync("caitlyn-hook", [], { input: JSON.stringify({ tool, content }), timeout: 5000, encoding: "utf-8" });
     if (r.error || r.status === null) return { action: "allow", reason: "hook unavailable" };
     const o = JSON.parse(r.stdout.trim());
-    return { action: o.action, reason: o.reason || "scanned by CAITLYN" };
+    return { action: o.action, reason: o.reason || "scanned by CAITLYN", sanitizedContent: o.sanitizedContent, restoredContent: o.restoredContent };
   } catch { return { action: "allow", reason: "scan error" }; }
 }
 export default function main(api) {
   api.on("before_tool_call", async (ctx) => {
     const d = scan(ctx.tool || "unknown", ctx.args ? JSON.stringify(ctx.args) : "");
     if (d.action === "block") return { action: "deny", reason: "[CAITLYN] " + d.reason };
+    if (d.restoredContent) {
+      try {
+        const parsed = JSON.parse(d.restoredContent);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) ctx.args = parsed;
+      } catch { /* keep original args */ }
+    }
     return { action: "allow" };
   });
   api.on("after_tool_call", async (ctx) => {
     const content = typeof ctx.result === "string" ? ctx.result : JSON.stringify(ctx.result || "");
     const d = scan(ctx.tool || "unknown", content);
-    if (d.action === "block") console.error("[CAITLYN] Blocked tool output from " + ctx.tool + ": " + d.reason);
+    if (d.action === "block") throw new Error("[CAITLYN] " + d.reason);
+    if (d.sanitizedContent) {
+      if (typeof ctx.result === "string") ctx.result = d.sanitizedContent;
+      else { try { ctx.result = JSON.parse(d.sanitizedContent); } catch { ctx.result = d.sanitizedContent; } }
+    }
   });
 }`;
 
@@ -215,7 +234,7 @@ const PI_MIDDLEWARE_SOURCE = [
   "    });",
   "    if (r.error || r.status === null) return { action: 'allow', reason: 'hook unavailable' };",
   "    const o = JSON.parse(r.stdout.trim());",
-  "    return { action: o.action, reason: o.reason || 'scanned by CAITLYN' };",
+  "    return { action: o.action, reason: o.reason || 'scanned by CAITLYN', sanitizedContent: o.sanitizedContent, restoredContent: o.restoredContent };",
   "  } catch { return { action: 'allow', reason: 'scan error' }; }",
   "}",
   "",
@@ -224,11 +243,21 @@ const PI_MIDDLEWARE_SOURCE = [
   "    const argsText = ctx.args ? JSON.stringify(ctx.args) : '';",
   "    const before = scan(ctx.toolName, argsText);",
   "    if (before.action === 'block') { ctx.cancel('[CAITLYN] ' + before.reason); return; }",
+  "    if (before.restoredContent) {",
+  "      try {",
+  "        const parsed = JSON.parse(before.restoredContent);",
+  "        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ctx.args = parsed;",
+  "      } catch { /* keep original args */ }",
+  "    }",
   "    await next();",
   "    const resultText = typeof ctx.result === 'string' ? ctx.result : JSON.stringify(ctx.result || '');",
   "    const after = scan(ctx.toolName, resultText);",
   "    if (after.action === 'block') ctx.setResult('[CAITLYN BLOCKED] ' + after.reason);",
   "    else if (after.action === 'flag') ctx.setResult('[CAITLYN FLAGGED] ' + (typeof ctx.result === 'string' ? ctx.result : ''));",
+  "    else if (after.sanitizedContent) {",
+  "      if (typeof ctx.result === 'string') ctx.setResult(after.sanitizedContent);",
+  "      else { try { ctx.setResult(JSON.parse(after.sanitizedContent)); } catch { ctx.setResult(after.sanitizedContent); } }",
+  "    }",
   "  };",
   "}",
 ].join("\n");
@@ -396,11 +425,11 @@ def register(ctx):
                 ["caitlyn-hook"],
                 input=input_data, capture_output=True, text=True, timeout=30,
             )
-            if result.returncode != 0:
-                return {"action": "allow"}
-            decision = json.loads(result.stdout)
+            # Exit 1 is a block. The reason on stdout is what Hermes shows the model.
+            decision = json.loads(result.stdout or "{}")
             if decision.get("action") == "block":
-                return {"action": "block", "message": decision.get("reason", "blocked by CAITLYN")}
+                reason = decision.get("reason") or "blocked by CAITLYN"
+                return {"action": "block", "message": "[CAITLYN] " + reason}
         except Exception:
             pass
         return {"action": "allow"}

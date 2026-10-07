@@ -16,6 +16,8 @@ import { hybridScan } from "../hybrid-scanner.js";
 import type { GuardConfig, GuardEvent, VerdictAction } from "./types.js";
 import { DEFAULT_GUARD_CONFIG } from "./types.js";
 import { evaluatePolicy, prepareContent } from "./policy.js";
+import type { PrivacyLevel } from "../config.js";
+import { protectOutbound, restoreInbound } from "../privacy/protect.js";
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -32,6 +34,18 @@ export interface HookDecision {
 
   /** If action="flag" and hookPoint="after", the modified result. */
   modifiedResult?: string;
+
+  /**
+   * Tool output with secrets removed. Set on the after hook when the
+   * model must not see the original text.
+   */
+  sanitizedContent?: string;
+
+  /**
+   * Tool arguments with local surrogates restored. Set on the before
+   * hook when a local tool should receive the original value.
+   */
+  restoredContent?: string;
 
   /** Scan result (null if scan was skipped). */
   scanResult: ScanResult | null;
@@ -86,6 +100,16 @@ export interface AgentHooksConfig extends GuardConfig {
 
   /** What to do on hook error or timeout. */
   on_error: "allow" | "block";
+
+  /**
+   * When true, tool output is sanitized before the model reads it and
+   * known surrogates are restored before a local tool runs.
+   * KEYPOINT-REVIEW: this defaults to false. Setup must opt in.
+   */
+  privacy_enabled: boolean;
+
+  /** Which spans are masked when privacy_enabled is true. */
+  privacy_level: PrivacyLevel;
 }
 
 export const DEFAULT_AGENT_HOOKS_CONFIG: Partial<AgentHooksConfig> = {
@@ -95,6 +119,8 @@ export const DEFAULT_AGENT_HOOKS_CONFIG: Partial<AgentHooksConfig> = {
   skip_tools: [],
   after_only_tools: [],
   on_error: "allow", // Fail-open for safety
+  privacy_enabled: false,
+  privacy_level: "off",
 };
 
 // ── Agent Hook Interface ────────────────────────────────────────────
@@ -157,32 +183,33 @@ export class AgentHooksEngine {
       return this._allow(ctx, null);
     }
 
-    // Check disabled hook points
-    if (ctx.hookPoint === "before" && !this.config.before_enabled) {
-      return this._allow(ctx, null);
-    }
-    if (ctx.hookPoint === "after" && !this.config.after_enabled) {
-      return this._allow(ctx, null);
-    }
-
-    // Check skip list
+    // Skipped tools are neither scanned nor rewritten.
     if (this.config.skip_tools.includes(ctx.toolName)) {
       return this._allow(ctx, null);
     }
 
-    // Check after_only list (skip before hook for these tools)
+    const privacy = this._privacyBoundary(ctx);
+
+    // A disabled scan still restores or sanitizes. Otherwise a surrogate
+    // would reach a local tool, or a secret would reach the model.
+    if (ctx.hookPoint === "before" && !this.config.before_enabled) {
+      return this._allow(ctx, null, privacy);
+    }
+    if (ctx.hookPoint === "after" && !this.config.after_enabled) {
+      return this._allow(ctx, null, privacy);
+    }
     if (ctx.hookPoint === "before" && this.config.after_only_tools.includes(ctx.toolName)) {
-      return this._allow(ctx, null);
+      return this._allow(ctx, null, privacy);
     }
 
     this.stats.totalHooks++;
     if (ctx.hookPoint === "before") this.stats.beforeHooks++;
     else this.stats.afterHooks++;
 
-    // Scan
+    // Scan the model-facing text so logs and the classifier do not keep the secret.
     let scanResult: ScanResult | null = null;
     try {
-      const content = prepareContent(ctx.content, this.config.max_scan_bytes);
+      const content = prepareContent(privacy.scanText, this.config.max_scan_bytes);
 
       const result = await Promise.race([
         hybridScan({
@@ -207,7 +234,7 @@ export class AgentHooksEngine {
       if (this.config.onEvent) {
         this.config.onEvent({
           mode: "agent-hooks",
-          content_snippet: ctx.content.slice(0, 256),
+          content_snippet: privacy.scanText.slice(0, 256),
           scan_result: {
             verdict: "benign", confidence: 0, tier: 0,
             script_results: [], total_latency_us: 0, total_tokens: 0,
@@ -222,11 +249,13 @@ export class AgentHooksEngine {
         action: this.config.on_error,
         reason: `Hook error: ${String(err)}`,
         scanResult: null,
+        sanitizedContent: privacy.sanitizedContent,
+        restoredContent: privacy.restoredContent,
       };
     }
 
     // Evaluate policy
-    const content = prepareContent(ctx.content, this.config.max_scan_bytes);
+    const content = prepareContent(privacy.scanText, this.config.max_scan_bytes);
     const decision = evaluatePolicy({
       mode: "agent-hooks",
       source: `${ctx.hookPoint}:${ctx.toolName}`,
@@ -253,6 +282,8 @@ export class AgentHooksEngine {
       action: decision.action,
       reason: decision.reason,
       modifiedResult: decision.modifiedContent,
+      sanitizedContent: privacy.sanitizedContent,
+      restoredContent: privacy.restoredContent,
       scanResult,
     };
   }
@@ -279,7 +310,11 @@ export class AgentHooksEngine {
 
   // ── Helpers ──────────────────────────────────────────────────────
 
-  private _allow(ctx: HookContext, scanResult: ScanResult | null): HookDecision {
+  private _allow(
+    ctx: HookContext,
+    scanResult: ScanResult | null,
+    privacy?: { sanitizedContent?: string; restoredContent?: string },
+  ): HookDecision {
     this.stats.totalHooks++;
     if (ctx.hookPoint === "before") this.stats.beforeHooks++;
     else this.stats.afterHooks++;
@@ -288,7 +323,41 @@ export class AgentHooksEngine {
       action: "allow",
       reason: "Hook disabled or skipped",
       scanResult,
+      sanitizedContent: privacy?.sanitizedContent,
+      restoredContent: privacy?.restoredContent,
     };
+  }
+
+  /**
+   * Build the model-facing scan text and the host rewrite fields.
+   * After hooks sanitize. Before hooks restore known surrogates and scan
+   * a redacted copy so the tool still receives the original secret.
+   */
+  private _privacyBoundary(ctx: HookContext): {
+    scanText: string;
+    sanitizedContent?: string;
+    restoredContent?: string;
+  } {
+    if (!this.config.privacy_enabled) return { scanText: ctx.content };
+    const level = this.config.privacy_level === "off" ? "standard" : this.config.privacy_level;
+    try {
+      if (ctx.hookPoint === "after") {
+        const protectedText = protectOutbound(ctx.content, undefined, level);
+        return {
+          scanText: protectedText.text,
+          sanitizedContent: protectedText.changed ? protectedText.text : undefined,
+        };
+      }
+      const redacted = protectOutbound(ctx.content, undefined, level);
+      const restored = restoreInbound(ctx.content);
+      return {
+        scanText: redacted.text,
+        restoredContent: restored.changed ? restored.text : undefined,
+      };
+    } catch {
+      // KEYPOINT-REVIEW: a vault or cipher failure must not block the tool.
+      return { scanText: ctx.content };
+    }
   }
 
   private _freshStats(): AgentHooksStats {
@@ -346,6 +415,7 @@ export function createPiAgentHookAdapter(engine: AgentHooksEngine): {
         ctx.cancel(`[CAITLYN] ${beforeDecision.reason}`);
         return;
       }
+      applyRestoredArgs(ctx, beforeDecision.restoredContent);
 
       // Execute tool
       await next();
@@ -367,6 +437,8 @@ export function createPiAgentHookAdapter(engine: AgentHooksEngine): {
         ctx.setResult(`[CAITLYN BLOCKED] ${afterDecision.reason}`);
       } else if (afterDecision.action === "flag" && afterDecision.modifiedResult) {
         ctx.setResult(afterDecision.modifiedResult);
+      } else if (afterDecision.sanitizedContent) {
+        ctx.setResult(coerceSanitizedResult(ctx.result, afterDecision.sanitizedContent));
       }
     },
     getStats: () => engine.getStats(),
@@ -393,12 +465,14 @@ export function createStandaloneHooks(engine: AgentHooksEngine): {
 } {
   return {
     beforeToolCall: async (toolName, args) => {
-      return engine.processHook({
+      const decision = await engine.processHook({
         hookPoint: "before",
         toolName,
         content: JSON.stringify(args),
         toolArgs: args,
       });
+      applyRestoredArgs({ args }, decision.restoredContent);
+      return decision;
     },
     afterToolCall: async (toolName, args, result) => {
       return engine.processHook({
@@ -411,4 +485,33 @@ export function createStandaloneHooks(engine: AgentHooksEngine): {
     },
     getStats: () => engine.getStats(),
   };
+}
+
+/**
+ * Replace tool arguments with the restored object when the rewrite is valid JSON.
+ * KEYPOINT-REVIEW: a parse failure leaves the original arguments in place.
+ */
+function applyRestoredArgs(ctx: { args: Record<string, unknown> }, restored: string | undefined): void {
+  if (!restored) return;
+  try {
+    const parsed = JSON.parse(restored) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+    const record = parsed as Record<string, unknown>;
+    for (const key of Object.keys(ctx.args)) delete ctx.args[key];
+    Object.assign(ctx.args, record);
+  } catch {
+    // The host keeps the arguments the model produced.
+  }
+}
+
+/**
+ * Put sanitized text back into the same shape as the original tool result.
+ */
+function coerceSanitizedResult(original: unknown, sanitized: string): unknown {
+  if (typeof original === "string") return sanitized;
+  try {
+    return JSON.parse(sanitized) as unknown;
+  } catch {
+    return sanitized;
+  }
 }

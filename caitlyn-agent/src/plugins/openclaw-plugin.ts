@@ -12,6 +12,8 @@ import { spawnSync } from "node:child_process";
 interface HookDecision {
   action: "allow" | "block" | "flag";
   reason: string;
+  sanitizedContent?: string;
+  restoredContent?: string;
 }
 
 function scanContent(tool: string, content: string): HookDecision {
@@ -29,6 +31,8 @@ function scanContent(tool: string, content: string): HookDecision {
     return {
       action: output.action,
       reason: output.reason || "scanned by CAITLYN",
+      sanitizedContent: output.sanitizedContent,
+      restoredContent: output.restoredContent,
     };
   } catch {
     return { action: "allow", reason: "scan error — allowing" };
@@ -57,6 +61,17 @@ export default function main(api: OpenClawPluginApi): void {
     if (decision.action === "block") {
       return { action: "deny", reason: `[CAITLYN] ${decision.reason}` };
     }
+    // KEYPOINT-REVIEW: restored JSON replaces the tool arguments in place.
+    if (decision.restoredContent) {
+      try {
+        const parsed = JSON.parse(decision.restoredContent) as unknown;
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          c.args = parsed as Record<string, unknown>;
+        }
+      } catch {
+        // Keep the arguments the model produced.
+      }
+    }
     return { action: "allow" };
   });
 
@@ -68,10 +83,25 @@ export default function main(api: OpenClawPluginApi): void {
       typeof c.result === "string" ? c.result : JSON.stringify(c.result || "");
     const decision = scanContent(toolName, content);
 
+    // KEYPOINT-REVIEW: a block becomes an error the agent reads, same as before_tool_call deny.
     if (decision.action === "block") {
-      console.error(
-        `[CAITLYN] Blocked tool output from ${toolName}: ${decision.reason}`,
-      );
+      throw new Error(`[CAITLYN] ${decision.reason}`);
+    }
+    if (decision.sanitizedContent) {
+      c.result = typeof c.result === "string"
+        ? decision.sanitizedContent
+        : parseSanitized(decision.sanitizedContent);
     }
   });
+}
+
+/**
+ * Parse sanitized JSON tool output, or keep the string if it is not JSON.
+ */
+function parseSanitized(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
 }

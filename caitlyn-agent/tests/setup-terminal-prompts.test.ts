@@ -66,6 +66,7 @@ describe("runSetupWizard over a non-TTY pipe", () => {
       secret,
       "2",
       "n",
+      "n",
       "y",
     ]);
     const output = new PassThrough();

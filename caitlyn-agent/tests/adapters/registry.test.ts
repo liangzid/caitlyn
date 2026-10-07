@@ -183,6 +183,8 @@ describe("installAgent", () => {
       expect(content).toContain("CAITLYN Guard Plugin");
       expect(content).toContain("pre_tool_call");
       expect(content).toContain("caitlyn-hook");
+      expect(content).toContain('"[CAITLYN] " + reason');
+      expect(content).not.toContain("returncode != 0");
     } finally {
       process.env.HOME = origHome;
     }

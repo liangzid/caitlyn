@@ -7,7 +7,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { AGENT_REGISTRY } from "../src/adapters/registry.js";
-import { loadConfigFile, loadScanningConfig } from "../src/config.js";
+import { loadConfigFile, loadGuardRuntimeConfig, loadScanningConfig } from "../src/config.js";
 import {
   customizeDetection,
   presetDocument,
@@ -90,7 +90,7 @@ describe("runSetupWizard", () => {
     const saved: Array<[string, string]> = [];
     const prompts = new ScriptedPrompts(
       ["deepseek", "deepseek-v4-flash", "balanced"],
-      [true, false, true],
+      [true, false, false, true],
       [],
       [secret],
     );
@@ -114,6 +114,8 @@ describe("runSetupWizard", () => {
       model: "deepseek-v4-flash",
     });
     expect(loadScanningConfig(configPath).skipTier1).toBe(false);
+    expect(loadGuardRuntimeConfig(configPath).privacyEnabled).toBe(false);
+    expect(loadGuardRuntimeConfig(configPath).privacyLevel).toBe("off");
     expect(prompts.messages.join("\n")).not.toContain(secret);
   });
 
@@ -124,7 +126,7 @@ describe("runSetupWizard", () => {
     const installCalls: Array<{ id: string; dryRun: boolean }> = [];
     const prompts = new ScriptedPrompts(
       ["deepseek", "deepseek-v4-flash", "local"],
-      [true, false, false, true],
+      [true, false, false, false, true],
       [],
       [],
       [["codex"]],
@@ -165,7 +167,7 @@ describe("runSetupWizard", () => {
     const configPath = path.join(dir, "config.toml");
     const prompts = new ScriptedPrompts(
       ["deepseek", "deepseek-v4-flash", "local"],
-      [true, false, false, false],
+      [true, false, false, false, false],
     );
 
     await expect(runSetupWizard(prompts, { configPath }, {
@@ -173,6 +175,30 @@ describe("runSetupWizard", () => {
       detectAgents: () => [],
     })).rejects.toThrow("not applied");
     expect(fs.existsSync(configPath)).toBe(false);
+  });
+
+  it("saves an explicit strict privacy choice from the guided prompt", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-setup-privacy-"));
+    const configPath = path.join(dir, "config.toml");
+    const prompts = new ScriptedPrompts(
+      ["deepseek", "deepseek-v4-flash", "balanced", "strict"],
+      [true, false, true, true],
+      [],
+      ["private-test-key-value"],
+    );
+
+    await runSetupWizard(prompts, { configPath }, {
+      authStatus: () => ({ runtime: false, persisted: false, env: false }),
+      providerEnvVars: () => ["DEEPSEEK_API_KEY"],
+      verify: async () => "OK",
+      detectAgents: () => [],
+    });
+
+    expect(loadGuardRuntimeConfig(configPath)).toMatchObject({
+      privacyEnabled: true,
+      privacyLevel: "strict",
+    });
+    expect(prompts.messages.join("\n")).toContain("Privacy: strict");
   });
 });
 
@@ -185,7 +211,7 @@ describe("customizeDetection", () => {
     });
     const prompts = new ScriptedPrompts(
       ["merged", "detectors", "low", "block", "block", "block"],
-      [false, true, true, true, true, false],
+      [false, true, true, true, true, false, false],
       ["0.75", "22000", "3", "131072", "45000"],
     );
 

@@ -76,6 +76,9 @@ export const SCANNING_DEFAULTS: ScanningConfig = {
 
 export type GuardVerdictAction = "allow" | "flag" | "block";
 export type GuardErrorAction = "allow" | "block";
+export type PrivacyLevel = "off" | "standard" | "strict";
+
+const PRIVACY_LEVEL_VALUES = ["off", "standard", "strict"] as const;
 
 /** Runtime policy applied by caitlyn-hook around Agent tool calls. */
 export interface GuardRuntimeConfig {
@@ -87,6 +90,16 @@ export interface GuardRuntimeConfig {
   onError: GuardErrorAction;
   suspiciousAction: GuardVerdictAction;
   maliciousAction: GuardVerdictAction;
+  /**
+   * Master switch for local privacy protection. Default off.
+   * KEYPOINT-REVIEW: a missing config must not start masking tool output.
+   */
+  privacyEnabled: boolean;
+  /**
+   * standard masks credentials and format-dependent identifiers.
+   * strict also perturbs labeled ages and money amounts.
+   */
+  privacyLevel: PrivacyLevel;
 }
 
 export const GUARD_RUNTIME_DEFAULTS: GuardRuntimeConfig = {
@@ -98,6 +111,8 @@ export const GUARD_RUNTIME_DEFAULTS: GuardRuntimeConfig = {
   onError: "allow",
   suspiciousAction: "flag",
   maliciousAction: "block",
+  privacyEnabled: false,
+  privacyLevel: "off",
 };
 
 // ── Evolution (System 2) Config ─────────────────────────────
@@ -417,6 +432,12 @@ export function loadGuardRuntimeConfig(configPath?: string): GuardRuntimeConfig 
     GUARD_ACTION_VALUES,
     cfg.maliciousAction,
   );
+  cfg.privacyLevel = parseEnum(raw, "privacy_level", PRIVACY_LEVEL_VALUES, cfg.privacyLevel);
+  cfg.privacyEnabled = parseBoolean(raw, "privacy_enabled", cfg.privacyLevel !== "off");
+  // The boolean is the master switch. A level without the switch means on.
+  // A switch without a level means standard.
+  if (!cfg.privacyEnabled) cfg.privacyLevel = "off";
+  else if (cfg.privacyLevel === "off") cfg.privacyLevel = "standard";
 
   return cfg;
 }

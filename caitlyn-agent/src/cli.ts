@@ -6,6 +6,7 @@
  *   caitlyn tui               Full-screen Terminal UI (default)
  *   caitlyn repl              Basic readline REPL
  *   caitlyn scan <content>    Quick security scan
+ *   caitlyn privacy <sanitize|restore> [--level standard|strict] <text>
  *   caitlyn status            Show defense skill/attack library status
  *   caitlyn dashboard         Show defense stats dashboard
  *   caitlyn history [N]       Show recent scan history
@@ -60,6 +61,7 @@ import {
 } from "./commands/evolution.js";
 import { runUpdateCommand } from "./sync/update.js";
 import { runContributeCommand } from "./sync/contribute.js";
+import { runPrivacyCommand } from "./privacy/protect.js";
 import {
   runSetupWizard,
   SetupCancelledError,
@@ -246,6 +248,10 @@ async function main() {
         console.error(`❌ Synthesis failed: ${err instanceof Error ? err.message : String(err)}`);
         process.exit(1);
       }
+      process.exit(0);
+    }
+    case "privacy": {
+      runPrivacyCommand(args.slice(1));
       process.exit(0);
     }
     case "scan": {

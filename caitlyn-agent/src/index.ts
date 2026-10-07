@@ -27,6 +27,9 @@ export {
   userLibraryRoot,
 } from "./library.js";
 
+export { protectOutbound, restoreInbound } from "./privacy/protect.js";
+export type { ProtectResult } from "./privacy/protect.js";
+
 export type {
   DefenseSkillConfig,
   DefenseSkillEntry,

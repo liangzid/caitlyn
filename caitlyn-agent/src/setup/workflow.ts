@@ -18,6 +18,7 @@ import {
   loadScanningConfig,
   type CaitlynAgentConfig,
   type GuardRuntimeConfig,
+  type PrivacyLevel,
   type ScanningConfig,
 } from "../config.js";
 import {
@@ -175,7 +176,13 @@ export async function runSetupWizard(
   const reviewAdvanced = detectionPreset === "custom"
     || await prompts.confirm("Review and customize every detection setting?", false);
   if (reviewAdvanced) document = await customizeDetection(prompts, document);
+  else document = { ...document, guard: await choosePrivacy(prompts, document.guard) };
   await confirmDetectionAvailability(prompts, document.scanning, credential.available);
+  if (document.guard.privacyEnabled && !document.guard.enabled) {
+    prompts.warn(
+      "Privacy protection runs inside Agent hooks. Hook enforcement is off, so the saved privacy level will not run until hooks are enabled.",
+    );
+  }
 
   showFinalSummary(prompts, configPath, document, selectedAgentIds, credential);
   if (!await prompts.confirm("Apply this configuration now?", true)) {
@@ -205,6 +212,7 @@ export async function runSetupWizard(
   if (writeResult.backupPath) prompts.info(`Previous configuration backup: ${writeResult.backupPath}`);
   prompts.info(`Provider: ${provider}/${model}`);
   prompts.info(`Detection profile: ${detectionPreset}`);
+  prompts.info(`Privacy: ${document.guard.privacyLevel}`);
   prompts.info(`Agent integrations installed: ${installedAgents.join(", ") || "none"}`);
   if (failedAgents.length > 0) prompts.warn(`Agent installation failed: ${failedAgents.join(", ")}`);
   prompts.info("Run `caitlyn scan \"test content\"` or `caitlyn tui` to begin.");
@@ -673,7 +681,41 @@ export async function customizeDetection(
     prompts.info("Post-execution hooks always flag instead of block because the tool has already run.");
   }
 
-  return { ...document, scanning, guard };
+  return { ...document, scanning, guard: await choosePrivacy(prompts, guard) };
+}
+
+/**
+ * Ask whether local privacy protection should run, then which level.
+ * The default answer is no. Standard masks credentials and format-dependent
+ * identifiers. Strict also perturbs labeled ages and money amounts.
+ */
+export async function choosePrivacy(
+  prompts: SetupPrompts,
+  guard: GuardRuntimeConfig,
+): Promise<GuardRuntimeConfig> {
+  prompts.heading("4. Privacy protection");
+  prompts.info(
+    "This stays off unless you enable it. It masks secrets in tool output before a model reads them, and restores saved surrogates before a local tool runs.",
+  );
+  const enable = await prompts.confirm("Enable local privacy protection?", false);
+  if (!enable) return { ...guard, privacyEnabled: false, privacyLevel: "off" };
+  const level = await prompts.select<Exclude<PrivacyLevel, "off">>(
+    "Privacy level",
+    [
+      {
+        value: "standard",
+        label: "Standard",
+        description: "Credentials, email, phone, ID numbers, and payment cards. Format-dependent values keep their shape.",
+      },
+      {
+        value: "strict",
+        label: "Strict",
+        description: "Standard coverage, plus labeled ages and money amounts. Those numbers are perturbed and are not restored.",
+      },
+    ],
+    guard.privacyLevel === "strict" ? "strict" : "standard",
+  );
+  return { ...guard, privacyEnabled: true, privacyLevel: level };
 }
 
 /** Choices shared by suspicious and malicious hook verdicts. */
@@ -705,7 +747,7 @@ function showFinalSummary(
   credential: CredentialSelection,
 ): void {
   const { scanning, guard, llm } = document;
-  prompts.heading("4. Review");
+  prompts.heading("5. Review");
   prompts.info(`Config: ${configPath}`);
   prompts.info(`Provider/model: ${llm.provider}/${llm.model}`);
   prompts.info(`Credential: ${credential.source}${credential.verified ? "; verified" : "; not verified"}`);
@@ -714,6 +756,7 @@ function showFinalSummary(
   prompts.info(`Escalation/trust: ${scanning.policy}, ${scanning.sourceTrust}, high-risk=${scanning.highRisk}`);
   prompts.info(`Hooks: ${guard.enabled ? `before=${guard.beforeEnabled}, after=${guard.afterEnabled}, on-error=${guard.onError}` : "disabled"}`);
   prompts.info(`Verdict actions: suspicious=${guard.suspiciousAction}, malicious=${guard.maliciousAction}`);
+  prompts.info(`Privacy: ${guard.privacyEnabled ? guard.privacyLevel : "off"}`);
   prompts.info(`Agent integrations: ${agentIds.join(", ") || "none"}`);
 }
 
