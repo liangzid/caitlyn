@@ -17,7 +17,7 @@
 ![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.19-18212b?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-2675bf?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-%3E%3D3.10-3572A5?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-428_TS_%7C_41_Python-20a387?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-487_TS_%7C_41_Python-20a387?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-7253ed?style=flat-square)
 
 </div>
@@ -258,13 +258,16 @@ export CAITLYN_MODEL="deepseek-v4-flash"
 | 命令 | 用途 |
 | --- | --- |
 | `./caitlyn` 或 `./caitlyn tui` | 打开全屏终端界面 |
+| `./caitlyn repl` | 打开 readline REPL |
 | `./caitlyn scan <content>` | 使用当前管线扫描内容 |
+| `./caitlyn privacy <sanitize\|restore> [--level standard\|strict] <text>` | 在命令行上遮盖或还原标识符 |
 | `./caitlyn status` | 检查防御库与攻击库 |
 | `./caitlyn dashboard` | 显示运行时防御统计 |
 | `./caitlyn history [N]` | 显示最近的扫描历史 |
 | `./caitlyn detect` | 检测本机受支持的智能体 |
 | `./caitlyn setup` | 引导配置 provider、智能体集成、detection 层级与隐私保护 |
-| `./caitlyn install <agent>` | 安装智能体集成 |
+| `./caitlyn init` | 在当前目录写入默认 `config.toml` |
+| `./caitlyn install [--dry-run] [--force] <agent>` | 安装智能体集成，或刷新已复制的插件 |
 | `./caitlyn uninstall <agent>` | 移除集成并恢复备份 |
 | `./caitlyn daemon start\|stop\|status` | 管理本地扫描 daemon |
 | `./caitlyn watch [--add <dir>]` | 添加文件系统观察目录 |
@@ -272,9 +275,11 @@ export CAITLYN_MODEL="deepseek-v4-flash"
 | `./caitlyn synthesize --status` | 检查进化谱系 |
 | `./caitlyn synthesize --approve <id>` | 批准 shadow 候选 |
 | `./caitlyn synthesize --redteam [category]` | 在攻击语料上评测 Tier 0 |
+| `./caitlyn releases` | 打印按日期排列的 What's New（`whats-new` 是同一命令） |
 | `./caitlyn providers` | 列出内置服务商与模型 |
 | `./caitlyn update --check` | 检查发布版本元数据 |
 | `./caitlyn contribute` | 打包防御库贡献以供评审 |
+| `./caitlyn help` | 打印命令列表 |
 
 ## 配置
 

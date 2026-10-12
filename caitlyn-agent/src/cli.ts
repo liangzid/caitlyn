@@ -13,7 +13,8 @@
  *   caitlyn history --export json [path]   Export scan history to file
  *   caitlyn history --clear   Clear scan history
  *   caitlyn detect            Scan system for supported agents
- *   caitlyn install <agent>   Inject CAITLYN hooks into an agent's config
+ *   caitlyn install [--dry-run] [--force] <agent>
+ *                             Inject or refresh CAITLYN hooks
  *   caitlyn providers         List available LLM providers
  *   caitlyn synthesize <pattern>  Submit synthesis pattern to daemon
  *   caitlyn synthesize --approve <id>  Explicitly activate a candidate
@@ -64,6 +65,7 @@ import { runUpdateCommand } from "./sync/update.js";
 import { runContributeCommand } from "./sync/contribute.js";
 import { runPrivacyCommand } from "./privacy/protect.js";
 import { formatReleaseNotes } from "./releases.js";
+import { formatCliHelp, formatUnknownCommand } from "./cli-help.js";
 import {
   runSetupWizard,
   SetupCancelledError,
@@ -515,31 +517,7 @@ memory_limit = 10000
     case "help":
     case "--help":
     case "-h": {
-      console.log("CAITLYN — Continuous Agents for Injection Threats via Lifelong Yielding Nexus");
-      console.log("");
-      console.log("Usage: caitlyn <command> [options]");
-      console.log("");
-      console.log("Commands:");
-      console.log("  tui                        Full-screen Terminal UI (default)");
-      console.log("  scan <content>             Quick security scan");
-      console.log("  status                     Show defense skill/attack library status");
-      console.log("  dashboard                  Show defense stats dashboard");
-      console.log("  history [N]                Show recent scan history (default 20)");
-      console.log("  history --export json [p]  Export scan history to file");
-      console.log("  history --clear            Clear all scan history");
-      console.log("  detect                     Scan system for supported agents");
-      console.log("  install [--dry-run] <a>    Inject CAITLYN hooks into agent config");
-      console.log("  uninstall [--dry-run] <a>  Remove CAITLYN hooks, restore backup");
-      console.log("  providers                  List available LLM providers");
-      console.log("  init                       Generate default config.toml");
-      console.log("  setup [--config p] [--no-connection-test]");
-      console.log("                             Guided provider, Agent, and detection setup");
-      console.log("  releases                   Dated What's New page");
-      console.log("  synthesize <pattern>        Submit synthesis pattern");
-      console.log("  update [--check] [--yes]   Check GitHub release / npm update");
-      console.log("  contribute                 Pack library into library/incoming bundle");
-      console.log("  help                       Show this help");
-      console.log("");
+      console.log(formatCliHelp());
       process.exit(0);
     }
     case "update": {
@@ -551,8 +529,7 @@ memory_limit = 10000
       process.exit(0);
     }
     default: {
-      console.log(`Unknown command: ${command}`);
-      console.log("Usage: caitlyn [tui|repl|scan|status|dashboard|history|detect|install|uninstall|providers|init|setup|releases|synthesize|update|contribute]");
+      console.log(formatUnknownCommand(command));
       process.exit(1);
     }
   }

@@ -19,7 +19,7 @@ new prompt-injection failures into verified, reusable defense skills.
 ![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.19-18212b?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-2675bf?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-%3E%3D3.10-3572A5?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-428_TS_%7C_41_Python-20a387?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-487_TS_%7C_41_Python-20a387?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-7253ed?style=flat-square)
 
 </div>
@@ -337,13 +337,16 @@ Supported adapters currently include:
 | Command | Purpose |
 | --- | --- |
 | `./caitlyn` or `./caitlyn tui` | Open the full-screen terminal interface |
+| `./caitlyn repl` | Open the readline REPL |
 | `./caitlyn scan <content>` | Scan content with the configured pipeline |
+| `./caitlyn privacy <sanitize\|restore> [--level standard\|strict] <text>` | Mask or restore identifiers on the command line |
 | `./caitlyn status` | Inspect the defense and attack libraries |
 | `./caitlyn dashboard` | Show runtime defense statistics |
 | `./caitlyn history [N]` | Show recent scan history |
 | `./caitlyn detect` | Detect supported agents on the machine |
 | `./caitlyn setup` | Guided provider, Agent, and detection setup |
-| `./caitlyn install <agent>` | Install an agent integration |
+| `./caitlyn init` | Write a default `config.toml` in the current directory |
+| `./caitlyn install [--dry-run] [--force] <agent>` | Install an agent integration, or refresh copied plugins |
 | `./caitlyn uninstall <agent>` | Remove an integration and restore its backup |
 | `./caitlyn daemon start\|stop\|status` | Manage the local scanning daemon |
 | `./caitlyn watch [--add <dir>]` | Add filesystem observation paths |
@@ -351,9 +354,11 @@ Supported adapters currently include:
 | `./caitlyn synthesize --status` | Inspect the evolution lineage |
 | `./caitlyn synthesize --approve <id>` | Approve a shadow candidate |
 | `./caitlyn synthesize --redteam [category]` | Evaluate Tier 0 against the attack corpus |
+| `./caitlyn releases` | Print the dated What's New page (`whats-new` is the same command) |
 | `./caitlyn providers` | List bundled providers and models |
 | `./caitlyn update --check` | Check release metadata |
 | `./caitlyn contribute` | Package a library contribution for review |
+| `./caitlyn help` | Print the command list |
 
 ## Configuration
 
