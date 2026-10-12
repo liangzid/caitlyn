@@ -31,7 +31,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && npm run build-skills && npm run build-plugins",
     "build-skills": "npx tsx src/scripts/precompile-skills.ts",
-    "build-plugins": "mkdir -p dist/plugins dist/scripts && cp src/plugins/opencode-plugin.ts dist/plugins/opencode-plugin.js && cp src/plugins/openclaw-plugin.ts dist/plugins/openclaw-plugin.js && cp src/scripts/tier0-worker.mjs dist/scripts/tier0-worker.mjs",
+    "build-plugins": "node scripts/build-plugins.mjs",
     "audit:library": "npx tsx src/scripts/audit-library.ts",
     "stage:package": "node scripts/stage-package-assets.mjs",
     "clean:package": "node scripts/stage-package-assets.mjs --clean",

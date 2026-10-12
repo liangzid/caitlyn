@@ -19,7 +19,7 @@ new prompt-injection failures into verified, reusable defense skills.
 ![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.19-18212b?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-2675bf?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-%3E%3D3.10-3572A5?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-487_TS_%7C_41_Python-20a387?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-489_TS_%7C_41_Python-20a387?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-7253ed?style=flat-square)
 
 </div>
