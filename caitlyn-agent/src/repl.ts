@@ -53,7 +53,11 @@ async function getLlm(): Promise<LlmCallFn> {
   return llmCache;
 }
 
-export function startRepl(agent: Agent) {
+/**
+ * Start the readline REPL. Agent may be null when chat init failed; /scan still works.
+ * KEYPOINT-REVIEW: SIGINT is process-global and is not removed on close.
+ */
+export function startRepl(agent: Agent | null) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: "caitlyn> " });
   console.log(BANNER); rl.prompt();
 
@@ -78,7 +82,12 @@ export function startRepl(agent: Agent) {
       case "/help": console.log(HELP); break;
       case "/quit": case "/exit": console.log("Goodbye."); rl.close(); break;
       case "": break;
-      default: try { await agent.prompt(t); } catch (e) { console.error(e instanceof Error ? e.message : String(e)); }
+      default:
+        if (!agent) {
+          console.log("Chat unavailable. Use /scan <content> to scan, or /help.");
+          break;
+        }
+        try { await agent.prompt(t); } catch (e) { console.error(e instanceof Error ? e.message : String(e)); }
     }
     rl.prompt();
   });

@@ -123,6 +123,18 @@ async function main() {
   }
 
   switch (command) {
+    case "repl": {
+      let agent: Agent | null = null;
+      try {
+        const ctx = await createCaitlynAgent();
+        agent = ctx.agent;
+      } catch (err) {
+        console.warn(`⚠️  Agent initialization failed: ${err instanceof Error ? err.message : String(err)}`);
+        console.warn("   Running in scan-only mode. Chat disabled; use /scan.");
+      }
+      startRepl(agent);
+      return;
+    }
     case "daemon": {
       const sub = args[1];
       if (!sub || sub === "status") {
