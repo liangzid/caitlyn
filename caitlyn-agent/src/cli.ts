@@ -344,10 +344,12 @@ async function main() {
     }
 
     case "install": {
-      const dryRun = args.includes("--dry-run");
-      const target = args[1] === "--dry-run" ? args[2] : args[1];
+      const rest = args.slice(1);
+      const dryRun = rest.includes("--dry-run");
+      const force = rest.includes("--force");
+      const target = rest.find((a) => !a.startsWith("--"));
       if (!target) {
-        console.log("Usage: caitlyn install [--dry-run] <agent>");
+        console.log("Usage: caitlyn install [--dry-run] [--force] <agent>");
         console.log("Supported agents:");
         for (const r of detectAgents()) {
           const marker = isHookInstalled(r.agent.id) ? " (already installed)" : "";
@@ -356,13 +358,14 @@ async function main() {
         process.exit(1);
       }
 
-      if (isHookInstalled(target)) {
+      if (isHookInstalled(target) && !force) {
         console.log(`✅ CAITLYN hooks are already installed for ${target}.`);
+        console.log(`   Use \`caitlyn install --force ${target}\` to refresh copied plugins.`);
         console.log(`   Use \`caitlyn uninstall ${target}\` to remove them.`);
         process.exit(0);
       }
 
-      const result = installAgent(target, dryRun);
+      const result = installAgent(target, dryRun, force);
       const prefix = dryRun ? "🔍 [DRY-RUN]" : "✅";
       console.log(prefix, result.message);
       if (result.filesCreated.length > 0) {

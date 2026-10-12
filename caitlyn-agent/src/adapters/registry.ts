@@ -7,9 +7,10 @@
  * Config modification protocol:
  *   1. Backup: every config mutation first copies <path> → <path>.caitlyn-backup
  *   2. Idempotent merge: detects existing CAITLYN hooks, skips if already present
- *   3. Dry-run: --dry-run flag previews changes without touching files
- *   4. Uninstall: `caitlyn uninstall <agent>` restores from backup
- *   5. TOML merge: line-based append for Codex config.toml (no full parser needed)
+ *   3. Refresh: `caitlyn install --force <agent>` rewrites hooks and copied plugin files
+ *   4. Dry-run: --dry-run flag previews changes without touching files
+ *   5. Uninstall: `caitlyn uninstall <agent>` restores from backup
+ *   6. TOML merge: line-based append for Codex config.toml (no full parser needed)
  */
 
 import * as fs from "node:fs";
@@ -720,7 +721,12 @@ export function dryRunUninstall(agentId: string): DryRunChange[] {
 
 // ── Install ─────────────────────────────────────────────────────────
 
-export function installAgent(agentId: string, dryRun = false): InstallResult {
+/**
+ * Install or refresh hooks for one registered agent.
+ * KEYPOINT-REVIEW: --force overwrites copied plugin files and re-applies JSON/TOML patches.
+ * It does not uninstall first, so host keys outside the patch stay in place.
+ */
+export function installAgent(agentId: string, dryRun = false, force = false): InstallResult {
   const agent = AGENT_REGISTRY.find((a) => a.id === agentId);
   if (!agent) {
     return {
@@ -733,8 +739,10 @@ export function installAgent(agentId: string, dryRun = false): InstallResult {
     };
   }
 
+  const refreshing = force && isHookInstalled(agentId);
+
   // Idempotency check
-  if (isHookInstalled(agentId)) {
+  if (isHookInstalled(agentId) && !force) {
     return {
       agent,
       success: true,
@@ -793,10 +801,12 @@ export function installAgent(agentId: string, dryRun = false): InstallResult {
         const fullPath = expandPath(f.relPath);
         const dir = path.dirname(fullPath);
         fs.mkdirSync(dir, { recursive: true });
-        if (!fs.existsSync(fullPath)) {
+        const existed = fs.existsSync(fullPath);
+        if (!existed || force) {
           const content = f.content || readPluginSource(path.basename(f.relPath)) || "// CAITLYN plugin — source not found, reinstall caitlyn";
           fs.writeFileSync(fullPath, content, "utf-8");
-          filesCreated.push(fullPath);
+          if (existed) filesModified.push(fullPath);
+          else filesCreated.push(fullPath);
         }
       }
     }
@@ -804,7 +814,9 @@ export function installAgent(agentId: string, dryRun = false): InstallResult {
     return {
       agent,
       success: true,
-      message: install.postInstallMessage || `CAITLYN hooks installed for ${agent.name}.`,
+      message: refreshing
+        ? `CAITLYN hooks refreshed for ${agent.name}.`
+        : (install.postInstallMessage || `CAITLYN hooks installed for ${agent.name}.`),
       filesCreated,
       filesModified,
       dryRun,

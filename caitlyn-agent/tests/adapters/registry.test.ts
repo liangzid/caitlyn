@@ -190,6 +190,57 @@ describe("installAgent", () => {
     }
   });
 
+  it("skips a second install unless force refreshes the copied plugin", () => {
+    const fakeHome = path.join(tmpDir, "home-refresh");
+    fs.mkdirSync(path.join(fakeHome, ".hermes", "plugins"), { recursive: true });
+    const origHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+    try {
+      const first = installAgent("hermes");
+      const pluginPath = first.filesCreated.find((p) => p.includes("caitlyn_plugin.py"));
+      expect(pluginPath).toBeDefined();
+      fs.writeFileSync(pluginPath!, "stale plugin");
+
+      const skipped = installAgent("hermes");
+      expect(skipped.message).toContain("already installed");
+      expect(fs.readFileSync(pluginPath!, "utf-8")).toBe("stale plugin");
+
+      const refreshed = installAgent("hermes", false, true);
+      expect(refreshed.success).toBe(true);
+      expect(refreshed.message).toContain("refreshed");
+      expect(fs.readFileSync(pluginPath!, "utf-8")).toContain("CAITLYN Guard Plugin");
+    } finally {
+      process.env.HOME = origHome;
+    }
+  });
+
+  it("rewrites OpenCode additional plugin files on force refresh", () => {
+    const fakeHome = path.join(tmpDir, "opencode-home");
+    const pluginDir = path.join(fakeHome, ".config", "opencode", "plugins");
+    fs.mkdirSync(pluginDir, { recursive: true });
+    const origHome = process.env.HOME;
+    process.env.HOME = fakeHome;
+    try {
+      const first = installAgent("opencode");
+      expect(first.success).toBe(true);
+      const pluginPath = path.join(pluginDir, "caitlyn-plugin.js");
+      expect(fs.existsSync(pluginPath)).toBe(true);
+      fs.writeFileSync(pluginPath, "stale opencode plugin");
+
+      const skipped = installAgent("opencode");
+      expect(skipped.message).toContain("already installed");
+      expect(fs.readFileSync(pluginPath, "utf-8")).toBe("stale opencode plugin");
+
+      const refreshed = installAgent("opencode", false, true);
+      expect(refreshed.success).toBe(true);
+      expect(refreshed.message).toContain("refreshed");
+      expect(fs.readFileSync(pluginPath, "utf-8")).not.toBe("stale opencode plugin");
+      expect(fs.readFileSync(pluginPath, "utf-8").length).toBeGreaterThan(20);
+    } finally {
+      process.env.HOME = origHome;
+    }
+  });
+
   it("merges JSON config for claude-code", () => {
     const fakeHome = path.join(tmpDir, "claude-home");
     const claudeDir = path.join(fakeHome, ".claude");
