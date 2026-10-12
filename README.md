@@ -28,15 +28,15 @@ new prompt-injection failures into verified, reusable defense skills.
 
 ## What's New
 
-- **2026-10-07** · 0.5.2 — What's New is this dated list. `caitlyn releases`, and `/releases` in the terminal, open the same page.
-- **2026-10-07** · 0.5.1 — On Windows, skill builds and the OpenClaw, OpenCode, and pi hooks start `.cmd` shims with a shell. Chinese instruction signatures from the first outside pull request were tightened so ordinary work sentences stay benign.
-- **2026-10-07** · 0.5.0 — Privacy protection is available and off by default. Setup asks first. `standard` hides credentials and format-dependent identifiers. `strict` also perturbs labeled ages and amounts.
-- **2026-09-24** · 0.4.2 — The npm package counts `skills/`, so a fresh install is no longer empty.
-- **2026-09-24** · 0.4.1 — TypeScript compiles again after the rename. v0.4.0 had been tagged, and npm publish had stopped on the leftover name.
-- **2026-09-24** · 0.4.0 — Skills live in `skills/`, attacks live in `attacks/`, and `caitlyn synthesize` replaced `caitlyn vaccinate`.
-- **2026-09-02** · 0.3.1 — The terminal logo's right edge lines up, and paper credits moved into Acknowledgments.
-- **2026-08-31** · 0.3.0 — `caitlyn setup` walks through provider, API key, detected agents, and detection depth. Nothing is written until the final confirmation.
-- **2026-08-28** · 0.2.0 — The defense library is on npm: active skills, research entries, and the papers named below.
+- 🎉 **2026-10-07** · 0.5.2 — What's New is a dated list now! `caitlyn releases` and `/releases` open the same page!
+- 🪟 **2026-10-07** · 0.5.1 — Windows skill builds and the OpenClaw, OpenCode, and pi hooks finally start `.cmd` shims with a shell! Chinese instruction signatures from the first outside pull request got tighter, and ordinary work sentences stay benign!
+- 🕵️ **2026-10-07** · 0.5.0 — Privacy protection is here, and it stays off until you say yes! Setup asks before anything is masked! `standard` hides credentials and format-dependent identifiers, and `strict` also perturbs labeled ages and amounts!
+- 📦 **2026-09-24** · 0.4.2 — The npm package finally counts `skills/`, so a fresh install is no longer an empty box!
+- 🔧 **2026-09-24** · 0.4.1 — TypeScript compiles again after the rename! v0.4.0 had been tagged, and npm publish had stopped on the leftover name!
+- 🏷️ **2026-09-24** · 0.4.0 — The immune metaphor left the building! Skills live in `skills/`, attacks live in `attacks/`, and `caitlyn synthesize` replaced `caitlyn vaccinate`!
+- 🖼️ **2026-09-02** · 0.3.1 — The terminal logo's right edge finally lines up! Paper credits moved into Acknowledgments!
+- 🪄 **2026-08-31** · 0.3.0 — `caitlyn setup` now walks you through provider, API key, detected agents, and detection depth! Nothing is written until you confirm!
+- 📚 **2026-08-28** · 0.2.0 — The defense library is on npm! Active skills, research entries, and the papers named below all shipped together!
 
 CAITLYN protects the boundary where an LLM agent consumes webpages, files,
 search results, application programming interface responses, user follow-ups,

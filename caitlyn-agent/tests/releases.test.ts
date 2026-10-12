@@ -11,7 +11,7 @@ describe("release notes", () => {
     expect(dates).toEqual([...dates].sort((a, b) => (a < b ? 1 : a > b ? -1 : 0)));
     for (const note of RELEASE_NOTES) {
       expect(note.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-      expect(note.summary.length).toBeGreaterThan(0);
+      expect(note.summary.endsWith("!")).toBe(true);
     }
   });
 
