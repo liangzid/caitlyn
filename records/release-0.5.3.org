@@ -1,0 +1,13 @@
+#+title: CAITLYN 0.5.3 Release
+#+date: 2026-10-14
+
+* Scope
+- =caitlyn repl= starts the existing readline session.
+- =caitlyn help= and both READMEs list live commands, including privacy, daemon, watch, and releases.
+- =caitlyn install --force= refreshes hooks and copied plugin files on already-hooked agents.
+- =npm run build-plugins= copies plugin files with Node fs, so Windows cmd.exe does not need Unix mkdir/cp.
+
+* Release boundary
+- Version: 0.5.3.
+- Git tag: v0.5.3.
+- GitHub Release: https://github.com/liangzid/caitlyn/releases/tag/v0.5.3

@@ -6,7 +6,7 @@ import { RELEASE_NOTES, formatReleaseNotes } from "../src/releases.js";
 
 describe("release notes", () => {
   it("lists shipped versions newest first, with calendar dates", () => {
-    expect(RELEASE_NOTES[0]?.version).toBe("0.5.2");
+    expect(RELEASE_NOTES[0]?.version).toBe("0.5.3");
     const dates = RELEASE_NOTES.map((note) => note.date);
     expect(dates).toEqual([...dates].sort((a, b) => (a < b ? 1 : a > b ? -1 : 0)));
     for (const note of RELEASE_NOTES) {
@@ -18,7 +18,7 @@ describe("release notes", () => {
   it("prints the date before the version", () => {
     const text = formatReleaseNotes();
     expect(text.startsWith("What's New")).toBe(true);
-    expect(text).toContain("2026-10-07  0.5.2");
-    expect(text.indexOf("2026-10-07  0.5.2")).toBeLessThan(text.indexOf("2026-08-28  0.2.0"));
+    expect(text).toContain("2026-10-14  0.5.3");
+    expect(text.indexOf("2026-10-14  0.5.3")).toBeLessThan(text.indexOf("2026-08-28  0.2.0"));
   });
 });

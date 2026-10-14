@@ -26,6 +26,7 @@
 
 ## What's New
 
+- 🔄 **2026-10-14** · 0.5.3 — `caitlyn repl` 终于会启动了！help 和 README 写上了真实命令，`caitlyn install --force` 会刷新已复制的插件，插件打包改用 Node fs，Windows cmd.exe 也能 build！
 - 🎉 **2026-10-07** · 0.5.2 — What's New 现在按日期排开了！`caitlyn releases` 和终端里的 `/releases` 打开的是同一页！
 - 🪟 **2026-10-07** · 0.5.1 — Windows 上的技能构建，以及 OpenClaw、OpenCode、pi 的钩子，终于用 shell 启动 `.cmd` 垫片了！第一个外部 pull request 里的中文指令签名收紧了，普通工作句子仍然保持良性！
 - 🕵️ **2026-10-07** · 0.5.0 — 隐私保护来了，而且你不点头它就一直关着！引导会先问你！`standard` 藏起凭据和格式型标识，`strict` 还会扰动带标签的年龄和金额！
