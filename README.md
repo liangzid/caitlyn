@@ -28,6 +28,7 @@ new prompt-injection failures into verified, reusable defense skills.
 
 ## What's New
 
+- 👁️ **2026-10-19** · 0.6.0 — The local daemon is now a resident host watcher! It polls occupancy and network from `/proc`, watches agent component grafts with ACE-style energy, and quarantines newly added skills without synthesizing a defense skill from a CPU spike!
 - 🔄 **2026-10-14** · 0.5.3 — `caitlyn repl` actually starts now! Help and README name the live commands, `caitlyn install --force` refreshes copied plugins, and plugin staging uses Node fs so Windows cmd.exe can build!
 - 🎉 **2026-10-07** · 0.5.2 — What's New is a dated list now! `caitlyn releases` and `/releases` open the same page!
 - 🪟 **2026-10-07** · 0.5.1 — Windows skill builds and the OpenClaw, OpenCode, and pi hooks finally start `.cmd` shims with a shell! Chinese instruction signatures from the first outside pull request got tighter, and ordinary work sentences stay benign!

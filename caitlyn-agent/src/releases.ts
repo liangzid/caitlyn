@@ -18,6 +18,11 @@ export interface ReleaseNote {
 /** Published releases. Keep the newest entry at index 0. */
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    date: "2026-10-19",
+    version: "0.6.0",
+    summary: "👁️ The local daemon is now a resident host watcher! It polls occupancy and network from /proc, watches agent component grafts with ACE-style energy, and quarantines newly added skills without synthesizing a defense skill from a CPU spike!",
+  },
+  {
     date: "2026-10-14",
     version: "0.5.3",
     summary: "🔄 `caitlyn repl` actually starts now! Help and README name the live commands, `caitlyn install --force` refreshes copied plugins, and plugin staging uses Node fs so Windows cmd.exe can build!",

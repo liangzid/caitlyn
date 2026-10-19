@@ -1,0 +1,13 @@
+#+title: CAITLYN 0.6.0 Release
+#+date: 2026-10-19
+
+* Scope
+- Resident host watcher on ~caitlyn daemon start~.
+- Occupancy and network from Linux ~/proc~, ACE component-graph energy
+  on installed agent dirs.
+- Detect-only fusion; newly added skill/MCP/command grafts are
+  quarantined. Occupancy spikes do not start synthesis.
+
+* Release boundary
+- Version: 0.6.0 (0.5.3 + 0.1 minor).
+- Git tag: v0.6.0.
