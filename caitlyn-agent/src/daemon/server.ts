@@ -11,6 +11,7 @@
  *   GET  /v1/watch           — list watched dirs + stats
  *   DELETE /v1/watch          — stop watching all dirs
  *   GET  /v1/status           — daemon status
+ *   GET  /v1/os-watch         — occupancy, network, and ACE energy snapshot
  */
 
 import * as http from "node:http";
@@ -19,11 +20,17 @@ import * as path from "node:path";
 import { hybridScan } from "../hybrid-scanner.js";
 import { loadDefenseSkills, loadAttacks } from "../library.js";
 import { FSWatcher } from "../guard/fs-watcher.js";
+import { AceWatcher } from "../guard/ace-watcher.js";
+import {
+  HostSteward,
+  toPublicHostSnapshot,
+  type PublicHostWatchSnapshot,
+} from "../guard/host-steward.js";
+import { isOsTelemetrySource } from "../guard/os-watcher.js";
 import { createUnavailableLlmCall, parseScanMode, type LlmCallFn } from "../scanner.js";
 import type { ScanResult } from "../schema.js";
 import { loadEvolutionConfig, type EvolutionConfig } from "../config.js";
 import { EvolutionEngine } from "../evolution/engine.js";
-import { collectNetworkMetrics } from "../evolution/network-probe.js";
 import { appendTriggerRecord } from "../evolution/stats-events.js";
 import {
   StatsCollector,
@@ -39,7 +46,18 @@ export interface DaemonConfig {
   statsDir?: string;
   /** evolution 配置覆盖；缺省从 config.toml 读取。 */
   evolutionConfig?: EvolutionConfig;
+  /** ACE component roots; unset uses installed agent dirs. */
+  componentRoots?: string[];
+  /** Cheap /proc occupancy+net poll. Default 10s. */
+  occupancyPollMs?: number;
+  /** Agent component-graph inventory poll. Default 60s. */
+  componentPollMs?: number;
 }
+
+/** Occupancy /proc poll period. procfs reads are cheap; keep this modest. */
+export const DEFAULT_OCCUPANCY_POLL_MS = 10_000;
+/** ACE directory walk period. Heavier than /proc, so slower. */
+export const DEFAULT_COMPONENT_POLL_MS = 60_000;
 
 export interface DaemonStatus {
   pid: number;
@@ -58,6 +76,10 @@ export interface DaemonStatus {
     filesFlagged: number;
     filesAllowed: number;
   } | null;
+  os_watch: PublicHostWatchSnapshot | null;
+  host_watch_polls: number;
+  occupancy_poll_ms: number;
+  component_poll_ms: number;
 }
 
 /** Maximum accepted request body (1 MiB). */
@@ -82,8 +104,13 @@ export class DaemonServer {
   private reviewerLlm: LlmCallFn | null = null;
   private statsCollector: StatsCollector;
   private evolutionConfig: EvolutionConfig;
-  private statsTimer: NodeJS.Timeout | null = null;
+  private occupancyTimer: NodeJS.Timeout | null = null;
+  private componentTimer: NodeJS.Timeout | null = null;
+  private collectInFlight = false;
   private evolutionDisabled: boolean;
+  private hostWatchPolls = 0;
+  private occupancyPollMs: number;
+  private componentPollMs: number;
 
   // Stats
   private scansTotal = 0;
@@ -94,6 +121,9 @@ export class DaemonServer {
   // FS Watcher
   private watcher: FSWatcher | null = null;
   private watchDirs: string[] = [];
+
+  // Host steward: occupancy + network + ACE component energy
+  private steward: HostSteward;
 
   constructor(config: Partial<DaemonConfig> = {}) {
     this.config = {
@@ -108,6 +138,17 @@ export class DaemonServer {
     this.evolutionDisabled =
       process.env.CAITLYN_DISABLE_EVOLUTION === "1" ||
       process.env.CAITLYN_DISABLE_EVOLUTION === "true";
+    this.occupancyPollMs =
+      config.occupancyPollMs ?? DEFAULT_OCCUPANCY_POLL_MS;
+    this.componentPollMs =
+      config.componentPollMs ?? DEFAULT_COMPONENT_POLL_MS;
+    this.steward = new HostSteward({
+      statsDir: this.config.statsDir,
+      aceWatcher: new AceWatcher({
+        roots: config.componentRoots,
+        quarantineDir: path.join(this.config.statsDir!, "component-quarantine"),
+      }),
+    });
   }
 
   setLlmCall(fn: LlmCallFn): void {
@@ -129,18 +170,24 @@ export class DaemonServer {
       this.server.on("error", reject);
       this.server.listen(this.config.port, this.config.host, () => {
         this.startTime = Date.now();
-        this.statsTimer = setInterval(() => {
-          this.collectStats().catch(() => {});
-        }, 60_000);
-        resolve();
+        this.collectStats(true)
+          .catch(() => {})
+          .finally(() => {
+            this.startHostWatchLoop();
+            resolve();
+          });
       });
     });
   }
 
   async stop(): Promise<void> {
-    if (this.statsTimer) {
-      clearInterval(this.statsTimer);
-      this.statsTimer = null;
+    if (this.occupancyTimer) {
+      clearInterval(this.occupancyTimer);
+      this.occupancyTimer = null;
+    }
+    if (this.componentTimer) {
+      clearInterval(this.componentTimer);
+      this.componentTimer = null;
     }
     return new Promise((resolve) => {
       if (this.watcher) {
@@ -163,16 +210,48 @@ export class DaemonServer {
    * Aggregate new stats events and run an synthesis for each
    * anomaly trigger. Public for tests and manual daemon status checks.
    */
-  async collectStats(): Promise<AnomalyTrigger[]> {
-    // OS/network signals: real connection counts from /proc/net.
-    for (const event of collectNetworkMetrics()) {
+  /** How many host-watch polls have completed since start. */
+  getHostWatchPolls(): number {
+    return this.hostWatchPolls;
+  }
+
+  /**
+   * Occupancy always. Component inventory on includeAce ticks.
+   */
+  startHostWatchLoop(): void {
+    if (this.occupancyTimer || this.componentTimer) return;
+    this.occupancyTimer = setInterval(() => {
+      this.collectStats(false).catch(() => {});
+    }, this.occupancyPollMs);
+    this.componentTimer = setInterval(() => {
+      this.collectStats(true).catch(() => {});
+    }, this.componentPollMs);
+  }
+
+  async collectStats(includeAce: boolean = true): Promise<AnomalyTrigger[]> {
+    if (this.collectInFlight) return [];
+    this.collectInFlight = true;
+    try {
+      return await this.collectStatsBody(includeAce);
+    } finally {
+      this.collectInFlight = false;
+    }
+  }
+
+  private async collectStatsBody(includeAce: boolean): Promise<AnomalyTrigger[]> {
+    this.hostWatchPolls += 1;
+    const snapshot = this.steward.tick(new Date(), includeAce);
+    for (const event of snapshot.events) {
       this.statsCollector.appendEvent(event);
+    }
+    if (snapshot.intervention === "detect") {
+      console.error(
+        `[daemon] host steward detect-only: energy=${snapshot.energy.toFixed(3)} ` +
+          `hot=${snapshot.hotChannels.join(",")}`,
+      );
     }
     const triggers = this.statsCollector.collect();
     if (this.evolutionDisabled) {
-      console.error(
-        "[daemon] stats evolution disabled (CAITLYN_DISABLE_EVOLUTION) — no synthesis",
-      );
       return triggers;
     }
     for (const trigger of triggers) {
@@ -181,6 +260,8 @@ export class DaemonServer {
         `[daemon] ⚠️ anomaly: ${trigger.metric}=${trigger.value} ` +
           `(p99 ${trigger.baselineP99}, ewma ${trigger.baselineEwma})`,
       );
+      // Occupancy/network spikes are ACE-style detect-only, not skill synthesis.
+      if (isOsTelemetrySource(trigger.source)) continue;
       await this.runEvolutionResponse(trigger);
     }
     return triggers;
@@ -263,6 +344,8 @@ export class DaemonServer {
         await this._watchStop(res);
       } else if (path === "/v1/status" && method === "GET") {
         await this._status(res);
+      } else if (path === "/v1/os-watch" && method === "GET") {
+        await this._osWatch(res);
       } else {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "not found" }));
@@ -381,6 +464,12 @@ export class DaemonServer {
     res.end(JSON.stringify({ ok: true }));
   }
 
+  private async _osWatch(res: http.ServerResponse): Promise<void> {
+    const raw = this.steward.getLastSnapshot() ?? this.steward.tick();
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify(toPublicHostSnapshot(raw)));
+  }
+
   private async _status(res: http.ServerResponse): Promise<void> {
     const defenseSkills = loadDefenseSkills();
     const attacks = loadAttacks();
@@ -396,6 +485,12 @@ export class DaemonServer {
       scans_allowed: this.scansAllowed,
       watch_dirs: this.watchDirs,
       watch_stats: this.watcher?.getStats() ?? null,
+      os_watch: this.steward.getLastSnapshot()
+        ? toPublicHostSnapshot(this.steward.getLastSnapshot()!)
+        : null,
+      host_watch_polls: this.hostWatchPolls,
+      occupancy_poll_ms: this.occupancyPollMs,
+      component_poll_ms: this.componentPollMs,
     };
 
     res.writeHead(200, { "Content-Type": "application/json" });

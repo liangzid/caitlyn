@@ -39,6 +39,7 @@ export function formatCliHelp(): string {
     "  synthesize --redteam [cat] Run the active red-team drill",
     "  daemon [start|stop|status] Manage the local scanning daemon",
     "  watch [--add <dir>]        Add filesystem observation paths",
+    "  os-watch                   Resident occupancy/network/ACE snapshot",
     "  update [--check] [--yes]   Check GitHub release / npm update",
     "  contribute                 Pack library into library/incoming bundle",
     "  help                       Show this help",
@@ -52,6 +53,6 @@ export function formatCliHelp(): string {
 export function formatUnknownCommand(command: string): string {
   return [
     `Unknown command: ${command}`,
-    "Usage: caitlyn [tui|repl|scan|privacy|status|dashboard|history|detect|install|uninstall|providers|init|setup|releases|synthesize|daemon|watch|update|contribute|help]",
+    "Usage: caitlyn [tui|repl|scan|privacy|status|dashboard|history|detect|install|uninstall|providers|init|setup|releases|synthesize|daemon|watch|os-watch|update|contribute|help]",
   ].join("\n");
 }

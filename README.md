@@ -351,6 +351,7 @@ Supported adapters currently include:
 | `./caitlyn uninstall <agent>` | Remove an integration and restore its backup |
 | `./caitlyn daemon start\|stop\|status` | Manage the local scanning daemon |
 | `./caitlyn watch [--add <dir>]` | Add filesystem observation paths |
+| `./caitlyn os-watch` | Occupancy and network energy snapshot |
 | `./caitlyn synthesize <pattern>` | Submit an explicit System II trigger |
 | `./caitlyn synthesize --status` | Inspect the evolution lineage |
 | `./caitlyn synthesize --approve <id>` | Approve a shadow candidate |
@@ -446,9 +447,13 @@ The daemon listens on `http://127.0.0.1:9070` by default.
 | `/v1/watch` | POST | Start watching directories |
 | `/v1/watch` | DELETE | Stop watching directories |
 | `/v1/status` | GET | Runtime and library status |
+| `/v1/os-watch` | GET | Occupancy, network, and ACE component energy snapshot |
 
 Scan request bodies are capped at 1 MiB. Runtime statistics and anomaly
-triggers are stored under `~/.caitlyn/` unless overridden.
+triggers are stored under `~/.caitlyn/` unless overridden. After
+`caitlyn daemon start`, the host watcher polls occupancy and network
+from `/proc` every 10 seconds and the agent component graph every 60
+seconds until the daemon is stopped.
 
 ## Evaluation
 

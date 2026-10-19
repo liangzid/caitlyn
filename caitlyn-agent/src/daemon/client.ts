@@ -6,6 +6,7 @@
  */
 
 import type { ScanResult } from "../schema.js";
+import type { PublicHostWatchSnapshot } from "../guard/host-steward.js";
 import type { DaemonStatus } from "./server.js";
 import { isDaemonRunning } from "./lifecycle.js";
 
@@ -102,6 +103,17 @@ export async function getWatchInfo(): Promise<WatchInfo | null> {
     const res = await fetch(`${DAEMON_URL}/v1/watch`, { signal: AbortSignal.timeout(2000) });
     if (!res.ok) return null;
     return (await res.json()) as WatchInfo;
+  } catch {
+    return null;
+  }
+}
+
+/** Get the latest OS occupancy/network energy snapshot. */
+export async function getOsWatchTick(): Promise<PublicHostWatchSnapshot | null> {
+  try {
+    const res = await fetch(`${DAEMON_URL}/v1/os-watch`, { signal: AbortSignal.timeout(2000) });
+    if (!res.ok) return null;
+    return (await res.json()) as PublicHostWatchSnapshot;
   } catch {
     return null;
   }

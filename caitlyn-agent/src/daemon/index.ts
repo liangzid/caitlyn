@@ -1,7 +1,13 @@
 /**
  * CAITLYN Daemon — Barrel Export
  */
-export { DaemonServer, type DaemonConfig, type DaemonStatus } from "./server.js";
+export {
+  DaemonServer,
+  DEFAULT_OCCUPANCY_POLL_MS,
+  DEFAULT_COMPONENT_POLL_MS,
+  type DaemonConfig,
+  type DaemonStatus,
+} from "./server.js";
 export {
   isDaemonRunning,
   getDaemonPid,
@@ -19,6 +25,7 @@ export {
   daemonWatch,
   getWatchInfo,
   daemonUnwatch,
+  getOsWatchTick,
   type DaemonHealth,
   type WatchInfo,
 } from "./client.js";

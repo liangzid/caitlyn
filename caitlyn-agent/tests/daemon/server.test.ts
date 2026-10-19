@@ -197,6 +197,28 @@ describe("GET /v1/status", () => {
     expect(body).toHaveProperty("defense_skills_loaded");
     expect(body).toHaveProperty("scans_total");
     expect(body.scans_total).toBeGreaterThanOrEqual(0);
+    expect(body).toHaveProperty("os_watch");
+  });
+});
+
+describe("GET /v1/os-watch", () => {
+  it("returns occupancy/network energy fields", async () => {
+    const res = await fetch(`${BASE}/v1/os-watch`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(typeof body.energy).toBe("number");
+    expect(["none", "detect"]).toContain(body.intervention);
+    expect(typeof body.calibrated).toBe("boolean");
+    expect(body.events).toBeUndefined();
+    expect(typeof body.tickUs).toBe("number");
+    expect(body.ace.diff).toBeUndefined();
+    expect(Array.isArray(body.ace.quarantined)).toBe(true);
+    expect(body.channels).toMatchObject({
+      occupancy: expect.any(Number),
+      network: expect.any(Number),
+      component: expect.any(Number),
+    });
+    expect(Array.isArray(body.hotChannels)).toBe(true);
   });
 });
 

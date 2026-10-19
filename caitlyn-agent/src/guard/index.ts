@@ -1,10 +1,13 @@
 /**
  * CAITLYN Guard — Barrel Export
  *
- * Three defense modes for protecting LLM agents:
+ * Defense modes for protecting LLM agents:
  *   1. FS Watcher  — monitors filesystem, scans files on write
  *   2. Agent Hooks — framework-level beforeToolCall / afterToolCall hooks
- *   3. Sandbox     — process-level syscall interception (future)
+ *   3. OS Watcher  — occupancy + network energy, detect-only
+ *   4. ACE Watcher — agent component-graph mutation energy
+ *   5. Host steward — fused occupancy / network / component decision
+ *   6. Sandbox     — process-level syscall interception (future)
  */
 
 // Shared
@@ -50,3 +53,62 @@ export {
   type PiAgentMiddleware,
   DEFAULT_AGENT_HOOKS_CONFIG,
 } from "./agent-hooks.js";
+
+// OS Watcher
+export {
+  OsWatcher,
+  isOsTelemetrySource,
+  mergeNetworkFeatures,
+  type OsWatchIntervention,
+  type OsWatchTick,
+  type OsWatcherConfig,
+  type OsChannelEnergies,
+} from "./os-watcher.js";
+export {
+  AceWatcher,
+  resolveComponentRoots,
+  DEFAULT_ACE_WATCHER_CONFIG,
+  type AceWatchTick,
+  type AceWatcherConfig,
+} from "./ace-watcher.js";
+export {
+  classifyComponentPath,
+  diffComponentGraph,
+  inventoryComponentGraph,
+  isMutableComponentClass,
+  type ComponentClass,
+  type ComponentGraphDiff,
+  type ComponentNode,
+} from "./component-graph.js";
+export {
+  HostSteward,
+  fuseHostChannels,
+  toPublicHostSnapshot,
+  DEFAULT_HOST_STEWARD_CONFIG,
+  type HostWatchSnapshot,
+  type PublicHostWatchSnapshot,
+  type HostIncident,
+  type HostChannelName,
+} from "./host-steward.js";
+export {
+  quarantineGraftedComponents,
+  isQuarantinableGraft,
+} from "./component-quarantine.js";
+export {
+  collectOccupancyMetrics,
+  parseProcLoadavg,
+  parseProcMeminfo,
+  parseProcStatCpu,
+  cpuBusyRatio,
+  readProcFile,
+  type OccupancyFeatures,
+  type ProcFileReader,
+} from "./os-occupancy.js";
+export {
+  computeOsEnergy,
+  DEFAULT_OS_ENERGY_CONFIG,
+  updateOsEnergyBaseline,
+  type OsFeatureVector,
+  type OsEnergyBaseline,
+  type OsEnergyConfig,
+} from "./os-energy.js";

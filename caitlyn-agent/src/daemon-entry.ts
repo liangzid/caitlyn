@@ -8,6 +8,7 @@
  * Usage: node dist/daemon-entry.js [--port 9070]
  */
 
+import * as path from "node:path";
 import { DaemonServer } from "./daemon/server.js";
 import { writePidFile, removePidFile } from "./daemon/lifecycle.js";
 import { loadConfig } from "./config.js";
@@ -16,11 +17,28 @@ import { complete } from "@earendil-works/pi-ai/compat";
 import type { LlmCallFn } from "./scanner.js";
 import { checkProviderAuth, getCredentialEnv } from "./config/credentials.js";
 
+/** Parse a positive millisecond interval from the environment. */
+function envPositiveMs(name: string): number | undefined {
+  const raw = process.env[name];
+  if (!raw) return undefined;
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) return undefined;
+  return value;
+}
+
 const args = process.argv.slice(2);
 const portArg = args.indexOf("--port");
 const port = portArg >= 0 ? parseInt(args[portArg + 1], 10) || 9070 : 9070;
 
-const server = new DaemonServer({ port });
+const server = new DaemonServer({
+  port,
+  statsDir: process.env.CAITLYN_STATS_DIR,
+  occupancyPollMs: envPositiveMs("CAITLYN_OCCUPANCY_POLL_MS"),
+  componentPollMs: envPositiveMs("CAITLYN_COMPONENT_POLL_MS"),
+  componentRoots: process.env.CAITLYN_COMPONENT_ROOTS !== undefined
+    ? process.env.CAITLYN_COMPONENT_ROOTS.split(path.delimiter).filter(Boolean)
+    : undefined,
+});
 const daemonConfig = loadConfig();
 
 // ── LLM Setup ────────────────────────────────────────────────────────

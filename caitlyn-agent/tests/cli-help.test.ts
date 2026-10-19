@@ -12,6 +12,7 @@ describe("cli help", () => {
     expect(help).toContain("privacy");
     expect(help).toContain("daemon");
     expect(help).toContain("watch");
+    expect(help).toContain("os-watch");
     expect(help).toContain("releases");
     expect(help).toContain("whats-new");
     expect(help).toContain("--force");
@@ -29,6 +30,7 @@ describe("cli help", () => {
       "privacy",
       "daemon",
       "watch",
+      "os-watch",
       "releases",
       "synthesize",
       "help",

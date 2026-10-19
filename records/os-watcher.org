@@ -1,0 +1,93 @@
+#+TITLE: Caitlyn as OS watcher
+#+DATE: 2026-10-19
+
+* Objective
+Caitlyn as a lightweight whole-OS watcher: security-管家 style
+decisions on occupancy, network, and broader cyber anomalies, using ACE
+(arxiv:2605.11442) as reference but not remaining prompt-injection-only.
+
+* Verdict (this conversation)
+Feasible as an *observation + decision layer* on top of existing daemon
+stats, not as a full EDR replacement in one feature.
+
+ACE is *not* an OS occupancy monitor. It is Agent Component Energy:
+component-graph mutation energy on mutable vertices (skills, plugins,
+MCP, configs). Paper Finding 8: Möbius stealth can sit *below* benign
+HTTP rate; Zeek/Suricata rate/signature alerts fire 0; ACE fires.
+
+So: copy ACE's *principle* (inward graph energy vs clean baseline,
+escalating detect / quarantine / rollback). Do *not* treat CPU/net
+occupancy as the primary Möbius detector. Occupancy is a complementary
+cyber layer.
+
+* Existing footholds in repo
+- ~caitlyn-agent/src/guard/fs-watcher.ts~: inotify-style file writes,
+  scan content, quarantine. Not resource occupancy.
+- ~caitlyn-agent/src/evolution/network-probe.ts~: real ~/proc/net~
+  tcp/udp counts into ~os_network~ stats events.
+- ~caitlyn-agent/src/evolution/stats-collector.ts~: EWMA + p99 anomaly
+  triggers. Sources already include ~os_network~.
+- ~caitlyn-agent/src/daemon/server.ts~ ~collectStats~: wires probe to
+  evolution. Anomaly currently tries to *synthesize a skill*, which is
+  the wrong action for OS occupancy spikes.
+- Guard plan Mode 4 (ptrace sandbox): designed, not implemented.
+  Barrel export still says sandbox is future.
+- Old roadmap: "电脑管家" for *agents on the machine*, not whole OS EDR.
+
+* Transfer from ACE
+Keep: mutable graph, energy vs clean baseline, three interventions
+(detect-only, quarantine new vertices, rollback snapshot).
+Prototype energy in the paper is first-order event count, not Shannon
+entropy (future work there too).
+
+Generalize vertices: agent components *plus* OS objects (process,
+socket, file, cgroup) as a second graph, fused later.
+
+* Working assumption
+Product scope B until 团长 overrides: agent is first-class, OS is the
+second observation layer. Linux procfs first. No process kill.
+
+* Landed (2026-10-19)
+- ~caitlyn-agent/src/guard/os-occupancy.ts~: load/cpu/mem parsers
+- ~caitlyn-agent/src/guard/os-energy.ts~: ACE-style first-order energy
+- ~caitlyn-agent/src/guard/os-watcher.ts~: detect-only tick, occupancy
+  and network split into channels
+- ~caitlyn-agent/src/guard/component-graph.ts~ + ~ace-watcher.ts~:
+  real skill/MCP/config/command inventory. First snapshot is baseline.
+  Energy is mutable mutation count (ACE prototype).
+- ~caitlyn-agent/src/guard/host-steward.ts~: OR-fusion of occupancy,
+  network, component. Incidents in ~host-incidents.jsonl~.
+- Daemon ~collectStats~ skips synthesis for occupancy, network, and
+  ~agent_component~.
+- ~GET /v1/os-watch~ and ~caitlyn os-watch~ print all three channels.
+
+* Resident loop (2026-10-19)
+Prior design was NOT resident-enough: first sample waited 60s,
+occupancy was tied to a full ACE walk, and ~caitlyn os-watch~ did a
+one-shot local tick when the daemon was down.
+
+Now:
+- First poll completes before ~daemon.start()~ resolves.
+- Occupancy+/proc/net every 10s. ACE inventory every 60s.
+- ~caitlyn os-watch~ starts the daemon if needed.
+- Live tests read this machine's ~/proc~ and spawn ~daemon-entry~.
+
+* Efficiency (2026-10-19)
+- Occupancy net probe prefers ~/proc/net/sockstat~ (O(1) in socket
+  count) instead of scanning tcp tables.
+- HTTP ~os-watch~ drops event arrays and component node lists.
+- Overlapping ~collectStats~ ticks are skipped.
+- ACE quarantine moves added skill/MCP/command grafts; config stays.
+- Live occupancy ticks on this machine stay under 20ms.
+
+* Open (blocked on 团长)
+1. Product scope: whole-OS EDR vs agent-centric watcher that *also*
+   reads OS telemetry. Working: latter first.
+2. Action on OS anomaly: alert vs kill vs quota vs synthesize. Landed
+   detect-only. Quarantine/rollback of OS objects not started.
+3. Linux-first vs cross-platform. Working: Linux.
+4. Evaluation: ACE replay traces vs live procfs vs both.
+
+* Dead ends
+Treating ACE as "watch CPU and packets like 360" contradicts the
+paper's own network-blindness result.

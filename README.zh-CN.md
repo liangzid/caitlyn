@@ -272,6 +272,7 @@ export CAITLYN_MODEL="deepseek-v4-flash"
 | `./caitlyn uninstall <agent>` | 移除集成并恢复备份 |
 | `./caitlyn daemon start\|stop\|status` | 管理本地扫描 daemon |
 | `./caitlyn watch [--add <dir>]` | 添加文件系统观察目录 |
+| `./caitlyn os-watch` | 占用与网络能量快照 |
 | `./caitlyn synthesize <pattern>` | 提交显式 System II 触发器 |
 | `./caitlyn synthesize --status` | 检查进化谱系 |
 | `./caitlyn synthesize --approve <id>` | 批准 shadow 候选 |
@@ -352,8 +353,9 @@ daemon 默认监听 `http://127.0.0.1:9070`。
 | `/v1/watch` | POST | 开始观察目录 |
 | `/v1/watch` | DELETE | 停止观察目录 |
 | `/v1/status` | GET | 运行时与防御库状态 |
+| `/v1/os-watch` | GET | 占用、网络与 ACE 组件能量快照 |
 
-扫描请求体上限为 1 MiB。除非通过配置覆盖，运行时统计与异常触发记录存储在 `~/.caitlyn/` 下。
+扫描请求体上限为 1 MiB。除非通过配置覆盖，运行时统计与异常触发记录存储在 `~/.caitlyn/` 下。`caitlyn daemon start` 之后，主机观察会每 10 秒从 `/proc` 采样占用和网络，每 60 秒扫描一次智能体组件图，直到 daemon 停止。
 
 ## 评测
 

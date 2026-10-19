@@ -11,7 +11,13 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-export type StatsEventSource = "agent_behavior" | "filesystem" | "os_network" | "evolution_self";
+export type StatsEventSource =
+  | "agent_behavior"
+  | "filesystem"
+  | "os_network"
+  | "os_occupancy"
+  | "agent_component"
+  | "evolution_self";
 
 export interface StatsEvent {
   source: StatsEventSource;

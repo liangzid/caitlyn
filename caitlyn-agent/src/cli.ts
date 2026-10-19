@@ -54,7 +54,8 @@ import {
 } from "./history.js";
 import { detectAgents, installAgent, uninstallAgent, isHookInstalled, getWatchDirsForAgents } from "./adapters/registry.js";
 import { isDaemonRunning, startDaemon, stopDaemon, daemonStatus } from "./daemon/index.js";
-import { isDaemonAvailable, daemonScan, getDaemonStatus, daemonWatch, getWatchInfo } from "./daemon/index.js";
+import { isDaemonAvailable, daemonScan, getDaemonStatus, daemonWatch, getWatchInfo, getOsWatchTick } from "./daemon/index.js";
+import { HostSteward } from "./guard/host-steward.js";
 import {
   approveDefenseSkill,
   printEvolutionStatus,
@@ -219,6 +220,36 @@ async function main() {
       const ok = await daemonWatch(dirs);
       console.log(ok ? `✅ Watching: ${dirs.join(", ")}` : "❌ Failed");
       process.exit(ok ? 0 : 1);
+    }
+
+    case "os-watch": {
+      if (!isDaemonRunning()) {
+        console.log("Starting daemon for resident host watch...");
+        const { started, message } = await startDaemon();
+        if (!started && !isDaemonRunning()) {
+          console.log(`❌ ${message}`);
+          process.exit(1);
+        }
+        await new Promise((r) => setTimeout(r, 400));
+      }
+      const daemonTick = await getOsWatchTick();
+      const tick = daemonTick ?? new HostSteward().tick();
+      const source = daemonTick ? "daemon" : "local";
+      console.log(`Host steward (${source})`);
+      console.log(`  energy: ${tick.energy.toFixed(3)}  intervention: ${tick.intervention}`);
+      if ("tickUs" in tick && typeof tick.tickUs === "number") {
+        console.log(`  tick: ${(tick.tickUs / 1000).toFixed(2)}ms`);
+      }
+      console.log(`  calibrated: ${tick.calibrated}`);
+      console.log(
+        `  channels: occupancy=${tick.channels.occupancy.toFixed(3)} ` +
+          `network=${tick.channels.network.toFixed(3)} ` +
+          `component=${tick.channels.component.toFixed(3)}`,
+      );
+      if (tick.hotChannels.length > 0) {
+        console.log(`  hot: ${tick.hotChannels.join(",")}`);
+      }
+      process.exit(0);
     }
 
     case "providers": {
