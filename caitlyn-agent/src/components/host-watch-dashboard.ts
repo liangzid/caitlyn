@@ -8,7 +8,7 @@
  * not raw CPU percent. Hot means fusion already fired detect.
  */
 
-import { visibleWidth } from "@earendil-works/pi-tui";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { DEFAULT_OS_ENERGY_CONFIG } from "../guard/os-energy.js";
 import type {
   HostChannelName,
@@ -17,11 +17,17 @@ import type {
 } from "../guard/host-steward.js";
 import { C, PAL, fg, badge, bar, gradText, keycap, panelHeader } from "../theme.js";
 import type { DashboardStats } from "../history.js";
+import {
+  agentWatchStatus,
+  type HostProcessInventory,
+  type HostProcessRow,
+  type ProcSortKey,
+} from "../guard/os-process-table.js";
 
 export const OCCUPANCY_THRESHOLD = DEFAULT_OS_ENERGY_CONFIG.energyThreshold;
 export const NETWORK_THRESHOLD = DEFAULT_OS_ENERGY_CONFIG.energyThreshold;
 export const COMPONENT_THRESHOLD = 1;
-export const SPARK_WIDTH = 28;
+export const SPARK_WIDTH = 36;
 const SPARK_GLYPHS = "▁▂▃▄▅▆▇█";
 
 export type HostWatchTab = "channels" | "ace" | "scans";
@@ -40,6 +46,10 @@ export interface HostWatchChrome {
   daemonPid: number | null;
   daemonRssKb: number | null;
   error: string | null;
+  inventory: HostProcessInventory | null;
+  procSort: ProcSortKey;
+  procScroll: number;
+  height: number;
 }
 
 function fmt(n: number | undefined, digits: number = 3): string {
@@ -97,6 +107,22 @@ function optNum(n: number | undefined, digits = 0): string {
   return typeof n === "number" && Number.isFinite(n) ? n.toFixed(digits) : "·";
 }
 
+function fmtRss(kb: number): string {
+  if (kb >= 1024 * 1024) return `${(kb / 1024 / 1024).toFixed(1)}G`;
+  if (kb >= 1024) return `${(kb / 1024).toFixed(0)}M`;
+  return `${kb}K`;
+}
+
+function fmtUptime(sec: number | null): string {
+  if (sec == null) return "·";
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
 function sockstatLine(s: HostSockstat): string {
   return (
     `tcp4 ${optNum(s.tcpInuse)}  tcp6 ${optNum(s.tcp6Inuse)}  ` +
@@ -151,8 +177,13 @@ export function formatHostWatchDashboard(view: HostWatchDashboardView): string[]
   ];
 }
 
-function pad(text: string, width: number): string {
-  return text + " ".repeat(Math.max(0, width - visibleWidth(text)));
+/** Fit one TUI line: never wider than `width` visible columns. */
+export function fitDashboardLine(text: string, width: number): string {
+  const cap = Math.max(1, width);
+  if (visibleWidth(text) <= cap) {
+    return text + " ".repeat(cap - visibleWidth(text));
+  }
+  return truncateToWidth(text, cap, "", true);
 }
 
 function renderChannelBlock(
@@ -202,6 +233,7 @@ function renderChannelsTab(
   view: HostWatchDashboardView,
   history: ChannelHistory,
   sparkW: number,
+  width: number,
 ): string[] {
   const hot = new Set(view.hotChannels);
   const f = view.os.features;
@@ -211,7 +243,7 @@ function renderChannelsTab(
   const aceExtra =
     `nodes ${view.ace.nodeCount}   mutations ${view.ace.mutationCount}   ace-tick ${(view.ace.tickUs / 1000).toFixed(2)}ms`;
   const lines = [
-    panelHeader("CHANNELS", 56),
+    panelHeader("CHANNELS", width),
     ...renderChannelBlock(
       "OCCUPANCY",
       view.channels.occupancy,
@@ -221,7 +253,6 @@ function renderChannelsTab(
       sparkW,
       occExtra,
     ),
-    "",
     ...renderChannelBlock(
       "NETWORK",
       view.channels.network,
@@ -231,7 +262,6 @@ function renderChannelsTab(
       sparkW,
       netExtra,
     ),
-    "",
     ...renderChannelBlock(
       "COMPONENT",
       view.channels.component,
@@ -241,13 +271,12 @@ function renderChannelsTab(
       sparkW,
       aceExtra,
     ),
-    "",
-    panelHeader("INCIDENTS", 56),
+    panelHeader("INCIDENTS", width),
   ];
   if (view.incidents.length === 0) {
     lines.push(`${fg(PAL.faint)}  fusion has not fired detect on this host yet${C.reset}`);
   } else {
-    for (const incident of view.incidents.slice(-8)) {
+    for (const incident of view.incidents.slice(-6)) {
       lines.push(
         `  ${fg(PAL.danger)}◆${C.reset} ${fg(PAL.dim)}${incident.at.replace("T", " ").slice(0, 19)}${C.reset}` +
           `  ${fg(PAL.magenta)}${incident.hotChannels.join(" + ")}${C.reset}` +
@@ -258,9 +287,9 @@ function renderChannelsTab(
   return lines;
 }
 
-function renderAceTab(view: HostWatchDashboardView): string[] {
+function renderAceTab(view: HostWatchDashboardView, width: number): string[] {
   const lines = [
-    panelHeader("ACE COMPONENT GRAPH", 56),
+    panelHeader("ACE COMPONENT GRAPH", width),
     `  ${fg(PAL.faint)}energy${C.reset} ${fg(PAL.ghost)}${fmt(view.ace.energy)}${C.reset}` +
       `   ${fg(PAL.faint)}nodes${C.reset} ${fg(PAL.ghost)}${view.ace.nodeCount}${C.reset}` +
       `   ${fg(PAL.faint)}mutations this tick${C.reset} ${fg(PAL.ghost)}${view.ace.mutationCount}${C.reset}` +
@@ -270,7 +299,7 @@ function renderAceTab(view: HostWatchDashboardView): string[] {
     "",
     `${fg(PAL.dim)}  Möbius/AbO grafts show up here, not in occupancy.${C.reset}`,
     "",
-    panelHeader("ROOTS", 56),
+    panelHeader("ROOTS", width),
   ];
   if (view.ace.roots.length === 0) {
     lines.push(`${fg(PAL.faint)}  (no component roots resolved)${C.reset}`);
@@ -280,7 +309,7 @@ function renderAceTab(view: HostWatchDashboardView): string[] {
     }
   }
   lines.push("");
-  lines.push(panelHeader("QUARANTINED GRAFTS", 56));
+  lines.push(panelHeader("QUARANTINED GRAFTS", width));
   if (view.ace.quarantined.length === 0) {
     lines.push(`${fg(PAL.faint)}  (none — skill/MCP/command grafts would land here)${C.reset}`);
   } else {
@@ -291,10 +320,10 @@ function renderAceTab(view: HostWatchDashboardView): string[] {
   return lines;
 }
 
-function renderScansTab(stats: DashboardStats | null): string[] {
+function renderScansTab(stats: DashboardStats | null, width: number): string[] {
   if (!stats || stats.total_scans === 0) {
     return [
-      panelHeader("SCAN TELEMETRY", 56),
+      panelHeader("SCAN TELEMETRY", width),
       `${fg(PAL.faint)}  no scan history on this machine yet${C.reset}`,
     ];
   }
@@ -302,7 +331,7 @@ function renderScansTab(stats: DashboardStats | null): string[] {
   const rateColor = rate > 0.3 ? PAL.danger : rate > 0.1 ? PAL.warn : PAL.ok;
   const tierTotal = stats.tier0_hits + stats.tier1_hits || 1;
   const lines = [
-    panelHeader("SCAN TELEMETRY", 56),
+    panelHeader("SCAN TELEMETRY", width),
     `  ${fg(PAL.faint)}scans${C.reset} ${fg(PAL.ghost)}${stats.total_scans}${C.reset}` +
       `   ${fg(PAL.faint)}detected${C.reset} ${fg(PAL.danger)}${stats.malicious_count}${C.reset}` +
       `   ${fg(PAL.faint)}clean${C.reset} ${fg(PAL.ok)}${stats.benign_count}${C.reset}` +
@@ -315,7 +344,7 @@ function renderScansTab(stats: DashboardStats | null): string[] {
   ];
   if (stats.top_defense_skills.length > 0) {
     lines.push("");
-    lines.push(panelHeader("TOP DEFENSE SKILLS", 56));
+    lines.push(panelHeader("TOP DEFENSE SKILLS", width));
     const maxHits = stats.top_defense_skills[0]?.hits ?? 1;
     for (const skill of stats.top_defense_skills.slice(0, 8)) {
       lines.push(
@@ -332,12 +361,136 @@ function tabHint(tab: HostWatchTab, id: HostWatchTab, label: string): string {
   return `${fg(PAL.faint)}${label}${C.reset}`;
 }
 
+function renderMeters(view: HostWatchDashboardView, chrome: HostWatchChrome): string[] {
+  const inv = chrome.inventory;
+  const load = inv?.load;
+  const mem = inv?.mem;
+  const memUsed = mem ? (mem.memTotalKb - mem.memAvailableKb) / mem.memTotalKb : undefined;
+  const cpu = view.os.features.cpuBusy;
+  const files =
+    inv?.openFiles != null
+      ? `${inv.openFiles}${inv.fileMax != null ? `/${inv.fileMax}` : ""}`
+      : "·";
+  return [
+    `  ${fg(PAL.faint)}uptime${C.reset} ${fg(PAL.ghost)}${fmtUptime(inv?.uptimeSec ?? null)}${C.reset}` +
+      `  ${fg(PAL.faint)}load${C.reset} ${fg(PAL.ghost)}${fmt(load?.load1, 2)} ${fmt(load?.load5, 2)} ${fmt(load?.load15, 2)}${C.reset}` +
+      `  ${fg(PAL.faint)}run${C.reset} ${fg(PAL.ghost)}${load?.runnable ?? "·"}/${load?.processes ?? "·"}${C.reset}` +
+      `  ${fg(PAL.faint)}/proc${C.reset} ${fg(PAL.ghost)}${inv?.procDirs ?? "·"}${C.reset}` +
+      `  ${fg(PAL.faint)}scan${C.reset} ${fg(PAL.ghost)}${inv ? `${inv.scanMs}ms` : "·"}${C.reset}` +
+      `  ${fg(PAL.faint)}fds${C.reset} ${fg(PAL.ghost)}${files}${C.reset}`,
+    `  ${fg(PAL.faint)}cpu${C.reset} ${bar(cpu ?? 0, 28, PAL.cyan)} ${fg(PAL.ghost)}${fmt(cpu, 2)}${C.reset}` +
+      `  ${fg(PAL.faint)}mem${C.reset} ${bar(memUsed ?? 0, 28, PAL.violet)} ${fg(PAL.ghost)}${fmt(memUsed, 2)}${C.reset}` +
+      (mem
+        ? ` ${fg(PAL.dim)}${fmtRss(mem.memTotalKb - mem.memAvailableKb)}/${fmtRss(mem.memTotalKb)}${C.reset}`
+        : ""),
+  ];
+}
+
+function statusBadge(status: ReturnType<typeof agentWatchStatus>): string {
+  switch (status) {
+    case "safe":
+      return badge("SAFE", PAL.ghost, PAL.okBg);
+    case "daemon":
+      return badge("DAEMON", PAL.ghost, PAL.cyanBg);
+    case "graft":
+      return badge("GRAFT", PAL.ghost, PAL.dangerBg);
+    default:
+      return badge("WARMING", PAL.ghost, PAL.warnBg);
+  }
+}
+
+function renderSafeAgentWindow(
+  chrome: HostWatchChrome,
+  view: HostWatchDashboardView,
+  width: number,
+): string[] {
+  const lines = [
+    panelHeader("SAFE AGENTS", width),
+    `${fg(PAL.faint)}  under Caitlyn watch · SAFE is steward-quiet, not a malware verdict${C.reset}`,
+  ];
+  const agents = (chrome.inventory?.rows ?? []).filter((row) => row.agent);
+  if (agents.length === 0) {
+    lines.push(`${fg(PAL.faint)}  no tagged agent runtimes in the current top slice${C.reset}`);
+    return lines;
+  }
+  for (const row of agents.slice(0, 12)) {
+    const status = agentWatchStatus(row, {
+      daemonPid: chrome.daemonPid,
+      aceDetect: view.ace.intervention === "detect",
+      calibrated: view.ace.calibrated,
+    });
+    const cmd = row.cmdline.length > 0 ? row.cmdline : row.comm;
+    const clip = cmd.length > Math.max(24, width - 36) ? `${cmd.slice(0, Math.max(21, width - 39))}…` : cmd;
+    lines.push(
+      `  ${statusBadge(status)} ${fg(PAL.dim)}${String(row.pid).padStart(7)}${C.reset}` +
+        ` ${fg(PAL.ghost)}${fmtRss(row.rssKb).padStart(6)}${C.reset}` +
+        ` ${fg(PAL.text)}${clip}${C.reset}`,
+    );
+  }
+  return lines;
+}
+
+function joinColumns(left: string[], right: string[], leftW: number, totalW: number): string[] {
+  const rule = `${fg(PAL.border)}│${C.reset}`;
+  const rightW = Math.max(24, totalW - leftW - 1);
+  const rows = Math.max(left.length, right.length);
+  const out: string[] = [];
+  for (let i = 0; i < rows; i++) {
+    out.push(
+      fitDashboardLine(
+        fitDashboardLine(left[i] ?? "", leftW) + rule + fitDashboardLine(right[i] ?? "", rightW),
+        totalW,
+      ),
+    );
+  }
+  return out;
+}
+
+function renderProcessTable(chrome: HostWatchChrome, width: number, rowBudget: number): string[] {
+  const inv = chrome.inventory;
+  const sortMark = chrome.procSort === "cpu" ? "CPU" : "RSS";
+  const head = panelHeader(`PROCESSES sort=${sortMark}`, width);
+  if (!inv) {
+    return [head, `${fg(PAL.faint)}  process inventory not ready${C.reset}`];
+  }
+  const header =
+    `${fg(PAL.faint)}` +
+    `PID`.padStart(7) +
+    ` ${"PPID".padStart(7)} ${"RSS".padStart(6)} ${"CPU%".padStart(6)} ${"THR".padStart(4)} S ` +
+    `COMM             COMMAND${C.reset}`;
+  const start = Math.max(0, chrome.procScroll);
+  const slice = inv.rows.slice(start, start + Math.max(3, rowBudget));
+  const lines = [head, header];
+  const cmdBudget = Math.max(16, width - 56);
+  for (const row of slice) {
+    const tag = row.agent ? badge("AGENT", PAL.ghost, PAL.violetBg) : "";
+    const cpu = row.cpuPct == null ? "   ·  " : row.cpuPct.toFixed(1).padStart(6);
+    const cpuColor = (row.cpuPct ?? 0) > 50 ? PAL.danger : (row.cpuPct ?? 0) > 15 ? PAL.warn : PAL.text;
+    const commColor = row.pid === chrome.daemonPid ? PAL.cyan : row.agent ? PAL.violet : PAL.text;
+    const comm = row.comm.slice(0, 16).padEnd(16);
+    const cmd = (row.cmdline || row.comm).slice(0, cmdBudget);
+    lines.push(
+      `${fg(PAL.dim)}${String(row.pid).padStart(7)}${C.reset}` +
+        ` ${fg(PAL.faint)}${String(row.ppid).padStart(7)}${C.reset}` +
+        ` ${fg(PAL.ghost)}${fmtRss(row.rssKb).padStart(6)}${C.reset}` +
+        ` ${fg(cpuColor)}${cpu}${C.reset}` +
+        ` ${fg(PAL.dim)}${String(row.threads).padStart(4)}${C.reset}` +
+        ` ${fg(PAL.dim)}${row.state}${C.reset} ` +
+        `${fg(commColor)}${comm}${C.reset} ${fg(PAL.text)}${cmd}${C.reset} ${tag}`,
+    );
+  }
+  if (inv.rows.length > slice.length + start) {
+    lines.push(`${fg(PAL.faint)}  … ${inv.rows.length - start - slice.length} more  j/k to scroll${C.reset}`);
+  }
+  return lines;
+}
+
 function renderFooter(chrome: HostWatchChrome): string {
   const pause = chrome.paused
     ? badge("PAUSED", PAL.warn, PAL.warnBg)
     : badge("LIVE", PAL.ok, PAL.okBg);
   return (
-    `${tabHint(chrome.tab, "channels", "1 channels")}  ` +
+    `${tabHint(chrome.tab, "channels", "1 host")}  ` +
     `${tabHint(chrome.tab, "ace", "2 ace")}  ` +
     `${tabHint(chrome.tab, "scans", "3 scans")}   ${pause}  ` +
     `${fg(PAL.faint)}${(chrome.refreshMs / 1000).toFixed(1)}s${C.reset}  ` +
@@ -346,8 +499,15 @@ function renderFooter(chrome: HostWatchChrome): string {
   );
 }
 
+function fillHeight(lines: string[], width: number, height: number): string[] {
+  const h = Math.max(lines.length, height);
+  const out = lines.slice();
+  while (out.length < h) out.push(fitDashboardLine("", width));
+  return out.slice(0, h);
+}
+
 /**
- * Themed live-frame lines. Width is used to pad the glass body.
+ * Themed live-frame lines. Fills the terminal height like htop.
  */
 export function renderHostWatchLiveLines(
   view: HostWatchDashboardView | null,
@@ -357,25 +517,39 @@ export function renderHostWatchLiveLines(
   width: number,
 ): string[] {
   const inner = Math.max(40, width);
-  const sparkW = Math.min(SPARK_WIDTH, Math.max(12, inner - 36));
+  const sparkW = Math.min(SPARK_WIDTH, Math.max(16, Math.floor(inner / 3)));
   const title = gradText("CAITLYN HOST WATCH", PAL.cyan, PAL.magenta, true);
   const head: string[] = [
     panelHeader("HOST WATCH", inner),
-    `  ${title}  ${fg(PAL.faint)}detect-only steward · not a process killer${C.reset}`,
+    `  ${title}  ${fg(PAL.faint)}detect-only · no kill${C.reset}`,
   ];
   if (chrome.error) {
     head.push(`  ${badge("OFFLINE", PAL.ghost, PAL.dangerBg)} ${fg(PAL.warn)}${chrome.error}${C.reset}`);
   }
   if (!view) {
-    return [...head, `  ${fg(PAL.faint)}waiting for daemon snapshot…${C.reset}`, "", renderFooter(chrome)];
+    const waiting = [...head, `  ${fg(PAL.faint)}waiting for daemon snapshot…${C.reset}`, "", renderFooter(chrome)];
+    return fillHeight(waiting.map((line) => fitDashboardLine(line, inner)), inner, chrome.height);
   }
-  const body =
-    chrome.tab === "ace"
-      ? renderAceTab(view)
-      : chrome.tab === "scans"
-        ? renderScansTab(stats)
-        : renderChannelsTab(view, history, sparkW);
-  return [...head, `  ${renderStatusRow(view, chrome)}`, "", ...body, "", renderFooter(chrome)].map(
-    (line) => pad(line, inner),
+  const status = [`  ${renderStatusRow(view, chrome)}`, ...renderMeters(view, chrome)];
+  let body: string[];
+  if (chrome.tab === "ace") {
+    body = renderAceTab(view, inner);
+  } else if (chrome.tab === "scans") {
+    body = renderScansTab(stats, inner);
+  } else {
+    const leftW = inner >= 120 ? Math.floor(inner * 0.58) : inner;
+    const sparkLeft = Math.min(SPARK_WIDTH, Math.max(12, leftW - 40));
+    const channels = renderChannelsTab(view, history, sparkLeft, leftW);
+    const upper =
+      inner >= 120
+        ? joinColumns(channels, renderSafeAgentWindow(chrome, view, inner - leftW - 1), leftW, inner)
+        : [...channels, "", ...renderSafeAgentWindow(chrome, view, inner)];
+    const used = head.length + status.length + upper.length + 3;
+    const procBudget = Math.max(10, chrome.height - used);
+    body = [...upper, "", ...renderProcessTable(chrome, inner, procBudget)];
+  }
+  const framed = [...head, ...status, "", ...body, "", renderFooter(chrome)].map((line) =>
+    fitDashboardLine(line, inner),
   );
+  return fillHeight(framed, inner, chrome.height);
 }

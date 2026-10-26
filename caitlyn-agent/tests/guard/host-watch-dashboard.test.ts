@@ -5,12 +5,16 @@ import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { visibleWidth } from "@earendil-works/pi-tui";
 import {
   energyBar,
+  fitDashboardLine,
   formatHostWatchDashboard,
   renderHostWatchLiveLines,
   sparkline,
+  type HostWatchChrome,
 } from "../../src/components/host-watch-dashboard.js";
+import { collectHostProcessInventory } from "../../src/guard/os-process-table.js";
 import {
   HOST_INCIDENTS_FILENAME,
   readRecentIncidents,
@@ -97,6 +101,46 @@ describe("sparkline", () => {
 });
 
 describe("renderHostWatchLiveLines", () => {
+  it("draws a ranked process table when inventory is present", () => {
+    const lines = renderHostWatchLiveLines(
+      sampleView(),
+      { occupancy: [0.1], network: [0], component: [0] },
+      {
+        tab: "channels",
+        paused: false,
+        refreshMs: 1000,
+        samples: 1,
+        daemonPid: 42,
+        daemonRssKb: 4096,
+        error: null,
+        inventory: {
+          load: { load1: 1, load5: 1, load15: 1, runnable: 2, processes: 100 },
+          mem: { memTotalKb: 64 * 1024 * 1024, memAvailableKb: 32 * 1024 * 1024 },
+          uptimeSec: 3600,
+          openFiles: 100,
+          fileMax: 1000,
+          procDirs: 50,
+          leaders: 50,
+          rows: [
+            { pid: 42, comm: "caitlyn", state: "S", ppid: 1, threads: 4, rssKb: 80 * 1024, cpuPct: 3.2, agent: true, cmdline: "caitlyn dashboard" },
+            { pid: 7, comm: "sshd", state: "S", ppid: 1, threads: 1, rssKb: 4000, cpuPct: 0.1, agent: false, cmdline: "/usr/sbin/sshd" },
+          ],
+          scanMs: 12,
+        },
+        procSort: "rss",
+        procScroll: 0,
+        height: 48,
+      },
+      null,
+      140,
+    ).join("\n");
+    expect(lines).toContain("caitlyn");
+    expect(lines).toContain("sshd");
+    expect(lines).toContain("AGENT");
+    expect(lines).toContain("SAFE");
+    expect(lines).toContain("caitlyn dashboard");
+  });
+
   it("draws themed channel chrome and sockstat", () => {
     const lines = renderHostWatchLiveLines(
       sampleView(),
@@ -109,6 +153,10 @@ describe("renderHostWatchLiveLines", () => {
         daemonPid: 1,
         daemonRssKb: 4096,
         error: null,
+        inventory: null,
+        procSort: "cpu",
+        procScroll: 0,
+        height: 40,
       },
       null,
       80,
@@ -116,7 +164,57 @@ describe("renderHostWatchLiveLines", () => {
     expect(lines).toContain("OCCUPANCY");
     expect(lines).toContain("tcp4 30");
     expect(lines).toContain("WATCHING");
-    expect(lines).toContain("1 channels");
+    expect(lines).toContain("1 host");
+    expect(lines).toContain("process inventory not ready");
+  });
+
+  it("keeps every live line within the TUI width, including 279", () => {
+    const collected = collectHostProcessInventory(null, "rss", 40);
+    const inventory = {
+      ...collected.inventory,
+      rows: collected.inventory.rows.map((row) => ({
+        ...row,
+        cmdline: `${row.cmdline} ${"x".repeat(400)}`,
+      })),
+    };
+    const chrome: HostWatchChrome = {
+      tab: "channels",
+      paused: false,
+      refreshMs: 1000,
+      samples: 4,
+      daemonPid: process.pid,
+      daemonRssKb: 4096,
+      error: null,
+      inventory,
+      procSort: "rss",
+      procScroll: 0,
+      height: 50,
+    };
+    for (const width of [40, 80, 100, 120, 200, 279, 300]) {
+      const lines = renderHostWatchLiveLines(
+        sampleView({
+          ace: { ...sampleView().ace, roots: ["/home/zi/.cursor", "/very/long/".repeat(20)] },
+        }),
+        { occupancy: [0.1, 3, 1], network: [0, 2], component: [0, 0.4] },
+        { ...chrome, height: 50 },
+        null,
+        width,
+      );
+      expect(lines.length).toBeGreaterThan(10);
+      for (const line of lines) {
+        expect(visibleWidth(line), `width=${width} line=${JSON.stringify(line.slice(0, 120))}`).toBeLessThanOrEqual(
+          width,
+        );
+      }
+    }
+  });
+});
+
+describe("fitDashboardLine", () => {
+  it("truncates ANSI-colored overflow to the cap", () => {
+    const raw = `${"\x1b[38;5;45m"}${"W".repeat(300)}${"\x1b[0m"}`;
+    const fitted = fitDashboardLine(raw, 279);
+    expect(visibleWidth(fitted)).toBeLessThanOrEqual(279);
   });
 });
 

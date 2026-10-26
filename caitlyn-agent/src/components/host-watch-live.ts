@@ -2,7 +2,7 @@
  * CAITLYN Guard — Live host-watch TUI
  *
  * Full-screen, refreshing steward view. Keyboard like htop: stay until
- * q. Not a process table.
+ * q. Process table is ranked and detect-only: no kill.
  *
  * KEYPOINT FOR 团长 REVIEW: this process never kills PIDs. Detect-only.
  */
@@ -19,6 +19,13 @@ import { getDaemonPid } from "../daemon/lifecycle.js";
 import { getDashboard, type DashboardStats } from "../history.js";
 import type { HostWatchDashboardView } from "../guard/host-steward.js";
 import {
+  collectHostProcessInventory,
+  type HostProcessInventory,
+  type ProcCpuPrev,
+  type ProcSortKey,
+} from "../guard/os-process-table.js";
+import {
+  fitDashboardLine,
   renderHostWatchLiveLines,
   type ChannelHistory,
   type HostWatchChrome,
@@ -85,6 +92,10 @@ export class HostWatchLiveScreen implements Component {
   private running = false;
   private error: string | null = null;
   private fetchInFlight = false;
+  private inventory: HostProcessInventory | null = null;
+  private procPrev: ProcCpuPrev | null = null;
+  private procSort: ProcSortKey = "cpu";
+  private procScroll = 0;
 
   constructor(opts: HostWatchLiveOptions) {
     this.opts = opts;
@@ -128,6 +139,9 @@ export class HostWatchLiveScreen implements Component {
         this.error = "daemon snapshot unavailable — caitlyn daemon start";
       }
       this.stats = safeScanStats();
+      const collected = collectHostProcessInventory(this.procPrev, this.procSort, 80);
+      this.inventory = collected.inventory;
+      this.procPrev = collected.prev;
       this.opts.requestRender();
     } finally {
       this.fetchInFlight = false;
@@ -136,6 +150,9 @@ export class HostWatchLiveScreen implements Component {
 
   render(width: number): string[] {
     const pid = getDaemonPid();
+    const envLines = Number(process.env.LINES);
+    const height = Math.max(24, process.stdout.rows ?? (Number.isFinite(envLines) && envLines > 0 ? envLines : 30));
+    const cols = Math.max(1, width);
     const chrome: HostWatchChrome = {
       tab: this.tab,
       paused: this.paused,
@@ -144,8 +161,14 @@ export class HostWatchLiveScreen implements Component {
       daemonPid: pid,
       daemonRssKb: pid != null ? readDaemonRssKb(pid) : null,
       error: this.error,
+      inventory: this.inventory,
+      procSort: this.procSort,
+      procScroll: this.procScroll,
+      height,
     };
-    return renderHostWatchLiveLines(this.view, this.history, chrome, this.stats, width);
+    return renderHostWatchLiveLines(this.view, this.history, chrome, this.stats, cols).map((line) =>
+      fitDashboardLine(line, cols),
+    );
   }
 
   handleInput(data: string): { consume: boolean } | void {
@@ -171,6 +194,28 @@ export class HostWatchLiveScreen implements Component {
     }
     if (data === "3") {
       this.tab = "scans";
+      this.opts.requestRender();
+      return { consume: true };
+    }
+    if (data === "P" || data === "p") {
+      this.procSort = "cpu";
+      this.procScroll = 0;
+      this.opts.requestRender();
+      return { consume: true };
+    }
+    if (data === "M" || data === "m") {
+      this.procSort = "rss";
+      this.procScroll = 0;
+      this.opts.requestRender();
+      return { consume: true };
+    }
+    if (data === "j" || data === "\x1b[B") {
+      this.procScroll += 1;
+      this.opts.requestRender();
+      return { consume: true };
+    }
+    if (data === "k" || data === "\x1b[A") {
+      this.procScroll = Math.max(0, this.procScroll - 1);
       this.opts.requestRender();
       return { consume: true };
     }

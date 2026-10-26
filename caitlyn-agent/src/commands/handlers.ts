@@ -533,7 +533,7 @@ export function showHelp(self: TUIHost): void {
     section("SCANNING & DEFENSE"),
     `  /scan <content>      Security scan for injection attacks`,
     `  /status              Defense library status`,
-    `  /dashboard           Live host-watch TUI (channels, ACE, scans)`,
+    `  /dashboard           Fullscreen host watch (procs, ACE, scans)`,
     `  /host                Same live host-watch TUI`,
     `  /guard               Agent protection & watch status`,
     `  /history             Recent scan history`,

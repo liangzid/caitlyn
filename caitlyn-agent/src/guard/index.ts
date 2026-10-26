@@ -111,6 +111,18 @@ export {
   type ProcFileReader,
 } from "./os-occupancy.js";
 export {
+  collectHostProcessInventory,
+  parseProcPidStat,
+  parseProcCmdline,
+  isAgentTaggedProcess,
+  agentWatchStatus,
+  type HostProcessInventory,
+  type HostProcessRow,
+  type ProcSortKey,
+  type ProcCpuPrev,
+  type AgentWatchStatus,
+} from "./os-process-table.js";
+export {
   computeOsEnergy,
   DEFAULT_OS_ENERGY_CONFIG,
   updateOsEnergyBaseline,

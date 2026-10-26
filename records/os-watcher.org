@@ -97,7 +97,5 @@ Snapshot printer first. 团长 rejected it: flash summary, too thin,
 not Caitlyn glass TUI.
 
 * Host dashboard (live TUI)
-~caitlyn dashboard~ is a resident frame: 1s refresh, space pause,
-1/2/3 tabs (channels / ACE / scans), sparks, sockstat tw/orphan,
-daemon RSS. TTY only; pipes still get the snapshot. Not a process
-table. Detect-only.
+Fullscreen htop-style frame. Tab 1: meters + ranked /proc table
+(CPU/RSS, agent tags). Tab 2 ACE, tab 3 scans. No kill. Detect-only.

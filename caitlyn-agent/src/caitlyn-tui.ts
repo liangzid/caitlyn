@@ -993,7 +993,7 @@ export class CaitlynTUI {
     });
     this.hostWatchLive = screen;
     screen.start();
-    this.tui.showOverlay(screen, { anchor: "center", width: "96%", maxHeight: "92%" });
+    this.tui.showOverlay(screen, { anchor: "center", width: "100%", maxHeight: "100%" });
   }
 
   private stopHostWatchLive(): void {
