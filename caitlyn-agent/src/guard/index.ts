@@ -84,9 +84,13 @@ export {
   HostSteward,
   fuseHostChannels,
   toPublicHostSnapshot,
+  toHostWatchDashboardView,
+  readRecentIncidents,
   DEFAULT_HOST_STEWARD_CONFIG,
+  HOST_INCIDENTS_FILENAME,
   type HostWatchSnapshot,
   type PublicHostWatchSnapshot,
+  type HostWatchDashboardView,
   type HostIncident,
   type HostChannelName,
 } from "./host-steward.js";

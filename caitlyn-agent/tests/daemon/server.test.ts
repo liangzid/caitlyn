@@ -219,6 +219,10 @@ describe("GET /v1/os-watch", () => {
       component: expect.any(Number),
     });
     expect(Array.isArray(body.hotChannels)).toBe(true);
+    expect(Array.isArray(body.incidents)).toBe(true);
+    expect(typeof body.polls).toBe("number");
+    expect(typeof body.occupancyPollMs).toBe("number");
+    expect(typeof body.componentPollMs).toBe("number");
   });
 });
 

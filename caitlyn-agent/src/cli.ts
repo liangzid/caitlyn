@@ -8,7 +8,7 @@
  *   caitlyn scan <content>    Quick security scan
  *   caitlyn privacy <sanitize|restore> [--level standard|strict] <text>
  *   caitlyn status            Show defense skill/attack library status
- *   caitlyn dashboard         Show defense stats dashboard
+ *   caitlyn dashboard         Host-watch channels plus scan stats
  *   caitlyn history [N]       Show recent scan history
  *   caitlyn history --export json [path]   Export scan history to file
  *   caitlyn history --clear   Clear scan history
@@ -54,8 +54,9 @@ import {
 } from "./history.js";
 import { detectAgents, installAgent, uninstallAgent, isHookInstalled, getWatchDirsForAgents } from "./adapters/registry.js";
 import { isDaemonRunning, startDaemon, stopDaemon, daemonStatus } from "./daemon/index.js";
-import { isDaemonAvailable, daemonScan, getDaemonStatus, daemonWatch, getWatchInfo, getOsWatchTick } from "./daemon/index.js";
-import { HostSteward } from "./guard/host-steward.js";
+import { isDaemonAvailable, daemonScan, getDaemonStatus, daemonWatch, getWatchInfo, getHostWatchDashboard } from "./daemon/index.js";
+import { HostSteward, toHostWatchDashboardView } from "./guard/host-steward.js";
+import { formatHostWatchDashboard } from "./components/host-watch-dashboard.js";
 import {
   approveDefenseSkill,
   printEvolutionStatus,
@@ -100,6 +101,32 @@ async function makeLlmCallSafe(): Promise<LlmCallFn> {
 function checkDependencies(): string[] {
   const missing: string[] = [];
   return missing;
+}
+
+/** Start the resident daemon if it is not already up. */
+async function ensureResidentDaemon(): Promise<boolean> {
+  if (isDaemonRunning()) return true;
+  console.log("Starting daemon for host watch...");
+  const { started, message } = await startDaemon();
+  if (!started && !isDaemonRunning()) {
+    console.log(`❌ ${message}`);
+    return false;
+  }
+  await new Promise((r) => setTimeout(r, 400));
+  return true;
+}
+
+/** Print the live host dashboard; local tick if the daemon is unreachable. */
+async function printHostWatchDashboard(): Promise<void> {
+  const view =
+    (await getHostWatchDashboard()) ??
+    toHostWatchDashboardView(new HostSteward().tick(), {
+      incidents: [],
+      polls: 0,
+      occupancyPollMs: 0,
+      componentPollMs: 0,
+    });
+  console.log(formatHostWatchDashboard(view).join("\n"));
 }
 
 async function main() {
@@ -223,32 +250,8 @@ async function main() {
     }
 
     case "os-watch": {
-      if (!isDaemonRunning()) {
-        console.log("Starting daemon for resident host watch...");
-        const { started, message } = await startDaemon();
-        if (!started && !isDaemonRunning()) {
-          console.log(`❌ ${message}`);
-          process.exit(1);
-        }
-        await new Promise((r) => setTimeout(r, 400));
-      }
-      const daemonTick = await getOsWatchTick();
-      const tick = daemonTick ?? new HostSteward().tick();
-      const source = daemonTick ? "daemon" : "local";
-      console.log(`Host steward (${source})`);
-      console.log(`  energy: ${tick.energy.toFixed(3)}  intervention: ${tick.intervention}`);
-      if ("tickUs" in tick && typeof tick.tickUs === "number") {
-        console.log(`  tick: ${(tick.tickUs / 1000).toFixed(2)}ms`);
-      }
-      console.log(`  calibrated: ${tick.calibrated}`);
-      console.log(
-        `  channels: occupancy=${tick.channels.occupancy.toFixed(3)} ` +
-          `network=${tick.channels.network.toFixed(3)} ` +
-          `component=${tick.channels.component.toFixed(3)}`,
-      );
-      if (tick.hotChannels.length > 0) {
-        console.log(`  hot: ${tick.hotChannels.join(",")}`);
-      }
+      if (!(await ensureResidentDaemon())) process.exit(1);
+      await printHostWatchDashboard();
       process.exit(0);
     }
 
@@ -435,23 +438,21 @@ async function main() {
       process.exit(result.success ? 0 : 1);
     }
     case "dashboard": {
+      if (!(await ensureResidentDaemon())) process.exit(1);
+      await printHostWatchDashboard();
       const stats = getDashboard();
-      if (stats.total_scans === 0) { console.log("📊 No scan data yet."); process.exit(0); }
-      console.log("📊 CAITLYN Defense Dashboard");
-      console.log("═══════════════════════════");
-      console.log(`Total Scans:      ${stats.total_scans}`);
-      console.log(`Detected (🚨):    ${stats.malicious_count}`);
-      console.log(`Clean (✅):       ${stats.benign_count}`);
-      console.log(`Detection Rate:   ${(stats.detection_rate * 100).toFixed(1)}%`);
-      console.log(`Avg Latency:      ${stats.avg_latency_ms.toFixed(2)}ms`);
-      console.log(`Avg Tokens:       ${stats.avg_tokens.toFixed(1)}`);
-      console.log(`Total Tokens:     ${stats.total_tokens}`);
-      console.log(`Tier 0 Hits:      ${stats.tier0_hits}`);
-      console.log(`Tier 1 Hits:      ${stats.tier1_hits}`);
-      console.log(`Last Scan:        ${stats.last_scan_at ?? "N/A"}`);
+      console.log("");
+      console.log("SCAN TELEMETRY");
+      if (stats.total_scans === 0) {
+        console.log("  No scan data yet.");
+        process.exit(0);
+      }
+      console.log(`  scans: ${stats.total_scans}  detected: ${stats.malicious_count}  clean: ${stats.benign_count}`);
+      console.log(`  detection_rate: ${(stats.detection_rate * 100).toFixed(1)}%`);
+      console.log(`  avg_latency_ms: ${stats.avg_latency_ms.toFixed(2)}  avg_tokens: ${stats.avg_tokens.toFixed(1)}`);
+      console.log(`  tier0: ${stats.tier0_hits}  tier1: ${stats.tier1_hits}`);
       if (stats.top_defense_skills.length > 0) {
-        console.log("Top Defense skills:");
-        for (const a of stats.top_defense_skills) console.log(`  ${a.id}: ${a.hits} hits`);
+        for (const a of stats.top_defense_skills) console.log(`  skill ${a.id}: ${a.hits} hits`);
       }
       process.exit(0);
     }

@@ -23,7 +23,10 @@ import { FSWatcher } from "../guard/fs-watcher.js";
 import { AceWatcher } from "../guard/ace-watcher.js";
 import {
   HostSteward,
+  readRecentIncidents,
+  toHostWatchDashboardView,
   toPublicHostSnapshot,
+  type HostWatchDashboardView,
   type PublicHostWatchSnapshot,
 } from "../guard/host-steward.js";
 import { isOsTelemetrySource } from "../guard/os-watcher.js";
@@ -127,11 +130,14 @@ export class DaemonServer {
 
   constructor(config: Partial<DaemonConfig> = {}) {
     this.config = {
-      port: 9070,
-      host: "127.0.0.1",
-      statsDir: path.join(os.homedir(), ".caitlyn", "stats"),
-      ...config,
+      port: config.port ?? 9070,
+      host: config.host ?? "127.0.0.1",
+      statsDir: config.statsDir ?? path.join(os.homedir(), ".caitlyn", "stats"),
     };
+    if (config.evolutionConfig) this.config.evolutionConfig = config.evolutionConfig;
+    if (config.componentRoots) this.config.componentRoots = config.componentRoots;
+    if (config.occupancyPollMs !== undefined) this.config.occupancyPollMs = config.occupancyPollMs;
+    if (config.componentPollMs !== undefined) this.config.componentPollMs = config.componentPollMs;
     this.evolutionConfig = config.evolutionConfig ?? loadEvolutionConfig();
     this.statsCollector = new StatsCollector(this.config.statsDir!);
     this.statsCollector.load();
@@ -464,10 +470,21 @@ export class DaemonServer {
     res.end(JSON.stringify({ ok: true }));
   }
 
+  private dashboardViewFromSnapshot(
+    raw: ReturnType<HostSteward["tick"]>,
+  ): HostWatchDashboardView {
+    return toHostWatchDashboardView(raw, {
+      incidents: readRecentIncidents(this.config.statsDir!, 8),
+      polls: this.hostWatchPolls,
+      occupancyPollMs: this.occupancyPollMs,
+      componentPollMs: this.componentPollMs,
+    });
+  }
+
   private async _osWatch(res: http.ServerResponse): Promise<void> {
     const raw = this.steward.getLastSnapshot() ?? this.steward.tick();
     res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(toPublicHostSnapshot(raw)));
+    res.end(JSON.stringify(this.dashboardViewFromSnapshot(raw)));
   }
 
   private async _status(res: http.ServerResponse): Promise<void> {

@@ -26,7 +26,7 @@ const HELP = `
 Commands:
   /scan <content>   — Scan content for attacks
   /status           — Show defense skill/attack library status
-  /dashboard        — Show defense stats (scans, latency, tokens)
+  /dashboard        — Host-watch channels plus scan stats
   /history [N]      — Show recent scan history
   /help             — Show this help
   /quit, /exit      — Exit CAITLYN
@@ -117,8 +117,20 @@ async function doStatus() {
 }
 
 async function doDashboard() {
+  const { getHostWatchDashboard } = await import("./daemon/client.js");
+  const { formatHostWatchDashboard } = await import("./components/host-watch-dashboard.js");
+  const { HostSteward, toHostWatchDashboardView } = await import("./guard/host-steward.js");
+  const view =
+    (await getHostWatchDashboard()) ??
+    toHostWatchDashboardView(new HostSteward().tick(), {
+      incidents: [],
+      polls: 0,
+      occupancyPollMs: 0,
+      componentPollMs: 0,
+    });
+  console.log(formatHostWatchDashboard(view).join("\n"));
   const stats = getDashboard();
-  if (stats.total_scans === 0) { console.log("📊 No scan data yet."); return; }
+  if (stats.total_scans === 0) { console.log("SCAN TELEMETRY: no scan data yet."); return; }
   console.log(`📊 CAITLYN Defense Dashboard`);
   console.log(`   Scans: ${stats.total_scans} | Detected: ${stats.malicious_count} | Clean: ${stats.benign_count}`);
   console.log(`   Detection Rate: ${(stats.detection_rate * 100).toFixed(1)}%`);

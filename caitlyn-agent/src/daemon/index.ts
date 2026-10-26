@@ -26,6 +26,7 @@ export {
   getWatchInfo,
   daemonUnwatch,
   getOsWatchTick,
+  getHostWatchDashboard,
   type DaemonHealth,
   type WatchInfo,
 } from "./client.js";

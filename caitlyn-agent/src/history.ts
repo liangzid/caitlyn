@@ -195,7 +195,7 @@ export function getDashboard(): DashboardStats {
   // Top defense skills by hit count
   const abCounts = new Map<string, number>();
   for (const e of entries) {
-    for (const abId of e.defense_skill_hits) {
+    for (const abId of e.defense_skill_hits ?? []) {
       abCounts.set(abId, (abCounts.get(abId) ?? 0) + 1);
     }
   }

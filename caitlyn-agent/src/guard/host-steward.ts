@@ -66,6 +66,16 @@ export interface PublicHostWatchSnapshot {
   };
 }
 
+export const HOST_INCIDENTS_FILENAME = "host-incidents.jsonl";
+
+/** Wire-safe snapshot plus dashboard fields (incidents, poll cadence). */
+export interface HostWatchDashboardView extends PublicHostWatchSnapshot {
+  incidents: HostIncident[];
+  polls: number;
+  occupancyPollMs: number;
+  componentPollMs: number;
+}
+
 /** Drop heavy fields before HTTP. */
 export function toPublicHostSnapshot(
   snapshot: HostWatchSnapshot,
@@ -96,7 +106,58 @@ export function toPublicHostSnapshot(
       quarantined: snapshot.ace.quarantined,
       tickUs: snapshot.ace.tickUs,
     },
+    };
+}
+
+/** Attach incidents and poll counters for the host dashboard. */
+export function toHostWatchDashboardView(
+  snapshot: HostWatchSnapshot,
+  extras: {
+    incidents: HostIncident[];
+    polls: number;
+    occupancyPollMs: number;
+    componentPollMs: number;
+  },
+): HostWatchDashboardView {
+  return {
+    ...toPublicHostSnapshot(snapshot),
+    incidents: extras.incidents,
+    polls: extras.polls,
+    occupancyPollMs: extras.occupancyPollMs,
+    componentPollMs: extras.componentPollMs,
   };
+}
+
+/**
+ * Read the last N host incidents from jsonl. Detect-only log; no synthesis.
+ */
+export function readRecentIncidents(
+  statsDir: string,
+  limit: number = 8,
+): HostIncident[] {
+  const file = path.join(statsDir, HOST_INCIDENTS_FILENAME);
+  if (!fs.existsSync(file)) return [];
+  let text: string;
+  try {
+    text = fs.readFileSync(file, "utf-8");
+  } catch {
+    return [];
+  }
+  const lines = text.trim().split("\n").filter((line) => line.length > 0);
+  const slice = lines.slice(-Math.max(0, limit));
+  const incidents: HostIncident[] = [];
+  for (const line of slice) {
+    try {
+      const parsed = JSON.parse(line) as HostIncident;
+      if (parsed.intervention !== "detect") continue;
+      if (!Array.isArray(parsed.hotChannels)) continue;
+      if (!parsed.channels) continue;
+      incidents.push(parsed);
+    } catch {
+      // Skip a corrupt line; keep serving the dashboard.
+    }
+  }
+  return incidents;
 }
 
 export interface HostIncident {
@@ -216,7 +277,7 @@ export class HostSteward {
     if (!this.statsDir) return;
     try {
       fs.mkdirSync(this.statsDir, { recursive: true });
-      const file = path.join(this.statsDir, "host-incidents.jsonl");
+      const file = path.join(this.statsDir, HOST_INCIDENTS_FILENAME);
       fs.appendFileSync(file, `${JSON.stringify(incident)}\n`, "utf-8");
     } catch {
       // Steward must not crash the daemon on disk errors.

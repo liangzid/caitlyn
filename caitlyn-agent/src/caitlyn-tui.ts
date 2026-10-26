@@ -49,6 +49,7 @@ import type { MessageEntry } from "./session/session-types.js";
 import { C, PAL, fg, paint, badge, gradLines, gradText, gradColorAt, selectListTheme, estimateTokens, translateLlmError, randomDefenseQuote } from "./theme.js";
 import {
   buildDashboardOverlay,
+  buildHostWatchOverlay,
   buildStatusOverlay,
   buildHistoryOverlay,
   buildModelSelectorOverlay,
@@ -384,9 +385,12 @@ export class CaitlynTUI {
       // ── Quick-launch overlays (only when NO overlay active) ──
       if (!tui.hasOverlay() && (self.isResponding || self.editor.disableSubmit)) {
         if (data === "\x04") {
-          tui.showOverlay(buildDashboardOverlay(), {
-            anchor: "center", width: "70%", maxHeight: "70%",
-          });
+          void (async () => {
+            const overlay = await buildDashboardOverlay();
+            tui.showOverlay(overlay, {
+              anchor: "center", width: "70%", maxHeight: "70%",
+            });
+          })();
           return { consume: true };
         }
         if (data === "\x13") {
@@ -609,7 +613,13 @@ export class CaitlynTUI {
         break;
       }
       case "/dashboard": {
-        this.tui.showOverlay(buildDashboardOverlay(), { anchor: "center", width: "70%", maxHeight: "70%" });
+        const overlay = await buildDashboardOverlay();
+        this.tui.showOverlay(overlay, { anchor: "center", width: "70%", maxHeight: "70%" });
+        break;
+      }
+      case "/host": {
+        const overlay = await buildHostWatchOverlay();
+        this.tui.showOverlay(overlay, { anchor: "center", width: "70%", maxHeight: "70%" });
         break;
       }
       case "/history": {

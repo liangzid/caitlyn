@@ -23,7 +23,9 @@ import { getProviders, getModels } from "../llm.js";
 import { getContextWindow, getModelDisplay } from "../config/models.js";
 import { detectAgents, isHookInstalled, getWatchDirsForAgents } from "../adapters/registry.js";
 import { isDaemonRunning, getDaemonPid } from "../daemon/index.js";
-import { getWatchInfo } from "../daemon/client.js";
+import { getHostWatchDashboard, getWatchInfo } from "../daemon/client.js";
+import { formatHostWatchDashboard } from "./host-watch-dashboard.js";
+import type { HostWatchDashboardView } from "../guard/host-steward.js";
 import {
   C, PAL, fg, paint, badge, bar, gradText,
   selectListTheme, categoryColor, tierColor, verdictMeta,
@@ -129,18 +131,30 @@ export async function buildGuardOverlay(): Promise<Component> {
   return makeBox("GUARD STATUS", lines, 22);
 }
 
-/**
- * Dashboard — defense telemetry in KPI cards, tier-split gauges,
- * performance row, and a top-skills ranking.
- */
-export function buildDashboardOverlay(): Component {
+/** Host-channel panel. Daemon snapshot only; no process-kill UI. */
+export async function buildHostWatchOverlay(): Promise<Component> {
+  const view = await getHostWatchDashboard();
+  return makeBox("HOST WATCH", hostWatchOverlayLines(view), 28);
+}
+
+function hostWatchOverlayLines(view: HostWatchDashboardView | null): string[] {
+  if (!view) {
+    return [
+      `${fg(PAL.warn)}daemon not reachable${C.reset}`,
+      `${fg(PAL.dim)}start with ${paint(" caitlyn daemon start ", PAL.ghost, PAL.grayBg, true)}${C.reset}`,
+      `${fg(PAL.dim)}then /host or caitlyn dashboard${C.reset}`,
+    ];
+  }
+  return formatHostWatchDashboard(view).map((line) => `${fg(PAL.text)}${line}${C.reset}`);
+}
+
+function scanDashboardLines(): string[] {
   const stats = getDashboard();
   if (stats.total_scans === 0) {
-    return makeBox("DEFENSE DASHBOARD", [
+    return [
       `${fg(PAL.faint)}No scan data yet.${C.reset}`,
-      "",
-      `${fg(PAL.dim)}Run ${paint(" /scan <content> ", PAL.ghost, PAL.grayBg, true)} or a scan via the agent to populate telemetry.${C.reset}`,
-    ]);
+      `${fg(PAL.dim)}Run ${paint(" /scan <content> ", PAL.ghost, PAL.grayBg, true)} to populate scan telemetry.${C.reset}`,
+    ];
   }
 
   const rate = stats.detection_rate;
@@ -193,7 +207,21 @@ export function buildDashboardOverlay(): Component {
     lines.push(`${fg(PAL.faint)}last scan  ${stats.last_scan_at.replace("T", " ").slice(0, 19)}${C.reset}`);
   }
 
-  return makeBox("DEFENSE DASHBOARD", lines);
+  return lines;
+}
+
+/**
+ * Dashboard — live host channels first, then scan KPIs.
+ */
+export async function buildDashboardOverlay(): Promise<Component> {
+  const view = await getHostWatchDashboard();
+  const lines = [
+    ...hostWatchOverlayLines(view),
+    "",
+    `${gradText("SCAN TELEMETRY", PAL.cyan, PAL.violet, true)}`,
+    ...scanDashboardLines(),
+  ];
+  return makeBox("HOST WATCH", lines, 28);
 }
 
 /**
