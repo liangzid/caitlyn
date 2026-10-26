@@ -19,7 +19,7 @@ new prompt-injection failures into verified, reusable defense skills.
 ![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.19-18212b?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-2675bf?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-%3E%3D3.10-3572A5?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-489_TS_%7C_41_Python-20a387?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-530_TS_%7C_41_Python-20a387?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-7253ed?style=flat-square)
 
 </div>
@@ -28,6 +28,7 @@ new prompt-injection failures into verified, reusable defense skills.
 
 ## What's New
 
+- 🖥️ **2026-10-26** · 0.7.0 — `caitlyn dashboard` is a live fullscreen host watch now! It fills the terminal with occupancy, sockstat, ACE, a ranked `/proc` table, and a SAFE AGENTS pane, without killing processes!
 - 👁️ **2026-10-19** · 0.6.0 — The local daemon is now a resident host watcher! It polls occupancy and network from `/proc`, watches agent component grafts with ACE-style energy, and quarantines newly added skills without synthesizing a defense skill from a CPU spike!
 - 🔄 **2026-10-14** · 0.5.3 — `caitlyn repl` actually starts now! Help and README name the live commands, `caitlyn install --force` refreshes copied plugins, and plugin staging uses Node fs so Windows cmd.exe can build!
 - 🎉 **2026-10-07** · 0.5.2 — What's New is a dated list now! `caitlyn releases` and `/releases` open the same page!

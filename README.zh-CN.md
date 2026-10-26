@@ -17,7 +17,7 @@
 ![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.19-18212b?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-2675bf?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-%3E%3D3.10-3572A5?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-489_TS_%7C_41_Python-20a387?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-530_TS_%7C_41_Python-20a387?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-7253ed?style=flat-square)
 
 </div>
@@ -26,6 +26,7 @@
 
 ## What's New
 
+- 🖥️ **2026-10-26** · 0.7.0 — `caitlyn dashboard` 现在是全屏常驻主机观察界面了！占用、sockstat、ACE、按 CPU/RSS 排序的 `/proc` 表，还有 SAFE AGENTS 窗，都铺满终端，而且不会杀进程！
 - 👁️ **2026-10-19** · 0.6.0 — 本地 daemon 现在是常驻主机观察器了！它从 `/proc` 采占用和网络，用 ACE 式能量看智能体组件嫁接，并隔离新加的 skill，而不会因为 CPU 尖峰去合成一条防御技能！
 - 🔄 **2026-10-14** · 0.5.3 — `caitlyn repl` 终于会启动了！help 和 README 写上了真实命令，`caitlyn install --force` 会刷新已复制的插件，插件打包改用 Node fs，Windows cmd.exe 也能 build！
 - 🎉 **2026-10-07** · 0.5.2 — What's New 现在按日期排开了！`caitlyn releases` 和终端里的 `/releases` 打开的是同一页！

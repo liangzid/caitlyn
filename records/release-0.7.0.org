@@ -1,0 +1,11 @@
+#+title: CAITLYN 0.7.0 Release
+#+date: 2026-10-26
+
+* Scope
+- Live fullscreen ~caitlyn dashboard~ (TTY). Snapshot printer for pipes.
+- Ranked ~/proc~ table, sockstat extras, ACE pane, SAFE AGENTS window.
+- Detect-only. No process kill.
+
+* Release boundary
+- Version: 0.7.0 (0.6.0 + 0.1 minor).
+- Git tag: v0.7.0.

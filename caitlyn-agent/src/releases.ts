@@ -18,6 +18,11 @@ export interface ReleaseNote {
 /** Published releases. Keep the newest entry at index 0. */
 export const RELEASE_NOTES: readonly ReleaseNote[] = [
   {
+    date: "2026-10-26",
+    version: "0.7.0",
+    summary: "🖥️ `caitlyn dashboard` is a live fullscreen host watch now! It fills the terminal with occupancy, sockstat, ACE, a ranked /proc table, and a SAFE AGENTS pane, without killing processes!",
+  },
+  {
     date: "2026-10-19",
     version: "0.6.0",
     summary: "👁️ The local daemon is now a resident host watcher! It polls occupancy and network from /proc, watches agent component grafts with ACE-style energy, and quarantines newly added skills without synthesizing a defense skill from a CPU spike!",
