@@ -6,6 +6,7 @@ import { describe, it, expect } from "vitest";
 import {
   collectNetworkMetrics,
   parseProcNetTable,
+  parseSockstatFields,
   parseSockstatInuse,
 } from "../src/evolution/network-probe.js";
 
@@ -43,6 +44,11 @@ describe("parseSockstatInuse", () => {
     ].join("\n");
     expect(parseSockstatInuse(text, "TCP")).toBe(32);
     expect(parseSockstatInuse(text, "UDP")).toBe(8);
+    expect(parseSockstatFields(text, "TCP")).toMatchObject({
+      inuse: 32,
+      orphan: 0,
+      tw: 19,
+    });
   });
 });
 
@@ -51,7 +57,7 @@ describe("collectNetworkMetrics", () => {
     const metrics = collectNetworkMetrics();
     for (const m of metrics) {
       expect(m.source).toBe("os_network");
-      expect(m.metric).toMatch(/^(tcp|tcp6|udp|udp6)_(sockets|established|inuse)$/);
+      expect(m.metric).toMatch(/^(tcp|tcp6|udp|udp6)_(sockets|established|inuse|orphan|tw)$/);
       expect(m.value).toBeGreaterThanOrEqual(0);
       expect(Number.isFinite(Date.parse(m.at))).toBe(true);
     }

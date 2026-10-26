@@ -86,11 +86,13 @@ export {
   toPublicHostSnapshot,
   toHostWatchDashboardView,
   readRecentIncidents,
+  sockstatFromEvents,
   DEFAULT_HOST_STEWARD_CONFIG,
   HOST_INCIDENTS_FILENAME,
   type HostWatchSnapshot,
   type PublicHostWatchSnapshot,
   type HostWatchDashboardView,
+  type HostSockstat,
   type HostIncident,
   type HostChannelName,
 } from "./host-steward.js";

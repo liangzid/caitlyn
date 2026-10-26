@@ -45,37 +45,52 @@ export function readProcNetFile(path: string): string | null {
 }
 
 /**
- * Parse `TCP: inuse N` / `UDP: inuse N` lines from /proc/net/sockstat.
- * This is O(1) in the number of sockets, unlike scanning tcp tables.
+ * Parse `TCP: inuse N orphan N tw N` style key/value pairs.
+ * Missing keys stay absent. This is O(1) in socket count.
  */
-export function parseSockstatInuse(text: string, proto: string): number | null {
+export function parseSockstatFields(
+  text: string,
+  proto: string,
+): Record<string, number> | null {
   const prefix = `${proto}:`;
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed.startsWith(prefix)) continue;
-    const match = /\binuse\s+(\d+)/.exec(trimmed);
-    if (!match) return null;
-    const value = Number(match[1]);
-    return Number.isFinite(value) ? value : null;
+    const parts = trimmed.slice(prefix.length).trim().split(/\s+/);
+    const out: Record<string, number> = {};
+    for (let i = 0; i + 1 < parts.length; i += 2) {
+      const value = Number(parts[i + 1]);
+      if (!Number.isFinite(value)) continue;
+      out[parts[i]] = value;
+    }
+    return Object.keys(out).length > 0 ? out : null;
   }
   return null;
+}
+
+/** Parse `TCP: inuse N` / `UDP: inuse N` from sockstat. */
+export function parseSockstatInuse(text: string, proto: string): number | null {
+  const fields = parseSockstatFields(text, proto);
+  const value = fields?.inuse;
+  return typeof value === "number" ? value : null;
 }
 
 function sockstatEvents(
   reader: ProcNetReader,
   file: string,
   at: string,
-  suffixes: Array<{ proto: string; metric: string }>,
+  mappings: Array<{ proto: string; field: string; metric: string }>,
 ): StatsEvent[] | null {
   const text = reader(file);
   if (text === null) return null;
   const out: StatsEvent[] = [];
-  for (const { proto, metric } of suffixes) {
-    const value = parseSockstatInuse(text, proto);
-    if (value === null) continue;
+  for (const { proto, field, metric } of mappings) {
+    const fields = parseSockstatFields(text, proto);
+    const value = fields?.[field];
+    if (typeof value !== "number") continue;
     out.push({ source: "os_network", metric, value, at });
   }
-  return out;
+  return out.length > 0 ? out : [];
 }
 
 /** Read real /proc/net connection counts (Linux only). */
@@ -85,12 +100,14 @@ export function collectNetworkMetrics(
 ): StatsEvent[] {
   const fromSockstat = [
     ...(sockstatEvents(reader, "/proc/net/sockstat", at, [
-      { proto: "TCP", metric: "tcp_inuse" },
-      { proto: "UDP", metric: "udp_inuse" },
+      { proto: "TCP", field: "inuse", metric: "tcp_inuse" },
+      { proto: "TCP", field: "orphan", metric: "tcp_orphan" },
+      { proto: "TCP", field: "tw", metric: "tcp_tw" },
+      { proto: "UDP", field: "inuse", metric: "udp_inuse" },
     ]) ?? []),
     ...(sockstatEvents(reader, "/proc/net/sockstat6", at, [
-      { proto: "TCP6", metric: "tcp6_inuse" },
-      { proto: "UDP6", metric: "udp6_inuse" },
+      { proto: "TCP6", field: "inuse", metric: "tcp6_inuse" },
+      { proto: "UDP6", field: "inuse", metric: "udp6_inuse" },
     ]) ?? []),
   ];
   if (fromSockstat.length > 0) return fromSockstat;

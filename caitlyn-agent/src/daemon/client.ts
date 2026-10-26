@@ -129,6 +129,7 @@ export async function getHostWatchDashboard(): Promise<HostWatchDashboardView | 
       polls: typeof body.polls === "number" ? body.polls : 0,
       occupancyPollMs: typeof body.occupancyPollMs === "number" ? body.occupancyPollMs : 0,
       componentPollMs: typeof body.componentPollMs === "number" ? body.componentPollMs : 0,
+      sockstat: body.sockstat ?? {},
     };
   } catch {
     return null;

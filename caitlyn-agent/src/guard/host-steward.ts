@@ -68,12 +68,30 @@ export interface PublicHostWatchSnapshot {
 
 export const HOST_INCIDENTS_FILENAME = "host-incidents.jsonl";
 
+/** Cheap sockstat fields carried on the dashboard, not the energy vector. */
+export interface HostSockstat {
+  tcpInuse?: number;
+  tcpOrphan?: number;
+  tcpTw?: number;
+  udpInuse?: number;
+  tcp6Inuse?: number;
+  udp6Inuse?: number;
+}
+
+export interface HostIncident {
+  at: string;
+  intervention: "detect";
+  hotChannels: HostChannelName[];
+  channels: HostChannelScores;
+}
+
 /** Wire-safe snapshot plus dashboard fields (incidents, poll cadence). */
 export interface HostWatchDashboardView extends PublicHostWatchSnapshot {
   incidents: HostIncident[];
   polls: number;
   occupancyPollMs: number;
   componentPollMs: number;
+  sockstat: HostSockstat;
 }
 
 /** Drop heavy fields before HTTP. */
@@ -125,7 +143,23 @@ export function toHostWatchDashboardView(
     polls: extras.polls,
     occupancyPollMs: extras.occupancyPollMs,
     componentPollMs: extras.componentPollMs,
+    sockstat: sockstatFromEvents(snapshot.os.events),
   };
+}
+
+/** Fold sockstat events into a compact dashboard record. */
+export function sockstatFromEvents(events: StatsEvent[]): HostSockstat {
+  const sockstat: HostSockstat = {};
+  for (const event of events) {
+    if (event.source !== "os_network") continue;
+    if (event.metric === "tcp_inuse") sockstat.tcpInuse = event.value;
+    if (event.metric === "tcp_orphan") sockstat.tcpOrphan = event.value;
+    if (event.metric === "tcp_tw") sockstat.tcpTw = event.value;
+    if (event.metric === "udp_inuse") sockstat.udpInuse = event.value;
+    if (event.metric === "tcp6_inuse") sockstat.tcp6Inuse = event.value;
+    if (event.metric === "udp6_inuse") sockstat.udp6Inuse = event.value;
+  }
+  return sockstat;
 }
 
 /**
@@ -158,13 +192,6 @@ export function readRecentIncidents(
     }
   }
   return incidents;
-}
-
-export interface HostIncident {
-  at: string;
-  intervention: "detect";
-  hotChannels: HostChannelName[];
-  channels: HostChannelScores;
 }
 
 export interface HostStewardConfig {
