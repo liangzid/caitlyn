@@ -48,14 +48,13 @@ import { getContextWindow, getModelDisplay } from "./config/models.js";
 import type { MessageEntry } from "./session/session-types.js";
 import { C, PAL, fg, paint, badge, gradLines, gradText, gradColorAt, selectListTheme, estimateTokens, translateLlmError, randomDefenseQuote } from "./theme.js";
 import {
-  buildDashboardOverlay,
-  buildHostWatchOverlay,
   buildStatusOverlay,
   buildHistoryOverlay,
   buildModelSelectorOverlay,
   buildGuardOverlay,
   buildReleaseOverlay,
 } from "./components/overlays.js";
+import { HostWatchLiveScreen } from "./components/host-watch-live.js";
 import {
   doScan,
   doDefenseSkillList,
@@ -244,6 +243,7 @@ export class CaitlynTUI {
   private currentLoader: CancellableLoader | null = null;
   private sigintHandler: (() => void) | null = null;
   private rejectionHandler: ((reason: unknown) => void) | null = null;
+  private hostWatchLive: HostWatchLiveScreen | null = null;
 
   private constructor(
     tui: TUI,
@@ -330,6 +330,7 @@ export class CaitlynTUI {
       // Esc: universal dismiss / abort (matchesKey handles Kitty protocol)
       if (matchesKey(data, "escape")) {
         if (tui.hasOverlay()) {
+          self.stopHostWatchLive();
           tui.hideOverlay();
           return { consume: true };
         }
@@ -345,7 +346,7 @@ export class CaitlynTUI {
       }
       // Tab: dismiss overlay or focus editor
       if (data === "\t" || data === "\x09") {
-        if (tui.hasOverlay()) {
+        if (tui.hasOverlay() && !self.hostWatchLive) {
           tui.hideOverlay();
           return { consume: true };
         }
@@ -353,6 +354,7 @@ export class CaitlynTUI {
       }
       // q: dismiss display overlay (non-interactive overlays only)
       if (data === "q" && tui.hasOverlay()) {
+        self.stopHostWatchLive();
         tui.hideOverlay();
         return { consume: true };
       }
@@ -360,6 +362,7 @@ export class CaitlynTUI {
       // Ctrl+C: dismiss overlay if active, otherwise quit
       if (matchesKey(data, "ctrl+c")) {
         if (tui.hasOverlay()) {
+          self.stopHostWatchLive();
           tui.hideOverlay();
         } else {
           self.stop();
@@ -385,12 +388,7 @@ export class CaitlynTUI {
       // ── Quick-launch overlays (only when NO overlay active) ──
       if (!tui.hasOverlay() && (self.isResponding || self.editor.disableSubmit)) {
         if (data === "\x04") {
-          void (async () => {
-            const overlay = await buildDashboardOverlay();
-            tui.showOverlay(overlay, {
-              anchor: "center", width: "70%", maxHeight: "70%",
-            });
-          })();
+          self.openHostWatchLive();
           return { consume: true };
         }
         if (data === "\x13") {
@@ -612,14 +610,9 @@ export class CaitlynTUI {
         this.tui.showOverlay(buildStatusOverlay(), { anchor: "center", width: "70%", maxHeight: "70%" });
         break;
       }
-      case "/dashboard": {
-        const overlay = await buildDashboardOverlay();
-        this.tui.showOverlay(overlay, { anchor: "center", width: "70%", maxHeight: "70%" });
-        break;
-      }
+      case "/dashboard":
       case "/host": {
-        const overlay = await buildHostWatchOverlay();
-        this.tui.showOverlay(overlay, { anchor: "center", width: "70%", maxHeight: "70%" });
+        this.openHostWatchLive();
         break;
       }
       case "/history": {
@@ -988,10 +981,31 @@ export class CaitlynTUI {
     this.editor.disableSubmit = false;
     this.tui.setFocus(this.editor);
   }
+  private openHostWatchLive(): void {
+    this.stopHostWatchLive();
+    const screen = new HostWatchLiveScreen({
+      requestRender: () => this.tui.requestRender(),
+      isVisible: () => this.tui.hasOverlay(),
+      onQuit: () => {
+        this.stopHostWatchLive();
+        this.tui.hideOverlay();
+      },
+    });
+    this.hostWatchLive = screen;
+    screen.start();
+    this.tui.showOverlay(screen, { anchor: "center", width: "96%", maxHeight: "92%" });
+  }
+
+  private stopHostWatchLive(): void {
+    this.hostWatchLive?.stop();
+    this.hostWatchLive = null;
+  }
+
   stop(): void {
     if (!this.running) return; // idempotent
     this.running = false;
     this.sessionMgr.flush();
+    this.stopHostWatchLive();
     this.tui.stop();
 
     if (this.footerTimer) {

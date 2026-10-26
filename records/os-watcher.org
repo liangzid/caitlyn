@@ -93,9 +93,11 @@ Treating ACE as "watch CPU and packets like 360" contradicts the
 paper's own network-blindness result.
 
 * Host dashboard (part 1)
-Live channel overlay, not process-list htop. CLI ~caitlyn dashboard~
-and ~caitlyn os-watch~ print the same text. TUI ~/host~ and
-~/dashboard~ fetch ~GET /v1/os-watch~ (channels, sockstat inuse,
-ACE nodes, quarantine paths, host-incidents.jsonl). Bars are energy
-over threshold 3 (component threshold 1). No unique-destination
-counts: sockstat does not expose remotes.
+Snapshot printer first. 团长 rejected it: flash summary, too thin,
+not Caitlyn glass TUI.
+
+* Host dashboard (live TUI)
+~caitlyn dashboard~ is a resident frame: 1s refresh, space pause,
+1/2/3 tabs (channels / ACE / scans), sparks, sockstat tw/orphan,
+daemon RSS. TTY only; pipes still get the snapshot. Not a process
+table. Detect-only.

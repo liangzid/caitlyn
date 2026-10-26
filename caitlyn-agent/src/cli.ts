@@ -46,7 +46,6 @@ import {
   buildDefenseSkillIndex,
 } from "./library.js";
 import {
-  getDashboard,
   getHistory,
   loadHistory,
   clearHistory,
@@ -57,6 +56,7 @@ import { isDaemonRunning, startDaemon, stopDaemon, daemonStatus } from "./daemon
 import { isDaemonAvailable, daemonScan, getDaemonStatus, daemonWatch, getWatchInfo, getHostWatchDashboard } from "./daemon/index.js";
 import { HostSteward, toHostWatchDashboardView } from "./guard/host-steward.js";
 import { formatHostWatchDashboard } from "./components/host-watch-dashboard.js";
+import { runHostWatchLiveApp } from "./components/host-watch-live.js";
 import {
   approveDefenseSkill,
   printEvolutionStatus,
@@ -439,21 +439,11 @@ async function main() {
     }
     case "dashboard": {
       if (!(await ensureResidentDaemon())) process.exit(1);
-      await printHostWatchDashboard();
-      const stats = getDashboard();
-      console.log("");
-      console.log("SCAN TELEMETRY");
-      if (stats.total_scans === 0) {
-        console.log("  No scan data yet.");
+      if (!process.stdout.isTTY) {
+        await printHostWatchDashboard();
         process.exit(0);
       }
-      console.log(`  scans: ${stats.total_scans}  detected: ${stats.malicious_count}  clean: ${stats.benign_count}`);
-      console.log(`  detection_rate: ${(stats.detection_rate * 100).toFixed(1)}%`);
-      console.log(`  avg_latency_ms: ${stats.avg_latency_ms.toFixed(2)}  avg_tokens: ${stats.avg_tokens.toFixed(1)}`);
-      console.log(`  tier0: ${stats.tier0_hits}  tier1: ${stats.tier1_hits}`);
-      if (stats.top_defense_skills.length > 0) {
-        for (const a of stats.top_defense_skills) console.log(`  skill ${a.id}: ${a.hits} hits`);
-      }
+      await runHostWatchLiveApp();
       process.exit(0);
     }
     case "history": {

@@ -8,6 +8,8 @@ import * as path from "node:path";
 import {
   energyBar,
   formatHostWatchDashboard,
+  renderHostWatchLiveLines,
+  sparkline,
 } from "../../src/components/host-watch-dashboard.js";
 import {
   HOST_INCIDENTS_FILENAME,
@@ -46,6 +48,7 @@ function sampleView(over: Partial<HostWatchDashboardView> = {}): HostWatchDashbo
     polls: 3,
     occupancyPollMs: 10000,
     componentPollMs: 60000,
+    sockstat: { tcpInuse: 30, tcpTw: 4, udpInuse: 2 },
     ...over,
   };
 }
@@ -76,10 +79,44 @@ describe("formatHostWatchDashboard", () => {
     expect(text).toContain("CAITLYN HOST WATCH");
     expect(text).toContain("*occupancy");
     expect(text).toContain("hot: occupancy");
+    expect(text).toContain("tcp4 30");
     expect(text).toContain("tcp_sockets=30");
     expect(text).toContain("nodes=12");
     expect(text).toContain("2026-10-26T00:01:00.000Z  occupancy");
     expect(text).not.toContain("undefined");
+  });
+});
+
+describe("sparkline", () => {
+  it("pads an empty series and scales a rising series", () => {
+    expect(sparkline([], 8)).toContain("········");
+    const rising = sparkline([0, 1, 2, 3], 4);
+    expect(rising).toContain("▁");
+    expect(rising).toContain("█");
+  });
+});
+
+describe("renderHostWatchLiveLines", () => {
+  it("draws themed channel chrome and sockstat", () => {
+    const lines = renderHostWatchLiveLines(
+      sampleView(),
+      { occupancy: [0.1, 0.2], network: [0, 0.1], component: [0, 0] },
+      {
+        tab: "channels",
+        paused: false,
+        refreshMs: 1000,
+        samples: 2,
+        daemonPid: 1,
+        daemonRssKb: 4096,
+        error: null,
+      },
+      null,
+      80,
+    ).join("\n");
+    expect(lines).toContain("OCCUPANCY");
+    expect(lines).toContain("tcp4 30");
+    expect(lines).toContain("WATCHING");
+    expect(lines).toContain("1 channels");
   });
 });
 

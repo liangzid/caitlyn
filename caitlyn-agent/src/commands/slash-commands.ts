@@ -37,11 +37,11 @@ export const CAITLYN_COMMANDS: CaitlynCommand[] = [
   },
   {
     name: "dashboard",
-    description: "Host-watch channels plus scan telemetry",
+    description: "Live host-watch TUI",
   },
   {
     name: "host",
-    description: "Live occupancy, network, and ACE dashboard",
+    description: "Live host-watch TUI",
   },
   {
     name: "history",

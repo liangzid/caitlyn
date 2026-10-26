@@ -8,10 +8,9 @@
 
 import {
   SelectList,
-  visibleWidth,
   type Component,
 } from "@earendil-works/pi-tui";
-import { getDashboard, loadHistory } from "../history.js";
+import { loadHistory } from "../history.js";
 import {
   loadDefenseSkills,
   loadAttacks,
@@ -23,9 +22,7 @@ import { getProviders, getModels } from "../llm.js";
 import { getContextWindow, getModelDisplay } from "../config/models.js";
 import { detectAgents, isHookInstalled, getWatchDirsForAgents } from "../adapters/registry.js";
 import { isDaemonRunning, getDaemonPid } from "../daemon/index.js";
-import { getHostWatchDashboard, getWatchInfo } from "../daemon/client.js";
-import { formatHostWatchDashboard } from "./host-watch-dashboard.js";
-import type { HostWatchDashboardView } from "../guard/host-steward.js";
+import { getWatchInfo } from "../daemon/client.js";
 import {
   C, PAL, fg, paint, badge, bar, gradText,
   selectListTheme, categoryColor, tierColor, verdictMeta,
@@ -51,14 +48,6 @@ export function buildReleaseOverlay(): Component {
 export function makeBox(title: string, lines: string[], maxHeight = 20): ScrollableBox {
   const visibleLines = Math.min(maxHeight - 4, lines.length + 4);
   return new ScrollableBox(title, lines, Math.max(5, visibleLines));
-}
-
-/** A KPI card cell: dim label left, colored bold value right-aligned. */
-function kpiCard(label: string, value: string, color: number, cellWidth = 20): string {
-  const labelStr = `${fg(PAL.faint)}${label}${C.reset}`;
-  const valueStr = `${fg(color)}${C.bold}${value}${C.reset}`;
-  const gap = Math.max(2, cellWidth - visibleWidth(labelStr) - visibleWidth(valueStr));
-  return labelStr + " ".repeat(gap) + valueStr;
 }
 
 /**
@@ -129,99 +118,6 @@ export async function buildGuardOverlay(): Promise<Component> {
   }
 
   return makeBox("GUARD STATUS", lines, 22);
-}
-
-/** Host-channel panel. Daemon snapshot only; no process-kill UI. */
-export async function buildHostWatchOverlay(): Promise<Component> {
-  const view = await getHostWatchDashboard();
-  return makeBox("HOST WATCH", hostWatchOverlayLines(view), 28);
-}
-
-function hostWatchOverlayLines(view: HostWatchDashboardView | null): string[] {
-  if (!view) {
-    return [
-      `${fg(PAL.warn)}daemon not reachable${C.reset}`,
-      `${fg(PAL.dim)}start with ${paint(" caitlyn daemon start ", PAL.ghost, PAL.grayBg, true)}${C.reset}`,
-      `${fg(PAL.dim)}then /host or caitlyn dashboard${C.reset}`,
-    ];
-  }
-  return formatHostWatchDashboard(view).map((line) => `${fg(PAL.text)}${line}${C.reset}`);
-}
-
-function scanDashboardLines(): string[] {
-  const stats = getDashboard();
-  if (stats.total_scans === 0) {
-    return [
-      `${fg(PAL.faint)}No scan data yet.${C.reset}`,
-      `${fg(PAL.dim)}Run ${paint(" /scan <content> ", PAL.ghost, PAL.grayBg, true)} to populate scan telemetry.${C.reset}`,
-    ];
-  }
-
-  const rate = stats.detection_rate;
-  const rateColor = rate > 0.3 ? PAL.danger : rate > 0.1 ? PAL.warn : PAL.ok;
-  const lines: string[] = [];
-
-  // ── KPI grid (2 cards per row) ─────────────────────────────
-  lines.push(
-    kpiCard("TOTAL SCANS", String(stats.total_scans), PAL.cyan) +
-      kpiCard("THREATS DETECTED", String(stats.malicious_count), PAL.danger),
-    kpiCard("CLEAN", String(stats.benign_count), PAL.ok) +
-      kpiCard("DETECTION RATE", `${(rate * 100).toFixed(1)}%`, rateColor),
-  );
-  lines.push(`${fg(PAL.faint)}detection${C.reset} ${bar(rate, 24, rateColor)}`);
-
-  // ── Tier split ─────────────────────────────────────────────
-  const t0 = stats.tier0_hits;
-  const t1 = stats.tier1_hits;
-  const tierTotal = t0 + t1 || 1;
-  lines.push("");
-  lines.push(`${gradText("TIER SPLIT", PAL.cyan, PAL.violet, true)}`);
-  lines.push(
-    ` ${fg(tierColor(0))}◆${C.reset} ${fg(PAL.dim)}T0 · deterministic${C.reset}  ${bar(t0 / tierTotal, 14, tierColor(0))} ${fg(PAL.ghost)}${t0}${C.reset}`,
-    ` ${fg(tierColor(1))}◆${C.reset} ${fg(PAL.dim)}T1 · LLM verdict${C.reset}  ${bar(t1 / tierTotal, 14, tierColor(1))} ${fg(PAL.ghost)}${t1}${C.reset}`,
-  );
-
-  // ── Performance row ────────────────────────────────────────
-  lines.push("");
-  lines.push(`${gradText("PERFORMANCE", PAL.cyan, PAL.violet, true)}`);
-  lines.push(
-    ` ${fg(PAL.faint)}latency${C.reset} ${fg(PAL.ghost)}${stats.avg_latency_ms.toFixed(0)}ms${C.reset}` +
-      `   ${fg(PAL.faint)}avg tokens${C.reset} ${fg(PAL.ghost)}${stats.avg_tokens.toFixed(0)}${C.reset}` +
-      `   ${fg(PAL.faint)}total tokens${C.reset} ${fg(PAL.ghost)}${stats.total_tokens.toLocaleString()}${C.reset}`,
-  );
-
-  // ── Top defense skills ─────────────────────────────────────────
-  if (stats.top_defense_skills.length > 0) {
-    lines.push("");
-    lines.push(`${gradText("TOP DEFENSE SKILLS", PAL.cyan, PAL.violet, true)}`);
-    const maxHits = stats.top_defense_skills[0]?.hits ?? 1;
-    for (const a of stats.top_defense_skills.slice(0, 5)) {
-      lines.push(
-        ` ${fg(PAL.violet)}◆${C.reset} ${fg(PAL.text)}${a.id}${C.reset}  ${bar(a.hits / maxHits, 10, PAL.violet)} ${fg(PAL.ghost)}${a.hits}${C.reset} ${fg(PAL.faint)}hits${C.reset}`,
-      );
-    }
-  }
-
-  if (stats.last_scan_at) {
-    lines.push("");
-    lines.push(`${fg(PAL.faint)}last scan  ${stats.last_scan_at.replace("T", " ").slice(0, 19)}${C.reset}`);
-  }
-
-  return lines;
-}
-
-/**
- * Dashboard — live host channels first, then scan KPIs.
- */
-export async function buildDashboardOverlay(): Promise<Component> {
-  const view = await getHostWatchDashboard();
-  const lines = [
-    ...hostWatchOverlayLines(view),
-    "",
-    `${gradText("SCAN TELEMETRY", PAL.cyan, PAL.violet, true)}`,
-    ...scanDashboardLines(),
-  ];
-  return makeBox("HOST WATCH", lines, 28);
 }
 
 /**

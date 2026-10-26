@@ -20,7 +20,7 @@ export function formatCliHelp(): string {
     "  privacy <sanitize|restore> [--level standard|strict] <text>",
     "                             Mask or restore identifiers on the CLI",
     "  status                     Show defense skill/attack library status",
-    "  dashboard                  Host-watch channels plus scan stats",
+    "  dashboard                  Live host-watch TUI (snapshot if not a TTY)",
     "  history [N]                Show recent scan history (default 20)",
     "  history --export json [p]  Export scan history to file",
     "  history --clear            Clear all scan history",
