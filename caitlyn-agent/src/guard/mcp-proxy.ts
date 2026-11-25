@@ -16,7 +16,8 @@ import {
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { AgentHooksEngine } from "./agent-hooks.js";
-import { restoreInbound } from "../privacy/protect.js";
+import type { PrivacyLevel } from "../config.js";
+import { protectOutbound, restoreInbound } from "../privacy/protect.js";
 
 /** Extract the model-readable text represented by an MCP tool result. */
 export function callToolResultScanText(result: CallToolResult): string {
@@ -58,8 +59,88 @@ function replaceWithSanitizedText(result: CallToolResult, text: string): CallToo
   return replaced;
 }
 
+function protectText(text: string, level: PrivacyLevel): string {
+  try {
+    return protectOutbound(text, undefined, level).text;
+  } catch {
+    return text;
+  }
+}
+
+function sanitizeValue(value: unknown, level: PrivacyLevel): { value: unknown; changed: boolean } {
+  if (typeof value === "string") {
+    const sanitized = protectText(value, level);
+    return { value: sanitized, changed: sanitized !== value };
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const raw = String(value);
+    const sanitized = protectText(raw, level);
+    const numeric = Number(sanitized);
+    const next = Number.isFinite(numeric) && sanitized.trim() !== "" ? numeric : sanitized;
+    return { value: next, changed: next !== value };
+  }
+  if (Array.isArray(value)) {
+    let changed = false;
+    const items = value.map((item) => {
+      const sanitized = sanitizeValue(item, level);
+      changed ||= sanitized.changed;
+      return sanitized.value;
+    });
+    return { value: items, changed };
+  }
+  if (value && typeof value === "object") {
+    let changed = false;
+    const entries = Object.entries(value as Record<string, unknown>).map(([key, item]) => {
+      const sanitized = sanitizeValue(item, level);
+      changed ||= sanitized.changed;
+      return [key, sanitized.value];
+    });
+    return { value: Object.fromEntries(entries), changed };
+  }
+  return { value, changed: false };
+}
+
+/** Sanitize model-visible fields without changing the MCP result shape. */
+function sanitizeCallToolResult(
+  result: CallToolResult,
+  level: PrivacyLevel,
+): { result: CallToolResult; changed: boolean } {
+  let changed = false;
+  const content = (result.content ?? []).map((block) => {
+    if (block.type === "text") {
+      const sanitized = sanitizeValue(block.text, level);
+      changed ||= sanitized.changed;
+      return sanitized.changed ? { ...block, text: sanitized.value as string } : block;
+    }
+    if (block.type === "resource" && "text" in block.resource && typeof block.resource.text === "string") {
+      const sanitized = sanitizeValue(block.resource.text, level);
+      changed ||= sanitized.changed;
+      return sanitized.changed
+        ? { ...block, resource: { ...block.resource, text: sanitized.value as string } } as typeof block
+        : block;
+    }
+    return block;
+  });
+
+  let structuredContent = result.structuredContent;
+  if (structuredContent !== undefined) {
+    const sanitized = sanitizeValue(structuredContent, level);
+    changed ||= sanitized.changed;
+    structuredContent = sanitized.value as Record<string, unknown>;
+  }
+  return { result: { ...result, content, structuredContent }, changed };
+}
+
+function restoreSurrogateText(text: string): string {
+  try {
+    return restoreInbound(text).text;
+  } catch {
+    return text;
+  }
+}
+
 function restoreSurrogatesInValue(value: unknown): unknown {
-  if (typeof value === "string") return restoreInbound(value).text;
+  if (typeof value === "string") return restoreSurrogateText(value);
   if (Array.isArray(value)) return value.map(restoreSurrogatesInValue);
   if (value && typeof value === "object") {
     return Object.fromEntries(
@@ -106,9 +187,12 @@ export async function scanMcpToolCall(
     return textOnlyResult(`[CAITLYN BLOCKED] ${before.reason}`);
   }
 
+  const forwardArguments = before.restoredContent
+    ? restoreSurrogatesInValue(params.arguments) as Record<string, unknown> | undefined
+    : params.arguments;
   const forwardParams = {
     ...params,
-    arguments: restoreSurrogatesInValue(params.arguments) as Record<string, unknown> | undefined,
+    arguments: forwardArguments,
   };
   const upstreamResult = await upstreamClient.callTool(
     forwardParams,
@@ -123,9 +207,17 @@ export async function scanMcpToolCall(
     toolArgs: forwardParams.arguments,
     toolResult: upstreamResult,
   });
-  const visibleResult = after.sanitizedContent
-    ? replaceWithSanitizedText(upstreamResult, after.sanitizedContent)
-    : upstreamResult;
+  let visibleResult = upstreamResult;
+  if (after.sanitizedContent) {
+    const privacy = engine.getPrivacySettings();
+    const shaped = sanitizeCallToolResult(upstreamResult, privacy.level);
+    // KEYPOINT-REVIEW: preserve structuredContent whenever shape-aware
+    // masking found the same sensitive values. The flat string remains a
+    // fail-safe for cross-boundary matches that no single field contains.
+    visibleResult = shaped.changed
+      ? shaped.result
+      : replaceWithSanitizedText(upstreamResult, after.sanitizedContent);
+  }
 
   if (after.action === "block") {
     return replaceWithText(visibleResult, `[CAITLYN BLOCKED] ${after.reason}`);

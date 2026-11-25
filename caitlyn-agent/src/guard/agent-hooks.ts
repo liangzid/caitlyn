@@ -308,6 +308,14 @@ export class AgentHooksEngine {
     this.config = { ...this.config, ...partial };
   }
 
+  /** Return the privacy boundary settings needed by shape-aware adapters. */
+  getPrivacySettings(): { enabled: boolean; level: PrivacyLevel } {
+    return {
+      enabled: this.config.privacy_enabled,
+      level: this.config.privacy_level === "off" ? "standard" : this.config.privacy_level,
+    };
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────
 
   private _allow(
