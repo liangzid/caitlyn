@@ -1,0 +1,5 @@
+version: 2
+secret:
+  ignored_matches:
+    - name: caitlyn-privacy-test-password
+      match: abc123
