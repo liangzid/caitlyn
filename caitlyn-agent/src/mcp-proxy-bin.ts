@@ -22,19 +22,7 @@ import {
 import { createMcpProxyServer } from "./guard/mcp-proxy.js";
 import { loadGuardRuntimeConfig, loadScanningConfig } from "./config.js";
 import { createCredentialedLlmCall } from "./llm-runtime.js";
-
-export interface McpProxyCommand {
-  command: string;
-  args: string[];
-}
-
-/** Parse the upstream command. `--` is recommended but not required. */
-export function parseMcpProxyArgv(argv: string[]): McpProxyCommand | null {
-  const separator = argv.indexOf("--");
-  const parts = separator >= 0 ? argv.slice(separator + 1) : argv;
-  if (parts.length === 0 || parts[0] === "--help" || parts[0] === "-h") return null;
-  return { command: parts[0], args: parts.slice(1) };
-}
+import { parseMcpProxyArgv } from "./mcp-proxy-args.js";
 
 /** Build the shared enforcement engine from the operator configuration. */
 export function createMcpProxyEngine(): AgentHooksEngine {
