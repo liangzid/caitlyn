@@ -75,9 +75,13 @@ async function main(): Promise<void> {
     name: "caitlyn-mcp-proxy-upstream-client",
     version: "0.7.0",
   });
+  const inheritedEnv = Object.fromEntries(
+    Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  );
   const upstreamTransport = new StdioClientTransport({
     command: upstream.command,
     args: upstream.args,
+    env: inheritedEnv,
     stderr: "inherit",
   });
   await upstreamClient.connect(upstreamTransport);
@@ -85,10 +89,14 @@ async function main(): Promise<void> {
   const server = createMcpProxyServer(upstreamClient, createMcpProxyEngine());
   await server.connect(new StdioServerTransport());
 
+  let shuttingDown = false;
   const shutdown = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     await Promise.allSettled([server.close(), upstreamClient.close()]);
     process.exit(0);
   };
+  process.stdin.once("end", () => void shutdown());
   process.on("SIGINT", () => void shutdown());
   process.on("SIGTERM", () => void shutdown());
 }
