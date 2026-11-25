@@ -57,6 +57,7 @@ function verifyPackageContents(packResult) {
     "README.md",
     "dist/cli.js",
     "dist/hook-bin.js",
+    "dist/mcp-proxy-bin.js",
     "dist/index.js",
     "skills/index.json",
   ];

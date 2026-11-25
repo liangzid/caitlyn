@@ -8,9 +8,9 @@
 import { complete } from "@earendil-works/pi-ai/compat";
 import type { CaitlynAgentConfig } from "./config.js";
 import { loadConfig } from "./config.js";
-import { buildCredentialEnv, getCredentialEnv } from "./config/credentials.js";
+import { buildCredentialEnv, checkProviderAuth, getCredentialEnv } from "./config/credentials.js";
 import { resolveModel } from "./llm.js";
-import type { LlmCallFn } from "./scanner.js";
+import { createUnavailableLlmCall, type LlmCallFn } from "./scanner.js";
 
 /** Build a scanner-compatible LLM function from active CAITLYN settings. */
 export function createConfiguredLlmCall(
@@ -43,6 +43,24 @@ export function createConfiguredLlmCall(
       .map((part) => part.text)
       .join("");
   };
+}
+
+/**
+ * Build a live LLM function only when Tier 1 is enabled and credentials exist.
+ * Empty operator homes degrade to Tier 0 instead of treating authentication
+ * failure as suspicious content.
+ */
+export function createCredentialedLlmCall(
+  skipTier1: boolean,
+  unavailableReason: string,
+): LlmCallFn {
+  if (skipTier1) return createUnavailableLlmCall(`${unavailableReason}: Tier 1 disabled`);
+  const config = loadConfig();
+  const auth = checkProviderAuth(config.provider);
+  if (!auth.runtime && !auth.persisted && !auth.env) {
+    return createUnavailableLlmCall(`${unavailableReason}: no provider credentials`);
+  }
+  return createConfiguredLlmCall(config);
 }
 
 /** Verify provider credentials with a short, bounded real API request. */

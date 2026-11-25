@@ -30,6 +30,12 @@ export {
 export { protectOutbound, restoreInbound } from "./privacy/protect.js";
 export type { ProtectResult } from "./privacy/protect.js";
 
+export {
+  callToolResultScanText,
+  createMcpProxyServer,
+  scanMcpToolCall,
+} from "./guard/mcp-proxy.js";
+
 export type {
   DefenseSkillConfig,
   DefenseSkillEntry,

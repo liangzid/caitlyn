@@ -31,12 +31,10 @@ import {
   DEFAULT_AGENT_HOOKS_CONFIG,
   type AgentHooksConfig,
 } from "./guard/agent-hooks.js";
-import { createUnavailableLlmCall } from "./scanner.js";
 import { appendStatsEvent } from "./evolution/stats-events.js";
 import type { VerdictPolicy } from "./guard/types.js";
-import { loadConfig, loadGuardRuntimeConfig, loadScanningConfig } from "./config.js";
-import { checkProviderAuth } from "./config/credentials.js";
-import { createConfiguredLlmCall } from "./llm-runtime.js";
+import { loadGuardRuntimeConfig, loadScanningConfig } from "./config.js";
+import { createCredentialedLlmCall } from "./llm-runtime.js";
 
 interface HookInput {
   tool: string;
@@ -297,14 +295,8 @@ export async function decideHook(input: HookInput): Promise<HookDecision> {
  * KEYPOINT: empty operator homes must degrade to Tier 0 instead of treating
  * an unauthenticated Tier 1 parse as suspicious.
  */
-function createHookLlmCall(skipTier1: boolean): ReturnType<typeof createConfiguredLlmCall> {
-  if (skipTier1) return createUnavailableLlmCall("hook-bin: Tier 1 disabled");
-  const config = loadConfig();
-  const auth = checkProviderAuth(config.provider);
-  if (!auth.runtime && !auth.persisted && !auth.env) {
-    return createUnavailableLlmCall("hook-bin: no provider credentials");
-  }
-  return createConfiguredLlmCall(config);
+function createHookLlmCall(skipTier1: boolean) {
+  return createCredentialedLlmCall(skipTier1, "hook-bin");
 }
 
 function buildContent(input: HookInput): string {

@@ -1,0 +1,99 @@
+#!/usr/bin/env node
+/**
+ * CAITLYN MCP Proxy Binary — `caitlyn-mcp-proxy`
+ *
+ * Runs a transparent stdio MCP proxy:
+ *   agent client → caitlyn-mcp-proxy → upstream MCP server command
+ *
+ * Usage in an MCP server configuration:
+ *   caitlyn-mcp-proxy -- <upstream-command> [upstream-args...]
+ *
+ * stdout is reserved for the MCP protocol. Diagnostics go to stderr.
+ */
+
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import {
+  AgentHooksEngine,
+  DEFAULT_AGENT_HOOKS_CONFIG,
+  type AgentHooksConfig,
+} from "./guard/agent-hooks.js";
+import { createMcpProxyServer } from "./guard/mcp-proxy.js";
+import { loadGuardRuntimeConfig, loadScanningConfig } from "./config.js";
+import { createCredentialedLlmCall } from "./llm-runtime.js";
+
+export interface McpProxyCommand {
+  command: string;
+  args: string[];
+}
+
+/** Parse the upstream command. `--` is recommended but not required. */
+export function parseMcpProxyArgv(argv: string[]): McpProxyCommand | null {
+  const separator = argv.indexOf("--");
+  const parts = separator >= 0 ? argv.slice(separator + 1) : argv;
+  if (parts.length === 0 || parts[0] === "--help" || parts[0] === "-h") return null;
+  return { command: parts[0], args: parts.slice(1) };
+}
+
+/** Build the shared enforcement engine from the operator configuration. */
+export function createMcpProxyEngine(): AgentHooksEngine {
+  const runtime = loadGuardRuntimeConfig();
+  const scanning = loadScanningConfig();
+  return new AgentHooksEngine(
+    {
+      ...DEFAULT_AGENT_HOOKS_CONFIG,
+      enabled: runtime.enabled,
+      before_enabled: runtime.beforeEnabled,
+      after_enabled: runtime.afterEnabled,
+      max_scan_bytes: runtime.maxScanBytes,
+      scan_timeout_ms: runtime.hookTimeoutMs,
+      hook_timeout_ms: runtime.hookTimeoutMs,
+      on_error: runtime.onError,
+      privacy_enabled: runtime.privacyEnabled,
+      privacy_level: runtime.privacyLevel,
+      verdict_policy: {
+        benign: "allow",
+        suspicious: runtime.suspiciousAction,
+        malicious: runtime.maliciousAction,
+      },
+    } as AgentHooksConfig,
+    createCredentialedLlmCall(scanning.skipTier1, "mcp-proxy"),
+  );
+}
+
+async function main(): Promise<void> {
+  const upstream = parseMcpProxyArgv(process.argv.slice(2));
+  if (!upstream) {
+    process.stderr.write(
+      "Usage: caitlyn-mcp-proxy -- <upstream-command> [upstream-args...]\n",
+    );
+    process.exit(2);
+  }
+
+  const upstreamClient = new Client({
+    name: "caitlyn-mcp-proxy-upstream-client",
+    version: "0.7.0",
+  });
+  const upstreamTransport = new StdioClientTransport({
+    command: upstream.command,
+    args: upstream.args,
+    stderr: "inherit",
+  });
+  await upstreamClient.connect(upstreamTransport);
+
+  const server = createMcpProxyServer(upstreamClient, createMcpProxyEngine());
+  await server.connect(new StdioServerTransport());
+
+  const shutdown = async () => {
+    await Promise.allSettled([server.close(), upstreamClient.close()]);
+    process.exit(0);
+  };
+  process.on("SIGINT", () => void shutdown());
+  process.on("SIGTERM", () => void shutdown());
+}
+
+main().catch((error) => {
+  process.stderr.write(`caitlyn-mcp-proxy failed: ${String(error)}\n`);
+  process.exit(1);
+});

@@ -40,7 +40,7 @@ export const DEFAULT_VERDICT_POLICY: VerdictPolicy = {
 /** Unified event emitted by all guard modes when a scan completes. */
 export interface GuardEvent {
   /** Which guard mode produced this event. */
-  mode: "fs-watcher" | "agent-hooks" | "sandbox";
+  mode: "mcp-proxy" | "fs-watcher" | "agent-hooks" | "sandbox";
   /** Content that was scanned (truncated to 256 chars for logging). */
   content_snippet: string;
 

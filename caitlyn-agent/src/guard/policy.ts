@@ -13,7 +13,7 @@ import { DEFAULT_VERDICT_POLICY, DEFAULT_GUARD_CONFIG } from "./types.js";
 
 export interface PolicyContext {
   /** Mode identifier. */
-  mode: "fs-watcher" | "agent-hooks" | "sandbox";
+  mode: "mcp-proxy" | "fs-watcher" | "agent-hooks" | "sandbox";
   /** Source identifier (tool name, file path, hook point). */
   source: string;
 

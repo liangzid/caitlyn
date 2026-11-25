@@ -5,7 +5,8 @@
   "type": "module",
   "bin": {
     "caitlyn": "dist/cli.js",
-    "caitlyn-hook": "dist/hook-bin.js"
+    "caitlyn-hook": "dist/hook-bin.js",
+    "caitlyn-mcp-proxy": "dist/mcp-proxy-bin.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
