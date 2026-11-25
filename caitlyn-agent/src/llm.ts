@@ -60,7 +60,7 @@ export function resolveModel(config: CaitlynAgentConfig): Model<any> {
       // KEYPOINT-REVIEW: xAI model ids can leave the bundled catalog before
       // existing endpoint aliases disappear. Preserve saved configurations
       // instead of disabling chat during startup.
-      if (p === "xai" && XAI_LEGACY_PASSTHROUGH_MODELS.has(config.model)) {
+      if (p === "xai" && config.model in XAI_LEGACY_PASSTHROUGH_TEMPLATES) {
         return makeXaiPassthroughModel(config.model);
       }
       break;
@@ -87,19 +87,23 @@ function makeOpenRouterPassthroughModel(modelId: string): Model<any> {
 }
 
 // xAI ids present in the previous bundled catalog but removed by the current
-// catalog. Do not pass through arbitrary xAI ids: models such as Grok
-// multi-agent have account- and endpoint-specific capabilities that CAITLYN
-// cannot infer from a catalog template.
-const XAI_LEGACY_PASSTHROUGH_MODELS = new Set([
-  "grok-4.20-0309-non-reasoning",
-  "grok-4.20-0309-reasoning",
-]);
+// catalog even though xAI still resolves them. Each maps to the current model
+// that serves the alias. Do not pass through arbitrary xAI ids: models such
+// as Grok multi-agent have account- and endpoint-specific capabilities that
+// CAITLYN cannot infer from a catalog template.
+const XAI_LEGACY_PASSTHROUGH_TEMPLATES: Record<string, string> = {
+  "grok-4.20-0309-non-reasoning": "grok-4.3",
+  "grok-4.20-0309-reasoning": "grok-4.3",
+  "grok-3": "grok-4.3",
+  "grok-code-fast-1": "grok-build-0.1",
+};
 
-/** Clone the current xAI catalog shape for a removed legacy model id. */
+/** Clone the serving xAI catalog shape for a removed legacy model id. */
 function makeXaiPassthroughModel(modelId: string): Model<any> {
-  const template = getModels("xai")[0];
+  const templateId = XAI_LEGACY_PASSTHROUGH_TEMPLATES[modelId];
+  const template = getModels("xai").find((model) => model.id === templateId);
   if (!template) {
-    throw new Error("xAI catalog is empty; cannot passthrough model id");
+    throw new Error(`xAI catalog is missing template "${templateId}"`);
   }
   return { ...template, id: modelId, name: modelId };
 }

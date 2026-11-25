@@ -18,6 +18,24 @@ describe("resolveModel", () => {
     expect(model.baseUrl).toBe("https://api.x.ai/v1");
   });
 
+  it("preserves retired xAI aliases through their serving model shape", () => {
+    const grok3 = resolveModel({
+      provider: "xai",
+      model: "grok-3",
+      smallModel: "grok-3",
+    });
+    const codeFast = resolveModel({
+      provider: "xai",
+      model: "grok-code-fast-1",
+      smallModel: "grok-code-fast-1",
+    });
+
+    expect(grok3.id).toBe("grok-3");
+    expect(grok3.api).toBe("openai-completions");
+    expect(codeFast.id).toBe("grok-code-fast-1");
+    expect(codeFast.api).toBe("openai-completions");
+  });
+
   it("rejects xAI models whose tool capabilities cannot be inferred", () => {
     expect(() => resolveModel({
       provider: "xai",
