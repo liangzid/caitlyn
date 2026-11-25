@@ -65,6 +65,37 @@ describe("protectOutbound", () => {
     expect(protectOutbound(text, store, "off")).toEqual({ text, changed: false, count: 0 });
   });
 
+  it("masks a whole database URL instead of only a nested password assignment", () => {
+    const store = vault();
+    const uri = ["postgres", "://user", ":secret", "@host/db?password", "=abc12345"].join("");
+    const protectedText = protectOutbound(uri, store);
+    expect(protectedText.text).toMatch(/^<DATABASE_URL_[0-9a-f]{8}>$/);
+    expect(protectedText.text).not.toContain("user" + ":secret");
+    expect(protectedText.text).not.toContain("abc12345");
+  });
+
+  it("does not leave a password prefix beside a compact database URL", () => {
+    const store = vault();
+    const text = ["password", "=abc123;db=", "postgres", "://user", ":secret", "@host"].join("");
+    const protectedText = protectOutbound(text, store);
+    expect(protectedText.changed).toBe(true);
+    expect(protectedText.text).not.toContain("abc123");
+    expect(protectedText.text).not.toContain("user" + ":secret");
+    expect(protectedText.text).not.toContain("postgres" + "://");
+  });
+
+  it("masks both a compact JSON password and an adjacent database URL", () => {
+    const store = vault();
+    const text = [
+      "{\"password\":", "\"abc123\",", "\"db\":", "\"postgres",
+      "://user", ":secret", "@host\"}",
+    ].join("");
+    const protectedText = protectOutbound(text, store);
+    expect(protectedText.text).not.toContain("abc123");
+    expect(protectedText.text).not.toContain("user" + ":secret");
+    expect(protectedText.text).not.toContain("postgres" + "://");
+  });
+
   it("leaves ordinary prose unchanged", () => {
     const store = vault();
     const text = "The temperature is 72 degrees.";

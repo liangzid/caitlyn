@@ -67,6 +67,13 @@ export interface HookContext {
 
   /** Raw tool result (after hook only). */
   toolResult?: unknown;
+
+  /**
+   * True when the adapter already applied privacy rewriting in the shape of
+   * the original payload. The engine then scans `content` as provided instead
+   * of flattening and rewriting that payload a second time.
+   */
+  privacyHandled?: boolean;
 }
 
 /** Statistics for agent hooks. */
@@ -308,6 +315,21 @@ export class AgentHooksEngine {
     this.config = { ...this.config, ...partial };
   }
 
+  /** Return the privacy boundary settings needed by shape-aware adapters. */
+  getPrivacySettings(): { enabled: boolean; level: PrivacyLevel } {
+    return {
+      enabled: this.config.privacy_enabled,
+      level: this.config.privacy_level === "off" ? "standard" : this.config.privacy_level,
+    };
+  }
+
+  /** Whether this tool is inside the configured privacy rewrite boundary. */
+  shouldApplyPrivacy(toolName: string): boolean {
+    return this.config.enabled
+      && this.config.privacy_enabled
+      && !this.config.skip_tools.includes(toolName);
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────
 
   private _allow(
@@ -338,6 +360,7 @@ export class AgentHooksEngine {
     sanitizedContent?: string;
     restoredContent?: string;
   } {
+    if (ctx.privacyHandled) return { scanText: ctx.content };
     if (!this.config.privacy_enabled) return { scanText: ctx.content };
     const level = this.config.privacy_level === "off" ? "standard" : this.config.privacy_level;
     try {

@@ -335,6 +335,29 @@ Supported adapters currently include:
 | OpenClaw | plugin hooks |
 | Pi Coding Agent | middleware integration |
 
+### MCP proxy enforcement
+
+`caitlyn-mcp-proxy` is a stdio Model Context Protocol proxy. Place it between
+an agent and an upstream MCP server command; it scans tool arguments before
+upstream execution and scans tool output before the agent receives it:
+
+```json
+{
+  "mcpServers": {
+    "upstream": {
+      "command": "caitlyn-mcp-proxy",
+      "args": ["--", "npx", "-y", "@modelcontextprotocol/server-everything"]
+    }
+  }
+}
+```
+
+The outer MCP configuration shape is host-specific. The current proxy MVP
+exposes upstream tools only; resources and prompts are not yet proxied.
+Upstream environment variables are opt-in: set `CAITLYN_UPSTREAM_ENV_NAME`
+on the proxy to pass `NAME` to the upstream server. Scanner credentials are
+not forwarded implicitly.
+
 ## Command-line interface
 
 | Command | Purpose |

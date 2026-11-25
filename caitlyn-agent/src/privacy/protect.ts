@@ -26,6 +26,16 @@ export interface ProtectResult {
   count: number;
 }
 
+/** Offsets of one privacy-rule match in otherwise unchanged text. */
+export interface PrivacyTextSpan {
+  /** Full match, including any label or separator context. */
+  start: number;
+  end: number;
+  /** Capture group that carries the sensitive value. */
+  valueStart: number;
+  valueEnd: number;
+}
+
 interface Span {
   start: number;
   end: number;
@@ -56,6 +66,39 @@ export function protectOutbound(
 ): ProtectResult {
   if (level === "off") return { text, changed: false, count: 0 };
   return applySpans(text, collectSpans(text, vault, level));
+}
+
+/**
+ * Locate full privacy-rule matches without rewriting the text. Structured
+ * adapters use these offsets to tell field-local matches from matches whose
+ * context crosses an MCP content boundary.
+ */
+export function findPrivacySpans(
+  text: string,
+  level: PrivacyLevel,
+  vault: PrivacyVault = defaultPrivacyVault(),
+): PrivacyTextSpan[] {
+  if (level === "off") return [];
+  const spans: PrivacyTextSpan[] = [];
+  for (const rule of rulesForLevel(level)) {
+    rule.pattern.lastIndex = 0;
+    for (const match of text.matchAll(rule.pattern)) {
+      const bounds = groupBounds(match, rule.valueGroup);
+      if (!bounds) continue;
+      const raw = text.slice(bounds.start, bounds.end);
+      if (!raw || (rule.accept && !rule.accept(raw))) continue;
+      if (vault.lookup(raw) !== undefined) continue;
+      const start = match.index;
+      if (start === undefined) continue;
+      spans.push({
+        start,
+        end: start + match[0].length,
+        valueStart: bounds.start,
+        valueEnd: bounds.end,
+      });
+    }
+  }
+  return spans;
 }
 
 /**
@@ -109,14 +152,20 @@ export function runPrivacyCommand(argv: string[]): void {
   process.stdout.write(result.text + "\n");
 }
 
-/**
- * Find non-overlapping sensitive spans in priority order.
- */
-function collectSpans(text: string, vault: PrivacyVault, level: PrivacyLevel): Span[] {
-  const rules = builtinPrivacyRules()
+function rulesForLevel(level: PrivacyLevel): PrivacyRule[] {
+  return builtinPrivacyRules()
     .filter((rule) => level === "strict" || rule.klass !== "metric")
     .slice()
     .sort((a, b) => a.priority - b.priority);
+}
+
+/**
+ * Find sensitive spans in priority order. `applySpans` resolves overlaps
+ * afterward so a broader overlapping secret cannot suppress a narrower one
+ * and leak the uncovered prefix.
+ */
+function collectSpans(text: string, vault: PrivacyVault, level: PrivacyLevel): Span[] {
+  const rules = rulesForLevel(level);
   const spans: Span[] = [];
   for (const rule of rules) {
     rule.pattern.lastIndex = 0;
@@ -125,8 +174,11 @@ function collectSpans(text: string, vault: PrivacyVault, level: PrivacyLevel): S
       if (!bounds) continue;
       const raw = text.slice(bounds.start, bounds.end);
       if (!raw || (rule.accept && !rule.accept(raw))) continue;
+      // KEYPOINT-REVIEW: a vault surrogate is already masked. Rewriting it
+      // again would break restoration and make idempotent privacy passes
+      // impossible for structured adapters.
+      if (vault.lookup(raw) !== undefined) continue;
       const candidate = { start: bounds.start, end: bounds.end };
-      if (spans.some((span) => span.start < candidate.end && candidate.start < span.end)) continue;
       const replacement = renderSpan(rule, raw, vault);
       if (replacement === raw) continue;
       spans.push({ ...candidate, replacement });

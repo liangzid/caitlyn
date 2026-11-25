@@ -1,0 +1,15 @@
+#+title: MCP Proxy Enforcement Discussion
+#+date: 2026-11-25
+
+* Decisions
+- PR #3 remains scoped to the MCP proxy enforcement MVP.
+- Synthetic credential-shaped strings in regression tests are intentional security fixtures, not real secrets. GitGuardian failures for them can be ignored.
+- Do not rewrite PR history only to remove those synthetic fixtures.
+- Structured JSON-aware privacy redaction/restoration is follow-up work, not part of the MCP proxy MVP.
+- Fail-closed policy and structured audit logging are the next implementation task.
+
+* Outcome
+- MCP proxy blocks malicious arguments before upstream execution and scans text/resource/structured output before model delivery.
+- Schema-unsafe privacy-redacted structured output uses error-shaped fallback because MCP clients skip output-schema validation for errors.
+- Upstream credentials are opt-in through =CAITLYN_UPSTREAM_ENV_<NAME>= rather than wholesale environment forwarding.
+- Broader regex-over-serialized-JSON privacy limitations were escalated instead of patched further.
