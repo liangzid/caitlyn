@@ -16,6 +16,7 @@ import {
   type CallToolResult,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { AgentHooksEngine } from "./agent-hooks.js";
+import { restoreInbound } from "../privacy/protect.js";
 
 /** Extract the model-readable text represented by an MCP tool result. */
 export function callToolResultScanText(result: CallToolResult): string {
@@ -57,20 +58,18 @@ function replaceWithSanitizedText(result: CallToolResult, text: string): CallToo
   return replaced;
 }
 
-function parseRestoredArguments(
-  restored: string | undefined,
-  original: Record<string, unknown> | undefined,
-): Record<string, unknown> | undefined {
-  if (!restored) return original;
-  try {
-    const parsed = JSON.parse(restored) as unknown;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    // Keep the model-produced arguments when the rewrite is not valid JSON.
+function restoreSurrogatesInValue(value: unknown): unknown {
+  if (typeof value === "string") return restoreInbound(value).text;
+  if (Array.isArray(value)) return value.map(restoreSurrogatesInValue);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        restoreSurrogatesInValue(item),
+      ]),
+    );
   }
-  return original;
+  return value;
 }
 
 function prependWarning(result: CallToolResult, reason: string): CallToolResult {
@@ -109,7 +108,7 @@ export async function scanMcpToolCall(
 
   const forwardParams = {
     ...params,
-    arguments: parseRestoredArguments(before.restoredContent, params.arguments),
+    arguments: restoreSurrogatesInValue(params.arguments) as Record<string, unknown> | undefined,
   };
   const upstreamResult = await upstreamClient.callTool(
     forwardParams,
