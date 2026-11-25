@@ -46,6 +46,12 @@ export function resolveModel(config: CaitlynAgentConfig): Model<any> {
       if (p === "openrouter") {
         return makeOpenRouterPassthroughModel(config.model);
       }
+      // KEYPOINT-REVIEW: xAI model ids can leave the bundled catalog before
+      // existing endpoint aliases disappear. Preserve saved configurations
+      // instead of disabling chat during startup.
+      if (p === "xai") {
+        return makeXaiPassthroughModel(config.model);
+      }
       break;
     }
   }
@@ -65,6 +71,15 @@ function makeOpenRouterPassthroughModel(modelId: string): Model<any> {
     catalog.find((m) => m.id === "deepseek/deepseek-v4-flash") ?? catalog[0];
   if (!template) {
     throw new Error("OpenRouter catalog is empty; cannot passthrough model id");
+  }
+  return { ...template, id: modelId, name: modelId };
+}
+
+/** Clone the current xAI catalog shape for a model id omitted from it. */
+function makeXaiPassthroughModel(modelId: string): Model<any> {
+  const template = getModels("xai")[0];
+  if (!template) {
+    throw new Error("xAI catalog is empty; cannot passthrough model id");
   }
   return { ...template, id: modelId, name: modelId };
 }
