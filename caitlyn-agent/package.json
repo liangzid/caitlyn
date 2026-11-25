@@ -39,6 +39,7 @@
     "postpack": "npm run clean:package",
     "prepublishOnly": "npm test && npm run audit:library",
     "test": "vitest run",
+    "test:canary": "node scripts/hook-canary.mjs",
     "test:package": "node scripts/test-package-install.mjs"
   },
   "dependencies": {
