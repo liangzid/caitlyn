@@ -62,7 +62,7 @@ describe("setup configuration merge", () => {
     document.guard.onError = "block";
     document.guard.maxScanBytes = 123456;
     document.guard.auditEnabled = false;
-    document.guard.auditDir = "~/custom-audit";
+    document.guard.auditDir = "C:\\caitlyn\\audit";
 
     const result = writeSetupConfig(configPath, document);
 

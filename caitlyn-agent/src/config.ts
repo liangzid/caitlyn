@@ -235,6 +235,39 @@ function stripTomlInlineComment(value: string): string {
   return value.trimEnd();
 }
 
+/** Decode the escape sequences supported by TOML basic strings. */
+function decodeTomlBasicString(value: string): string {
+  return value.replace(
+    /\\(u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|[btnfr"\\])/g,
+    (_match, escape: string) => {
+      if (escape.startsWith("u") || escape.startsWith("U")) {
+        return String.fromCodePoint(parseInt(escape.slice(1), 16));
+      }
+      const escapes: Record<string, string> = {
+        b: "\b",
+        t: "\t",
+        n: "\n",
+        f: "\f",
+        r: "\r",
+        "\"": "\"",
+        "\\": "\\",
+      };
+      return escapes[escape] ?? escape;
+    },
+  );
+}
+
+/** Parse the scalar string forms used by the setup-owned config sections. */
+function parseTomlScalar(value: string): string {
+  if (value.length >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
+    return decodeTomlBasicString(value.slice(1, -1));
+  }
+  if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
 /** Minimal TOML section reader — reads [section] key=value pairs. */
 function readTomlSection(filePath: string, section: string): Record<string, string> {
   const result: Record<string, string> = {};
@@ -253,7 +286,7 @@ function readTomlSection(filePath: string, section: string): Record<string, stri
         const kvMatch = trimmed.match(/^(\w+)\s*=\s*(.+)$/);
         if (kvMatch) {
           const value = stripTomlInlineComment(kvMatch[2]);
-          result[kvMatch[1]] = value.replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
+          result[kvMatch[1]] = parseTomlScalar(value);
         }
       }
     }
