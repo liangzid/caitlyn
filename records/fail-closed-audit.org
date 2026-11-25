@@ -1,0 +1,16 @@
+#+TITLE: Fail-closed policy and audit logging
+#+DATE: 2026-11-25
+
+* Scope
+- Continue the practical-hardening roadmap after the MCP proxy MVP.
+- Keep structured JSON-aware privacy redesign as follow-up scope.
+
+* Decisions
+- `guard.on_error` now governs malformed hook input, empty unscannable hook content, hook crashes, agent-hook scan errors, and filesystem-watcher scan errors.
+- Guard audit logging is enabled by default because records exclude raw tool content.
+- Audit events are JSONL at `~/.caitlyn/audit/guard-events.jsonl`; `guard.audit_dir` or `CAITLYN_AUDIT_DIR` can relocate them.
+- Audit metadata is allow-listed so future raw payloads are not copied accidentally.
+- GitGuardian failures caused by synthetic credential fixtures remain expected and ignored.
+
+* Validation
+- TypeScript suite: 567 tests across 64 files passed locally before the documentation update.
