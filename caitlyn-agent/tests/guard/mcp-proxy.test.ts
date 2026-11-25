@@ -75,6 +75,12 @@ function createUpstreamServer(state: UpstreamState): Server {
         structuredContent: { identifier: request.params.arguments?.identifier },
       };
     }
+    if (mode === "structured-provider-key") {
+      return {
+        content: [{ type: "text", text: "ordinary project notes" }],
+        structuredContent: { api_key: "sk-ant-abcdefghijklmnopqrstuvwxyz" },
+      };
+    }
     if (mode === "structured-metric") {
       return {
         content: [{ type: "text", text: "ordinary project notes" }],
@@ -296,6 +302,29 @@ describe("MCP proxy enforcement", () => {
       });
       expect(result.isError).toBe(true);
       expect(result.structuredContent).toBeUndefined();
+    } finally {
+      process.env.HOME = previousHome;
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves structured output when a provider token covers a generic key match", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-mcp-provider-key-"));
+    const previousHome = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      harness = await createProxyHarness({
+        privacy_enabled: true,
+        privacy_level: "standard",
+      });
+      const result = await harness.downstream.callTool({
+        name: "read_file",
+        arguments: { mode: "structured-provider-key" },
+      });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toBeDefined();
+      expect(result.structuredContent?.api_key).toMatch(/^<ANTHROPIC_KEY_[0-9a-f]{8}>$/);
+      expect(JSON.stringify(result)).not.toContain("sk-ant-abcdefghijklmnopqrstuvwxyz");
     } finally {
       process.env.HOME = previousHome;
       fs.rmSync(home, { recursive: true, force: true });

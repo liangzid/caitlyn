@@ -100,6 +100,20 @@ function insideAtomicRange(
   return ranges.some((range) => span.start >= range.start && span.end <= range.end);
 }
 
+function shapeExpressibleSpan(
+  span: { start: number; end: number; valueStart: number; valueEnd: number },
+  spans: Array<{ start: number; end: number; valueStart: number; valueEnd: number }>,
+  ranges: Array<{ start: number; end: number }>,
+): boolean {
+  if (insideAtomicRange(span, ranges)) return true;
+  return spans.some((other) =>
+    other !== span
+      && insideAtomicRange(other, ranges)
+      && other.valueStart <= span.valueStart
+      && other.valueEnd >= span.valueEnd
+  );
+}
+
 function textOnlyResult(text: string): CallToolResult {
   return {
     content: [{ type: "text", text }],
@@ -226,7 +240,7 @@ function sanitizeResultForBoundary(
   const originalScanText = callToolResultScanText(result);
   const spans = findPrivacySpans(originalScanText, level);
   const atomicRanges = resultAtomicRanges(result);
-  const shapeExpressible = spans.every((span) => insideAtomicRange(span, atomicRanges));
+  const shapeExpressible = spans.every((span) => shapeExpressibleSpan(span, spans, atomicRanges));
   const shaped = sanitizeCallToolResult(result, level);
 
   // KEYPOINT-REVIEW: privacy is detected on the original boundary-aware

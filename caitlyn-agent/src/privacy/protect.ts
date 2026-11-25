@@ -26,10 +26,14 @@ export interface ProtectResult {
   count: number;
 }
 
-/** Offsets of one full privacy-rule match in otherwise unchanged text. */
+/** Offsets of one privacy-rule match in otherwise unchanged text. */
 export interface PrivacyTextSpan {
+  /** Full match, including any label or separator context. */
   start: number;
   end: number;
+  /** Capture group that carries the sensitive value. */
+  valueStart: number;
+  valueEnd: number;
 }
 
 interface Span {
@@ -86,7 +90,12 @@ export function findPrivacySpans(
       if (vault.lookup(raw) !== undefined) continue;
       const start = match.index;
       if (start === undefined) continue;
-      spans.push({ start, end: start + match[0].length });
+      spans.push({
+        start,
+        end: start + match[0].length,
+        valueStart: bounds.start,
+        valueEnd: bounds.end,
+      });
     }
   }
   return spans;
