@@ -92,6 +92,17 @@ describe("loadGuardRuntimeConfig", () => {
     });
   });
 
+  it("does not discard later settings after an invalid unicode escape", () => {
+    const file = writeGuardConfig([
+      'audit_dir = "\\U00110000"',
+      'on_error = "block"',
+    ]);
+    expect(loadGuardRuntimeConfig(file)).toMatchObject({
+      auditDir: "\\U00110000",
+      onError: "block",
+    });
+  });
+
   it("rejects invalid actions and non-positive limits", () => {
     const file = writeGuardConfig([
       "hook_timeout_ms = 0",

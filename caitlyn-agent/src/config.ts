@@ -241,7 +241,10 @@ function decodeTomlBasicString(value: string): string {
     /\\(u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|[btnfr"\\])/g,
     (_match, escape: string) => {
       if (escape.startsWith("u") || escape.startsWith("U")) {
-        return String.fromCodePoint(parseInt(escape.slice(1), 16));
+        const codePoint = parseInt(escape.slice(1), 16);
+        return codePoint <= 0x10ffff
+          ? String.fromCodePoint(codePoint)
+          : `\\${escape}`;
       }
       const escapes: Record<string, string> = {
         b: "\b",
