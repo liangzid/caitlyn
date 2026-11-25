@@ -65,6 +65,15 @@ describe("protectOutbound", () => {
     expect(protectOutbound(text, store, "off")).toEqual({ text, changed: false, count: 0 });
   });
 
+  it("masks a whole database URL instead of only a nested password assignment", () => {
+    const store = vault();
+    const uri = "postgres://user:secret@host/db?password=abc12345";
+    const protectedText = protectOutbound(uri, store);
+    expect(protectedText.text).toMatch(/^<DATABASE_URL_[0-9a-f]{8}>$/);
+    expect(protectedText.text).not.toContain("user:secret");
+    expect(protectedText.text).not.toContain("abc12345");
+  });
+
   it("leaves ordinary prose unchanged", () => {
     const store = vault();
     const text = "The temperature is 72 degrees.";

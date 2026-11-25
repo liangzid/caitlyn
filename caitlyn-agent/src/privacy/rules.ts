@@ -159,7 +159,9 @@ export function builtinPrivacyRules(): PrivacyRule[] {
     {
       name: "database_url",
       pattern: /\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis):\/\/[^\s<>'"`]+/gd,
-      priority: 2,
+      // A URI can contain several nested secrets in userinfo or query text.
+      // Mask the whole URI before narrower password captures consume part of it.
+      priority: 0,
       klass: "secret",
       valueGroup: 0,
       label: "DATABASE_URL",
