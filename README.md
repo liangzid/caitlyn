@@ -354,6 +354,9 @@ upstream execution and scans tool output before the agent receives it:
 
 The outer MCP configuration shape is host-specific. The current proxy MVP
 exposes upstream tools only; resources and prompts are not yet proxied.
+Upstream environment variables are opt-in: set `CAITLYN_UPSTREAM_ENV_NAME`
+on the proxy to pass `NAME` to the upstream server. Scanner credentials are
+not forwarded implicitly.
 
 ## Command-line interface
 
