@@ -19,6 +19,26 @@ import type { AgentHooksEngine } from "./agent-hooks.js";
 import type { PrivacyLevel } from "../config.js";
 import { protectOutbound, restoreInbound } from "../privacy/protect.js";
 
+function appendStructuredScanLines(
+  value: unknown,
+  keyPath: string,
+  lines: string[],
+): void {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    lines.push(`${keyPath}: ${String(value)}`);
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => appendStructuredScanLines(item, `${keyPath}[${index}]`, lines));
+    return;
+  }
+  if (value && typeof value === "object") {
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      appendStructuredScanLines(item, keyPath ? `${keyPath}.${key}` : key, lines);
+    }
+  }
+}
+
 /** Extract the model-readable text represented by an MCP tool result. */
 export function callToolResultScanText(result: CallToolResult): string {
   const parts = (result.content ?? [])
@@ -28,7 +48,9 @@ export function callToolResultScanText(result: CallToolResult): string {
       return `[${block.type} content]`;
     });
   if (result.structuredContent !== undefined) {
-    parts.push(JSON.stringify(result.structuredContent));
+    const lines: string[] = [];
+    appendStructuredScanLines(result.structuredContent, "", lines);
+    parts.push(lines.join("\n"));
   }
   return parts.join("\n");
 }
@@ -70,54 +92,70 @@ function protectText(text: string, level: PrivacyLevel): string {
   }
 }
 
-function sanitizeValue(value: unknown, level: PrivacyLevel): { value: unknown; changed: boolean } {
+interface SanitizedValue {
+  value: unknown;
+  changed: boolean;
+  /** False when privacy cannot round-trip inside the original JSON type. */
+  shapeSafe: boolean;
+}
+
+function sanitizeValue(value: unknown, level: PrivacyLevel): SanitizedValue {
   if (typeof value === "string") {
     const sanitized = protectText(value, level);
-    return { value: sanitized, changed: sanitized !== value };
+    return { value: sanitized, changed: sanitized !== value, shapeSafe: true };
   }
   if (typeof value === "number" && Number.isFinite(value)) {
     const raw = String(value);
     const sanitized = protectText(raw, level);
     const numeric = Number(sanitized);
-    const next = Number.isFinite(numeric) && sanitized.trim() !== "" ? numeric : sanitized;
-    return { value: next, changed: next !== value };
+    const roundTrips = Number.isFinite(numeric) && String(numeric) === sanitized;
+    return roundTrips
+      ? { value: numeric, changed: numeric !== value, shapeSafe: true }
+      : { value: sanitized, changed: sanitized !== raw, shapeSafe: false };
   }
   if (Array.isArray(value)) {
     let changed = false;
+    let shapeSafe = true;
     const items = value.map((item) => {
       const sanitized = sanitizeValue(item, level);
       changed ||= sanitized.changed;
+      shapeSafe &&= sanitized.shapeSafe;
       return sanitized.value;
     });
-    return { value: items, changed };
+    return { value: items, changed, shapeSafe };
   }
   if (value && typeof value === "object") {
     let changed = false;
+    let shapeSafe = true;
     const entries = Object.entries(value as Record<string, unknown>).map(([key, item]) => {
       const sanitized = sanitizeValue(item, level);
       changed ||= sanitized.changed;
+      shapeSafe &&= sanitized.shapeSafe;
       return [key, sanitized.value];
     });
-    return { value: Object.fromEntries(entries), changed };
+    return { value: Object.fromEntries(entries), changed, shapeSafe };
   }
-  return { value, changed: false };
+  return { value, changed: false, shapeSafe: true };
 }
 
 /** Sanitize model-visible fields without changing the MCP result shape. */
 function sanitizeCallToolResult(
   result: CallToolResult,
   level: PrivacyLevel,
-): { result: CallToolResult; changed: boolean } {
+): { result: CallToolResult; changed: boolean; shapeSafe: boolean } {
   let changed = false;
+  let shapeSafe = true;
   const content = (result.content ?? []).map((block) => {
     if (block.type === "text") {
       const sanitized = sanitizeValue(block.text, level);
       changed ||= sanitized.changed;
+      shapeSafe &&= sanitized.shapeSafe;
       return sanitized.changed ? { ...block, text: sanitized.value as string } : block;
     }
     if (block.type === "resource" && "text" in block.resource && typeof block.resource.text === "string") {
       const sanitized = sanitizeValue(block.resource.text, level);
       changed ||= sanitized.changed;
+      shapeSafe &&= sanitized.shapeSafe;
       return sanitized.changed
         ? { ...block, resource: { ...block.resource, text: sanitized.value as string } } as typeof block
         : block;
@@ -129,9 +167,34 @@ function sanitizeCallToolResult(
   if (structuredContent !== undefined) {
     const sanitized = sanitizeValue(structuredContent, level);
     changed ||= sanitized.changed;
+    shapeSafe &&= sanitized.shapeSafe;
     structuredContent = sanitized.value as Record<string, unknown>;
   }
-  return { result: { ...result, content, structuredContent }, changed };
+  return { result: { ...result, content, structuredContent }, changed, shapeSafe };
+}
+
+/** Apply shape-aware output privacy and choose the exact text scanned downstream. */
+function sanitizeResultForBoundary(
+  result: CallToolResult,
+  level: PrivacyLevel,
+): { visibleResult: CallToolResult; scanText: string } {
+  const shaped = sanitizeCallToolResult(result, level);
+  let scanText = callToolResultScanText(shaped.result);
+
+  // KEYPOINT-REVIEW: a secret can be split across two model-visible fields.
+  // Detect that residual concatenated form after field-local masking. Use the
+  // standard rules here so strict metric values are not noised a second time.
+  const residualScanText = protectText(scanText, "standard");
+  const hasCrossFieldResidual = residualScanText !== scanText;
+  scanText = residualScanText;
+
+  if (!shaped.shapeSafe || hasCrossFieldResidual) {
+    return {
+      visibleResult: replaceWithSanitizedText(result, scanText),
+      scanText,
+    };
+  }
+  return { visibleResult: shaped.result, scanText };
 }
 
 function restoreSurrogateText(text: string): string {
@@ -190,7 +253,8 @@ export async function scanMcpToolCall(
     return textOnlyResult(`[CAITLYN BLOCKED] ${before.reason}`);
   }
 
-  const forwardArguments = before.restoredContent
+  const privacyApplies = engine.shouldApplyPrivacy(params.name);
+  const forwardArguments = privacyApplies
     ? restoreSurrogatesInValue(params.arguments) as Record<string, unknown> | undefined
     : params.arguments;
   const forwardParams = {
@@ -202,25 +266,20 @@ export async function scanMcpToolCall(
     undefined,
     { signal },
   ) as CallToolResult;
-  const outputText = callToolResultScanText(upstreamResult);
+
+  const privacy = engine.getPrivacySettings();
+  const boundary = privacyApplies
+    ? sanitizeResultForBoundary(upstreamResult, privacy.level)
+    : { visibleResult: upstreamResult, scanText: callToolResultScanText(upstreamResult) };
   const after = await engine.processHook({
     hookPoint: "after",
     toolName: params.name,
-    content: outputText,
+    content: boundary.scanText,
     toolArgs: forwardParams.arguments,
     toolResult: upstreamResult,
+    privacyHandled: true,
   });
-  let visibleResult = upstreamResult;
-  if (after.sanitizedContent) {
-    const privacy = engine.getPrivacySettings();
-    const shaped = sanitizeCallToolResult(upstreamResult, privacy.level);
-    // KEYPOINT-REVIEW: preserve structuredContent whenever shape-aware
-    // masking found the same sensitive values. The flat string remains a
-    // fail-safe for cross-boundary matches that no single field contains.
-    visibleResult = shaped.changed
-      ? shaped.result
-      : replaceWithSanitizedText(upstreamResult, after.sanitizedContent);
-  }
+  const visibleResult = boundary.visibleResult;
 
   if (after.action === "block") {
     return replaceWithText(visibleResult, `[CAITLYN BLOCKED] ${after.reason}`);

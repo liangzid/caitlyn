@@ -125,6 +125,10 @@ function collectSpans(text: string, vault: PrivacyVault, level: PrivacyLevel): S
       if (!bounds) continue;
       const raw = text.slice(bounds.start, bounds.end);
       if (!raw || (rule.accept && !rule.accept(raw))) continue;
+      // KEYPOINT-REVIEW: a vault surrogate is already masked. Rewriting it
+      // again would break restoration and make idempotent privacy passes
+      // impossible for structured adapters.
+      if (vault.lookup(raw) !== undefined) continue;
       const candidate = { start: bounds.start, end: bounds.end };
       if (spans.some((span) => span.start < candidate.end && candidate.start < span.end)) continue;
       const replacement = renderSpan(rule, raw, vault);

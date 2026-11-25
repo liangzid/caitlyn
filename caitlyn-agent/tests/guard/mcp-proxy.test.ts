@@ -69,6 +69,12 @@ function createUpstreamServer(state: UpstreamState): Server {
         structuredContent: { credential: "password=fixture-secret-value" },
       };
     }
+    if (mode === "numeric-output") {
+      return {
+        content: [{ type: "text", text: "ordinary project notes" }],
+        structuredContent: { identifier: request.params.arguments?.identifier },
+      };
+    }
     const text = mode === "malicious-output"
       ? maliciousText
       : "ordinary project notes";
@@ -222,6 +228,60 @@ describe("MCP proxy enforcement", () => {
         arguments: { path: masked },
       });
       expect(harness.lastArguments()?.path).toBe(original);
+    } finally {
+      process.env.HOME = previousHome;
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("restores format surrogates containing escaped whitespace", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-mcp-whitespace-"));
+    const previousHome = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      const original = "+1\t(212)\t555\t0199";
+      const masked = protectOutbound(original).text;
+      expect(masked).not.toBe(original);
+      expect(masked).toContain("\t");
+
+      harness = await createProxyHarness({
+        privacy_enabled: true,
+        privacy_level: "standard",
+      });
+      await harness.downstream.callTool({
+        name: "read_file",
+        arguments: { path: masked },
+      });
+      expect(harness.lastArguments()?.path).toBe(original);
+    } finally {
+      process.env.HOME = previousHome;
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("uses an error-shaped result when a numeric mask cannot round-trip", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-mcp-numeric-"));
+    const previousHome = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      const vaultDir = path.join(home, ".caitlyn");
+      fs.mkdirSync(vaultDir, { recursive: true });
+      fs.writeFileSync(path.join(vaultDir, "privacy.key"), Buffer.alloc(32, 4));
+      const identifier = 13800138000;
+      const masked = protectOutbound(String(identifier)).text;
+      expect(masked).toMatch(/^0\d{10}$/);
+
+      harness = await createProxyHarness({
+        privacy_enabled: true,
+        privacy_level: "standard",
+      });
+      const result = await harness.downstream.callTool({
+        name: "read_file",
+        arguments: { mode: "numeric-output", identifier },
+      });
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toBeUndefined();
+      expect(JSON.stringify(result)).not.toContain(String(identifier));
     } finally {
       process.env.HOME = previousHome;
       fs.rmSync(home, { recursive: true, force: true });
