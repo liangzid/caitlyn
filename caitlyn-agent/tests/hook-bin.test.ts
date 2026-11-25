@@ -2,7 +2,10 @@
  * Tests for hook-bin decision logic: adapter mapping to AgentHooksEngine
  * (before/post hook points, verdict policy, exit codes, empty input).
  */
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 
 const engineMock = vi.hoisted(() => {
   const processHook = vi.fn();
@@ -25,6 +28,7 @@ vi.mock("../src/guard/agent-hooks.js", () => ({
 
 import {
   decideHook,
+  failureDecision,
   normalizeHookInput,
   parseHookArgv,
   renderHostHookResponse,
@@ -32,16 +36,72 @@ import {
 } from "../src/hook-bin.js";
 
 describe("decideHook", () => {
+  const previousConfigPath = process.env.CAITLYN_CONFIG;
+  const previousAuditDir = process.env.CAITLYN_AUDIT_DIR;
+  let auditDir = "";
+
   beforeEach(() => {
     engineMock.processHook.mockReset();
     engineMock.constructorCalls.length = 0;
+    delete process.env.CAITLYN_CONFIG;
+    auditDir = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-hook-audit-"));
+    process.env.CAITLYN_AUDIT_DIR = auditDir;
   });
 
-  it("allows empty content without scanning", async () => {
+  afterEach(() => {
+    if (previousConfigPath === undefined) delete process.env.CAITLYN_CONFIG;
+    else process.env.CAITLYN_CONFIG = previousConfigPath;
+    if (previousAuditDir === undefined) delete process.env.CAITLYN_AUDIT_DIR;
+    else process.env.CAITLYN_AUDIT_DIR = previousAuditDir;
+  });
+
+  function writeRuntimeConfig(lines: string[]): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-hook-config-"));
+    const file = path.join(dir, "config.toml");
+    fs.writeFileSync(file, ["[guard]", ...lines, ""].join("\n"), "utf-8");
+    return file;
+  }
+
+  it("allows empty content without scanning when fail-open", async () => {
     const d: HookDecision = await decideHook({ tool: "", content: "" });
     expect(d.output.action).toBe("allow");
     expect(d.exitCode).toBe(0);
     expect(engineMock.processHook).not.toHaveBeenCalled();
+  });
+
+  it("blocks empty content without scanning when fail-closed", async () => {
+    process.env.CAITLYN_CONFIG = writeRuntimeConfig(['on_error = "block"']);
+    const d: HookDecision = await decideHook({ tool: "", content: "" });
+    expect(d.output.action).toBe("block");
+    expect(d.exitCode).toBe(1);
+    expect(engineMock.processHook).not.toHaveBeenCalled();
+    const audit = JSON.parse(
+      fs.readFileSync(path.join(auditDir, "guard-events.jsonl"), "utf-8").trim(),
+    );
+    expect(audit).toMatchObject({
+      action: "block",
+      source: "before:hook-input",
+      metadata: { inputError: true },
+    });
+  });
+
+  it("allows malformed input when the guard itself is disabled", () => {
+    const decision = failureDecision({
+      enabled: false,
+      beforeEnabled: true,
+      afterEnabled: true,
+      hookTimeoutMs: 5000,
+      maxScanBytes: 65536,
+      onError: "block",
+      suspiciousAction: "flag",
+      maliciousAction: "block",
+      privacyEnabled: false,
+      privacyLevel: "off",
+      auditEnabled: false,
+      auditDir: null,
+    }, "invalid JSON hook input");
+    expect(decision.output.action).toBe("allow");
+    expect(decision.exitCode).toBe(0);
   });
 
   it("blocks malicious content in before hooks", async () => {
@@ -106,6 +166,19 @@ describe("decideHook", () => {
     const d = await decideHook({ tool: "web_search", content: "weather forecast" });
     expect(d.output.action).toBe("allow");
     expect(d.exitCode).toBe(0);
+  });
+
+  it("configures structured audit logging by default", async () => {
+    engineMock.processHook.mockResolvedValue({ action: "allow", reason: "ok" });
+    await decideHook({ tool: "bash", content: "hello" });
+    expect(engineMock.constructorCalls[0]?.onEvent).toEqual(expect.any(Function));
+  });
+
+  it("omits the audit callback when audit is disabled", async () => {
+    process.env.CAITLYN_CONFIG = writeRuntimeConfig(["audit_enabled = false"]);
+    engineMock.processHook.mockResolvedValue({ action: "allow", reason: "ok" });
+    await decideHook({ tool: "bash", content: "hello" });
+    expect(engineMock.constructorCalls[0]?.onEvent).toBeUndefined();
   });
 
   it("configures the engine to cap oversized content", async () => {

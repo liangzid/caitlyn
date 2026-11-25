@@ -100,6 +100,10 @@ export interface GuardRuntimeConfig {
    * strict also perturbs labeled ages and money amounts.
    */
   privacyLevel: PrivacyLevel;
+  /** Write privacy-safe structured guard audit events as JSONL. */
+  auditEnabled: boolean;
+  /** Optional audit directory. Null uses CAITLYN_AUDIT_DIR or ~/.caitlyn/audit. */
+  auditDir: string | null;
 }
 
 export const GUARD_RUNTIME_DEFAULTS: GuardRuntimeConfig = {
@@ -113,6 +117,8 @@ export const GUARD_RUNTIME_DEFAULTS: GuardRuntimeConfig = {
   maliciousAction: "block",
   privacyEnabled: false,
   privacyLevel: "off",
+  auditEnabled: true,
+  auditDir: null,
 };
 
 // ── Evolution (System 2) Config ─────────────────────────────
@@ -438,6 +444,8 @@ export function loadGuardRuntimeConfig(configPath?: string): GuardRuntimeConfig 
   // A switch without a level means standard.
   if (!cfg.privacyEnabled) cfg.privacyLevel = "off";
   else if (cfg.privacyLevel === "off") cfg.privacyLevel = "standard";
+  cfg.auditEnabled = parseBoolean(raw, "audit_enabled", cfg.auditEnabled);
+  cfg.auditDir = raw.audit_dir?.trim() || null;
 
   return cfg;
 }

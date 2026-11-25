@@ -328,7 +328,7 @@ export class FSWatcher {
       }
     } catch (err) {
       this.stats.scanErrors++;
-      action = "allow"; // Fail-open
+      action = this.config.on_error ?? "allow";
       if (this.config.onEvent) {
         this.config.onEvent({
           mode: "fs-watcher",
@@ -337,7 +337,7 @@ export class FSWatcher {
             verdict: "benign", confidence: 0, tier: 0,
             script_results: [], total_latency_us: 0, total_tokens: 0,
           },
-          action: "allow",
+          action,
           source: filePath,
           timestamp: new Date().toISOString(),
           metadata: { error: String(err) },

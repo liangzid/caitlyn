@@ -48,6 +48,8 @@ describe("loadGuardRuntimeConfig", () => {
       maliciousAction: "flag",
       privacyEnabled: false,
       privacyLevel: "off",
+      auditEnabled: true,
+      auditDir: null,
     });
   });
 
@@ -65,6 +67,17 @@ describe("loadGuardRuntimeConfig", () => {
     expect(loadGuardRuntimeConfig(disabled)).toMatchObject({
       privacyEnabled: false,
       privacyLevel: "off",
+    });
+  });
+
+  it("loads audit settings", () => {
+    const file = writeGuardConfig([
+      "audit_enabled = false",
+      'audit_dir = "~/custom-audit"',
+    ]);
+    expect(loadGuardRuntimeConfig(file)).toMatchObject({
+      auditEnabled: false,
+      auditDir: "~/custom-audit",
     });
   });
 
