@@ -132,10 +132,7 @@ export class FSWatcher {
       this._watchDir(dir);
     }
 
-    // Ensure quarantine directory exists
-    if (!fs.existsSync(this.config.quarantineDir)) {
-      fs.mkdirSync(this.config.quarantineDir, { recursive: true });
-    }
+    this._ensureQuarantineDir();
   }
 
   /** Stop watching all directories. */
@@ -419,8 +416,10 @@ export class FSWatcher {
     const quarantineName = `${timestamp}_${basename}`;
     const quarantinePath = path.join(this.config.quarantineDir, quarantineName);
 
+    this._ensureQuarantineDir();
     try {
       fs.renameSync(filePath, quarantinePath);
+      this._secureQuarantinedFile(quarantinePath);
       // Write metadata alongside quarantined file
       const metaPath = quarantinePath + ".caitlyn_meta.json";
       fs.writeFileSync(
@@ -434,19 +433,39 @@ export class FSWatcher {
           null,
           2,
         ),
-        "utf-8",
+        { encoding: "utf-8", mode: 0o600 },
       );
       return quarantinePath;
     } catch (err) {
       // If rename fails (cross-device), try copy + delete
       try {
         fs.copyFileSync(filePath, quarantinePath);
+        this._secureQuarantinedFile(quarantinePath);
         fs.unlinkSync(filePath);
         return quarantinePath;
       } catch {
         // Last resort: just log the failure
         return quarantinePath; // path allocated, but operation may have failed
       }
+    }
+  }
+
+  /** Keep quarantine storage private even when it already existed. */
+  private _ensureQuarantineDir(): void {
+    fs.mkdirSync(this.config.quarantineDir, { recursive: true, mode: 0o700 });
+    try {
+      fs.chmodSync(this.config.quarantineDir, 0o700);
+    } catch {
+      // Permission hardening is best-effort on platforms with POSIX modes.
+    }
+  }
+
+  /** Remove group/other access after a file enters quarantine. */
+  private _secureQuarantinedFile(quarantinePath: string): void {
+    try {
+      fs.chmodSync(quarantinePath, 0o600);
+    } catch {
+      // Permission hardening is best-effort on platforms with POSIX modes.
     }
   }
 

@@ -54,5 +54,7 @@ describe("FSWatcher scan-error policy", () => {
     expect(result.action).toBe("block");
     expect(result.quarantinedPath).not.toBeNull();
     expect(fs.existsSync(filePath)).toBe(false);
+    expect(fs.statSync(result.quarantinedPath!).mode & 0o777).toBe(0o600);
+    expect(fs.statSync(quarantineDir).mode & 0o777).toBe(0o700);
   });
 });

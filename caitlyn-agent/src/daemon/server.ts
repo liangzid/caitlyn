@@ -446,7 +446,7 @@ export class DaemonServer {
     this.watcher = new FSWatcher(
       {
         watchDirs: parsed.dirs,
-        quarantineDir: "/tmp/caitlyn-quarantine",
+        quarantineDir: path.join(os.homedir(), ".caitlyn", "quarantine"),
         on_error: guardRuntime.onError,
         onEvent: createGuardAuditLogger(guardRuntime.auditEnabled, guardRuntime.auditDir),
       },
