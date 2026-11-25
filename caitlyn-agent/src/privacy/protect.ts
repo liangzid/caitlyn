@@ -26,6 +26,12 @@ export interface ProtectResult {
   count: number;
 }
 
+/** Offsets of one full privacy-rule match in otherwise unchanged text. */
+export interface PrivacyTextSpan {
+  start: number;
+  end: number;
+}
+
 interface Span {
   start: number;
   end: number;
@@ -56,6 +62,34 @@ export function protectOutbound(
 ): ProtectResult {
   if (level === "off") return { text, changed: false, count: 0 };
   return applySpans(text, collectSpans(text, vault, level));
+}
+
+/**
+ * Locate full privacy-rule matches without rewriting the text. Structured
+ * adapters use these offsets to tell field-local matches from matches whose
+ * context crosses an MCP content boundary.
+ */
+export function findPrivacySpans(
+  text: string,
+  level: PrivacyLevel,
+  vault: PrivacyVault = defaultPrivacyVault(),
+): PrivacyTextSpan[] {
+  if (level === "off") return [];
+  const spans: PrivacyTextSpan[] = [];
+  for (const rule of rulesForLevel(level)) {
+    rule.pattern.lastIndex = 0;
+    for (const match of text.matchAll(rule.pattern)) {
+      const bounds = groupBounds(match, rule.valueGroup);
+      if (!bounds) continue;
+      const raw = text.slice(bounds.start, bounds.end);
+      if (!raw || (rule.accept && !rule.accept(raw))) continue;
+      if (vault.lookup(raw) !== undefined) continue;
+      const start = match.index;
+      if (start === undefined) continue;
+      spans.push({ start, end: start + match[0].length });
+    }
+  }
+  return spans;
 }
 
 /**
@@ -109,14 +143,18 @@ export function runPrivacyCommand(argv: string[]): void {
   process.stdout.write(result.text + "\n");
 }
 
+function rulesForLevel(level: PrivacyLevel): PrivacyRule[] {
+  return builtinPrivacyRules()
+    .filter((rule) => level === "strict" || rule.klass !== "metric")
+    .slice()
+    .sort((a, b) => a.priority - b.priority);
+}
+
 /**
  * Find non-overlapping sensitive spans in priority order.
  */
 function collectSpans(text: string, vault: PrivacyVault, level: PrivacyLevel): Span[] {
-  const rules = builtinPrivacyRules()
-    .filter((rule) => level === "strict" || rule.klass !== "metric")
-    .slice()
-    .sort((a, b) => a.priority - b.priority);
+  const rules = rulesForLevel(level);
   const spans: Span[] = [];
   for (const rule of rules) {
     rule.pattern.lastIndex = 0;

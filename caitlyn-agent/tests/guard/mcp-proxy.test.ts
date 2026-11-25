@@ -75,6 +75,28 @@ function createUpstreamServer(state: UpstreamState): Server {
         structuredContent: { identifier: request.params.arguments?.identifier },
       };
     }
+    if (mode === "structured-metric") {
+      return {
+        content: [{ type: "text", text: "ordinary project notes" }],
+        structuredContent: { salary: 120000 },
+      };
+    }
+    if (mode === "split-metric") {
+      return {
+        content: [
+          { type: "text", text: "salary:" },
+          { type: "text", text: "120000" },
+        ],
+      };
+    }
+    if (mode === "phone-tail") {
+      return {
+        content: [
+          { type: "text", text: "+1 (212) 555 0199" },
+          { type: "text", text: "1234" },
+        ],
+      };
+    }
     const text = mode === "malicious-output"
       ? maliciousText
       : "ordinary project notes";
@@ -253,6 +275,70 @@ describe("MCP proxy enforcement", () => {
         arguments: { path: masked },
       });
       expect(harness.lastArguments()?.path).toBe(original);
+    } finally {
+      process.env.HOME = previousHome;
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("uses an error-shaped result for a strict metric split across blocks", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-mcp-split-metric-"));
+    const previousHome = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      harness = await createProxyHarness({
+        privacy_enabled: true,
+        privacy_level: "strict",
+      });
+      const result = await harness.downstream.callTool({
+        name: "read_file",
+        arguments: { mode: "split-metric" },
+      });
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toBeUndefined();
+    } finally {
+      process.env.HOME = previousHome;
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("uses an error-shaped result when a structured key supplies metric context", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-mcp-key-metric-"));
+    const previousHome = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      harness = await createProxyHarness({
+        privacy_enabled: true,
+        privacy_level: "strict",
+      });
+      const result = await harness.downstream.callTool({
+        name: "read_file",
+        arguments: { mode: "structured-metric" },
+      });
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toBeUndefined();
+    } finally {
+      process.env.HOME = previousHome;
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves successful blocks after a field-local phone is masked", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-mcp-phone-tail-"));
+    const previousHome = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      harness = await createProxyHarness({
+        privacy_enabled: true,
+        privacy_level: "standard",
+      });
+      const result = await harness.downstream.callTool({
+        name: "read_file",
+        arguments: { mode: "phone-tail" },
+      });
+      expect(result.isError).not.toBe(true);
+      expect(result.content).toHaveLength(2);
+      expect(result.content?.[1]).toEqual({ type: "text", text: "1234" });
     } finally {
       process.env.HOME = previousHome;
       fs.rmSync(home, { recursive: true, force: true });

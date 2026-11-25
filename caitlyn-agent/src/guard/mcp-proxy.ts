@@ -17,42 +17,87 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import type { AgentHooksEngine } from "./agent-hooks.js";
 import type { PrivacyLevel } from "../config.js";
-import { protectOutbound, restoreInbound } from "../privacy/protect.js";
+import { findPrivacySpans, protectOutbound, restoreInbound } from "../privacy/protect.js";
 
-function appendStructuredScanLines(
+interface ScanPart {
+  text: string;
+  /** Offset inside `text` that the shape-aware sanitizer can rewrite. */
+  atomicStart?: number;
+  atomicEnd?: number;
+}
+
+function appendStructuredScanParts(
   value: unknown,
   keyPath: string,
-  lines: string[],
+  parts: ScanPart[],
 ): void {
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    lines.push(`${keyPath}: ${String(value)}`);
+    const prefix = keyPath ? `${keyPath}: ` : "";
+    const rendered = String(value);
+    parts.push({
+      text: `${prefix}${rendered}`,
+      atomicStart: prefix.length,
+      atomicEnd: prefix.length + rendered.length,
+    });
     return;
   }
   if (Array.isArray(value)) {
-    value.forEach((item, index) => appendStructuredScanLines(item, `${keyPath}[${index}]`, lines));
+    value.forEach((item, index) => appendStructuredScanParts(item, `${keyPath}[${index}]`, parts));
     return;
   }
   if (value && typeof value === "object") {
     for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
-      appendStructuredScanLines(item, keyPath ? `${keyPath}.${key}` : key, lines);
+      appendStructuredScanParts(item, keyPath ? `${keyPath}.${key}` : key, parts);
     }
   }
 }
 
-/** Extract the model-readable text represented by an MCP tool result. */
-export function callToolResultScanText(result: CallToolResult): string {
-  const parts = (result.content ?? [])
+function resultScanParts(result: CallToolResult): ScanPart[] {
+  const parts: ScanPart[] = (result.content ?? [])
     .map((block) => {
-      if (block.type === "text") return block.text;
-      if (block.type === "resource" && "text" in block.resource) return block.resource.text;
-      return `[${block.type} content]`;
+      if (block.type === "text") {
+        return { text: block.text, atomicStart: 0, atomicEnd: block.text.length };
+      }
+      if (block.type === "resource" && "text" in block.resource) {
+        return {
+          text: block.resource.text,
+          atomicStart: 0,
+          atomicEnd: block.resource.text.length,
+        };
+      }
+      return { text: `[${block.type} content]` };
     });
   if (result.structuredContent !== undefined) {
-    const lines: string[] = [];
-    appendStructuredScanLines(result.structuredContent, "", lines);
-    parts.push(lines.join("\n"));
+    appendStructuredScanParts(result.structuredContent, "", parts);
   }
-  return parts.join("\n");
+  return parts;
+}
+
+/** Extract the model-readable text represented by an MCP tool result. */
+export function callToolResultScanText(result: CallToolResult): string {
+  return resultScanParts(result).map((part) => part.text).join("\n");
+}
+
+function resultAtomicRanges(result: CallToolResult): Array<{ start: number; end: number }> {
+  let offset = 0;
+  const ranges: Array<{ start: number; end: number }> = [];
+  for (const part of resultScanParts(result)) {
+    if (part.atomicStart !== undefined && part.atomicEnd !== undefined) {
+      ranges.push({
+        start: offset + part.atomicStart,
+        end: offset + part.atomicEnd,
+      });
+    }
+    offset += part.text.length + 1;
+  }
+  return ranges;
+}
+
+function insideAtomicRange(
+  span: { start: number; end: number },
+  ranges: Array<{ start: number; end: number }>,
+): boolean {
+  return ranges.some((range) => span.start >= range.start && span.end <= range.end);
 }
 
 function textOnlyResult(text: string): CallToolResult {
@@ -178,23 +223,28 @@ function sanitizeResultForBoundary(
   result: CallToolResult,
   level: PrivacyLevel,
 ): { visibleResult: CallToolResult; scanText: string } {
+  const originalScanText = callToolResultScanText(result);
+  const spans = findPrivacySpans(originalScanText, level);
+  const atomicRanges = resultAtomicRanges(result);
+  const shapeExpressible = spans.every((span) => insideAtomicRange(span, atomicRanges));
   const shaped = sanitizeCallToolResult(result, level);
-  let scanText = callToolResultScanText(shaped.result);
 
-  // KEYPOINT-REVIEW: a secret can be split across two model-visible fields.
-  // Detect that residual concatenated form after field-local masking. Use the
-  // standard rules here so strict metric values are not noised a second time.
-  const residualScanText = protectText(scanText, "standard");
-  const hasCrossFieldResidual = residualScanText !== scanText;
-  scanText = residualScanText;
-
-  if (!shaped.shapeSafe || hasCrossFieldResidual) {
+  // KEYPOINT-REVIEW: privacy is detected on the original boundary-aware
+  // concatenation, not on masked output. Only a match contained entirely in
+  // one independently rewritten value can preserve the MCP shape. Matches that
+  // cross content parts, structured scalar values, or object keys require the
+  // flat error-shaped fallback.
+  if (!shaped.shapeSafe || !shapeExpressible) {
+    const scanText = protectText(originalScanText, level);
     return {
       visibleResult: replaceWithSanitizedText(result, scanText),
       scanText,
     };
   }
-  return { visibleResult: shaped.result, scanText };
+  return {
+    visibleResult: shaped.result,
+    scanText: callToolResultScanText(shaped.result),
+  };
 }
 
 function restoreSurrogateText(text: string): string {
