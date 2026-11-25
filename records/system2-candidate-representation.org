@@ -1,0 +1,17 @@
+#+title: System II Candidate Representation
+#+date: 2026-11-25
+
+* Goal
+Extend generated candidate defenses beyond exact substring and regex signatures without weakening deterministic verification.
+
+* Initial direction
+- Keep exact/regex as compatible signature types.
+- Add deterministic compositional matching first, before LLM-generated executable code.
+- Candidate representation should be serializable in the existing defense-skill config and DAG.
+- Verification, active scanning, and shadow scanning must share the same matcher semantics.
+- Generated executable TypeScript remains out of scope until there is a stronger sandbox and provenance model.
+
+* Open design choices
+- Representation for conjunction/proximity/field-aware predicates.
+- Whether regex remains one predicate atom rather than the top-level composition mechanism.
+- How reviewer prompts should prefer lower false-positive compositional candidates over broad regexes.
