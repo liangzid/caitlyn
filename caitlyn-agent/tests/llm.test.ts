@@ -23,4 +23,8 @@ describe("getModels", () => {
   it("keeps ordinary OpenAI chat models visible", () => {
     expect(getModels("openai").some((model) => model.id === "gpt-5.4-mini")).toBe(true);
   });
+
+  it("hides realtime-only OpenAI models from chat selection", () => {
+    expect(getModels("openai").some((model) => model.id === "gpt-realtime-2.1")).toBe(false);
+  });
 });

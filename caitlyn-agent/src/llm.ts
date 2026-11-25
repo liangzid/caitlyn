@@ -11,7 +11,7 @@
 import {
   registerBuiltInApiProviders,
   getProviders,
-  getModels,
+  getModels as getCatalogModels,
   type BuiltinProvider,
 } from "@earendil-works/pi-ai/compat";
 import type { Model } from "@earendil-works/pi-ai";
@@ -21,7 +21,18 @@ import type { CaitlynAgentConfig } from "./config.js";
 // can resolve auth for any provider.
 registerBuiltInApiProviders();
 
-export { getProviders, getModels };
+export { getProviders };
+
+/** Return catalog models usable through ordinary request/response chat APIs. */
+export function getModels(provider: BuiltinProvider): Model<any>[] {
+  // KEYPOINT-REVIEW: pi-ai's static catalog includes OpenAI realtime-only
+  // models with api=openai-responses. Those ids cannot complete the normal
+  // Responses chat flow used by CAITLYN, so keep them out of selection and
+  // validation instead of offering a model that always fails at runtime.
+  return getCatalogModels(provider).filter((model) =>
+    !/(?:^|[-/])realtime(?:[-.]|$)/i.test(model.id)
+  );
+}
 
 export function resolveModel(config: CaitlynAgentConfig): Model<any> {
   // Validate the user's provider string against the static catalog list.
