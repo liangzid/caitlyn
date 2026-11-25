@@ -13,5 +13,5 @@
 - GitGuardian failures caused by synthetic credential fixtures remain expected and ignored.
 
 * Validation
-- TypeScript suite: 570 tests across 64 files passed locally after review fixes.
+- TypeScript suite: 571 tests across 64 files passed locally after review fixes.
 - Review follow-up also made quarantine storage owner-only, treated Tier 1 fallback as scanner degradation under fail-closed policy, preserved audit preferences across setup, and fixed inline TOML comments.
