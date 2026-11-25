@@ -213,6 +213,28 @@ export const EVOLUTION_DEFAULTS: EvolutionConfig = {
   evolutionDir: path.join(os.homedir(), ".caitlyn", "evolution"),
 };
 
+/** Strip a TOML inline comment while preserving `#` inside quoted strings. */
+function stripTomlInlineComment(value: string): string {
+  let quote: "\"" | "'" | null = null;
+  let escaped = false;
+  for (let index = 0; index < value.length; index++) {
+    const char = value[index];
+    if (quote === "\"" && char === "\\" && !escaped) {
+      escaped = true;
+      continue;
+    }
+    if (quote !== null && char === quote && !escaped) {
+      quote = null;
+    } else if (quote === null && (char === "\"" || char === "'")) {
+      quote = char;
+    } else if (quote === null && char === "#") {
+      return value.slice(0, index).trimEnd();
+    }
+    escaped = false;
+  }
+  return value.trimEnd();
+}
+
 /** Minimal TOML section reader — reads [section] key=value pairs. */
 function readTomlSection(filePath: string, section: string): Record<string, string> {
   const result: Record<string, string> = {};
@@ -230,7 +252,8 @@ function readTomlSection(filePath: string, section: string): Record<string, stri
       if (inSection) {
         const kvMatch = trimmed.match(/^(\w+)\s*=\s*(.+)$/);
         if (kvMatch) {
-          result[kvMatch[1]] = kvMatch[2].replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
+          const value = stripTomlInlineComment(kvMatch[2]);
+          result[kvMatch[1]] = value.replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
         }
       }
     }

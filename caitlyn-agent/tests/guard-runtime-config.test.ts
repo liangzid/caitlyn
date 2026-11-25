@@ -81,6 +81,17 @@ describe("loadGuardRuntimeConfig", () => {
     });
   });
 
+  it("ignores inline comments without stripping hashes inside strings", () => {
+    const file = writeGuardConfig([
+      "audit_enabled = false # operator opt-out",
+      'audit_dir = "~/custom#audit" # keep the hash in the path',
+    ]);
+    expect(loadGuardRuntimeConfig(file)).toMatchObject({
+      auditEnabled: false,
+      auditDir: "~/custom#audit",
+    });
+  });
+
   it("rejects invalid actions and non-positive limits", () => {
     const file = writeGuardConfig([
       "hook_timeout_ms = 0",
