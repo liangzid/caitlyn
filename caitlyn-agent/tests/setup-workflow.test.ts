@@ -200,6 +200,30 @@ describe("runSetupWizard", () => {
     });
     expect(prompts.messages.join("\n")).toContain("Privacy: strict");
   });
+
+  it("preserves existing audit settings when setup is re-run", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-setup-audit-"));
+    const configPath = path.join(dir, "config.toml");
+    fs.writeFileSync(
+      configPath,
+      "[guard]\naudit_enabled = false\naudit_dir = \"~/operator-audit\"\n",
+      "utf-8",
+    );
+    const prompts = new ScriptedPrompts(
+      ["deepseek", "deepseek-v4-flash", "balanced"],
+      [true, false, false, false, true],
+    );
+
+    await runSetupWizard(prompts, { configPath }, {
+      authStatus: () => ({ runtime: false, persisted: false, env: true }),
+      detectAgents: () => [],
+    });
+
+    expect(loadGuardRuntimeConfig(configPath)).toMatchObject({
+      auditEnabled: false,
+      auditDir: "~/operator-audit",
+    });
+  });
 });
 
 describe("customizeDetection", () => {
