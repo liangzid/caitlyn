@@ -132,10 +132,7 @@ export class FSWatcher {
       this._watchDir(dir);
     }
 
-    // Ensure quarantine directory exists
-    if (!fs.existsSync(this.config.quarantineDir)) {
-      fs.mkdirSync(this.config.quarantineDir, { recursive: true });
-    }
+    this._ensureQuarantineDir();
   }
 
   /** Stop watching all directories. */
@@ -313,22 +310,42 @@ export class FSWatcher {
       ]);
       scanResult = result;
 
-      const decision = evaluatePolicy({
-        mode: "fs-watcher",
-        source: filePath,
-        content,
-        scanResult: result,
-        config: this.config,
-      });
+      const tier1Failure = result.script_results.find(
+        (script) => script.defense_skill_id === "llm-fallback" && script.error,
+      )?.error;
 
-      action = decision.action;
+      if (tier1Failure && this.config.on_error === "block") {
+        this.stats.scanErrors++;
+        action = "block";
+        if (this.config.onEvent) {
+          this.config.onEvent({
+            mode: "fs-watcher",
+            content_snippet: extractedText.slice(0, 256),
+            scan_result: result,
+            action,
+            source: filePath,
+            timestamp: new Date().toISOString(),
+            metadata: { filePath, fileType, error: tier1Failure },
+          });
+        }
+      } else {
+        const decision = evaluatePolicy({
+          mode: "fs-watcher",
+          source: filePath,
+          content,
+          scanResult: result,
+          config: this.config,
+        });
 
-      if (this.config.onEvent) {
-        this.config.onEvent({ ...decision.event, metadata: { filePath, fileType } });
+        action = decision.action;
+
+        if (this.config.onEvent) {
+          this.config.onEvent({ ...decision.event, metadata: { filePath, fileType } });
+        }
       }
     } catch (err) {
       this.stats.scanErrors++;
-      action = "allow"; // Fail-open
+      action = this.config.on_error ?? "allow";
       if (this.config.onEvent) {
         this.config.onEvent({
           mode: "fs-watcher",
@@ -337,7 +354,7 @@ export class FSWatcher {
             verdict: "benign", confidence: 0, tier: 0,
             script_results: [], total_latency_us: 0, total_tokens: 0,
           },
-          action: "allow",
+          action,
           source: filePath,
           timestamp: new Date().toISOString(),
           metadata: { error: String(err) },
@@ -419,8 +436,10 @@ export class FSWatcher {
     const quarantineName = `${timestamp}_${basename}`;
     const quarantinePath = path.join(this.config.quarantineDir, quarantineName);
 
+    this._ensureQuarantineDir();
     try {
       fs.renameSync(filePath, quarantinePath);
+      this._secureQuarantinedFile(quarantinePath);
       // Write metadata alongside quarantined file
       const metaPath = quarantinePath + ".caitlyn_meta.json";
       fs.writeFileSync(
@@ -434,19 +453,39 @@ export class FSWatcher {
           null,
           2,
         ),
-        "utf-8",
+        { encoding: "utf-8", mode: 0o600 },
       );
       return quarantinePath;
     } catch (err) {
       // If rename fails (cross-device), try copy + delete
       try {
         fs.copyFileSync(filePath, quarantinePath);
+        this._secureQuarantinedFile(quarantinePath);
         fs.unlinkSync(filePath);
         return quarantinePath;
       } catch {
         // Last resort: just log the failure
         return quarantinePath; // path allocated, but operation may have failed
       }
+    }
+  }
+
+  /** Keep quarantine storage private even when it already existed. */
+  private _ensureQuarantineDir(): void {
+    fs.mkdirSync(this.config.quarantineDir, { recursive: true, mode: 0o700 });
+    try {
+      fs.chmodSync(this.config.quarantineDir, 0o700);
+    } catch {
+      // Permission hardening is best-effort on platforms with POSIX modes.
+    }
+  }
+
+  /** Remove group/other access after a file enters quarantine. */
+  private _secureQuarantinedFile(quarantinePath: string): void {
+    try {
+      fs.chmodSync(quarantinePath, 0o600);
+    } catch {
+      // Permission hardening is best-effort on platforms with POSIX modes.
     }
   }
 

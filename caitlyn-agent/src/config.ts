@@ -100,6 +100,10 @@ export interface GuardRuntimeConfig {
    * strict also perturbs labeled ages and money amounts.
    */
   privacyLevel: PrivacyLevel;
+  /** Write privacy-safe structured guard audit events as JSONL. */
+  auditEnabled: boolean;
+  /** Optional audit directory. Null uses CAITLYN_AUDIT_DIR or ~/.caitlyn/audit. */
+  auditDir: string | null;
 }
 
 export const GUARD_RUNTIME_DEFAULTS: GuardRuntimeConfig = {
@@ -113,6 +117,8 @@ export const GUARD_RUNTIME_DEFAULTS: GuardRuntimeConfig = {
   maliciousAction: "block",
   privacyEnabled: false,
   privacyLevel: "off",
+  auditEnabled: true,
+  auditDir: null,
 };
 
 // ── Evolution (System 2) Config ─────────────────────────────
@@ -207,6 +213,64 @@ export const EVOLUTION_DEFAULTS: EvolutionConfig = {
   evolutionDir: path.join(os.homedir(), ".caitlyn", "evolution"),
 };
 
+/** Strip a TOML inline comment while preserving `#` inside quoted strings. */
+function stripTomlInlineComment(value: string): string {
+  let quote: "\"" | "'" | null = null;
+  let escaped = false;
+  for (let index = 0; index < value.length; index++) {
+    const char = value[index];
+    if (quote === "\"" && char === "\\" && !escaped) {
+      escaped = true;
+      continue;
+    }
+    if (quote !== null && char === quote && !escaped) {
+      quote = null;
+    } else if (quote === null && (char === "\"" || char === "'")) {
+      quote = char;
+    } else if (quote === null && char === "#") {
+      return value.slice(0, index).trimEnd();
+    }
+    escaped = false;
+  }
+  return value.trimEnd();
+}
+
+/** Decode the escape sequences supported by TOML basic strings. */
+function decodeTomlBasicString(value: string): string {
+  return value.replace(
+    /\\(u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|[btnfr"\\])/g,
+    (_match, escape: string) => {
+      if (escape.startsWith("u") || escape.startsWith("U")) {
+        const codePoint = parseInt(escape.slice(1), 16);
+        return codePoint <= 0x10ffff
+          ? String.fromCodePoint(codePoint)
+          : `\\${escape}`;
+      }
+      const escapes: Record<string, string> = {
+        b: "\b",
+        t: "\t",
+        n: "\n",
+        f: "\f",
+        r: "\r",
+        "\"": "\"",
+        "\\": "\\",
+      };
+      return escapes[escape] ?? escape;
+    },
+  );
+}
+
+/** Parse the scalar string forms used by the setup-owned config sections. */
+function parseTomlScalar(value: string): string {
+  if (value.length >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
+    return decodeTomlBasicString(value.slice(1, -1));
+  }
+  if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
 /** Minimal TOML section reader — reads [section] key=value pairs. */
 function readTomlSection(filePath: string, section: string): Record<string, string> {
   const result: Record<string, string> = {};
@@ -224,7 +288,8 @@ function readTomlSection(filePath: string, section: string): Record<string, stri
       if (inSection) {
         const kvMatch = trimmed.match(/^(\w+)\s*=\s*(.+)$/);
         if (kvMatch) {
-          result[kvMatch[1]] = kvMatch[2].replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
+          const value = stripTomlInlineComment(kvMatch[2]);
+          result[kvMatch[1]] = parseTomlScalar(value);
         }
       }
     }
@@ -438,6 +503,8 @@ export function loadGuardRuntimeConfig(configPath?: string): GuardRuntimeConfig 
   // A switch without a level means standard.
   if (!cfg.privacyEnabled) cfg.privacyLevel = "off";
   else if (cfg.privacyLevel === "off") cfg.privacyLevel = "standard";
+  cfg.auditEnabled = parseBoolean(raw, "audit_enabled", cfg.auditEnabled);
+  cfg.auditDir = raw.audit_dir?.trim() || null;
 
   return cfg;
 }

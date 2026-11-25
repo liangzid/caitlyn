@@ -76,6 +76,9 @@ export interface GuardConfig {
   /** Maximum content length to scan (bytes). Longer content is truncated. */
   max_scan_bytes: number;
 
+  /** Action when the scanner itself errors or times out. */
+  on_error?: "allow" | "block";
+
   /** Callback for guard events (logging, alerting). */
   onEvent?: (event: GuardEvent) => void;
 }

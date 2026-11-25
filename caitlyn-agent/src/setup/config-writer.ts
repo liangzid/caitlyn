@@ -75,6 +75,8 @@ function renderGuardSection(config: GuardRuntimeConfig): string {
     `malicious_action = ${tomlString(config.maliciousAction)}`,
     `privacy_enabled = ${config.privacyEnabled}`,
     `privacy_level = ${tomlString(config.privacyLevel)}`,
+    `audit_enabled = ${config.auditEnabled}`,
+    ...(config.auditDir ? [`audit_dir = ${tomlString(config.auditDir)}`] : []),
   ].join("\n");
 }
 

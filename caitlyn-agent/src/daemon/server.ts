@@ -32,7 +32,12 @@ import {
 import { isOsTelemetrySource } from "../guard/os-watcher.js";
 import { createUnavailableLlmCall, parseScanMode, type LlmCallFn } from "../scanner.js";
 import type { ScanResult } from "../schema.js";
-import { loadEvolutionConfig, type EvolutionConfig } from "../config.js";
+import {
+  loadEvolutionConfig,
+  loadGuardRuntimeConfig,
+  type EvolutionConfig,
+} from "../config.js";
+import { createGuardAuditLogger } from "../guard/audit.js";
 import { EvolutionEngine } from "../evolution/engine.js";
 import { appendTriggerRecord } from "../evolution/stats-events.js";
 import {
@@ -437,8 +442,14 @@ export class DaemonServer {
       await this.watcher.stop();
       this.watcher = null;
     }
+    const guardRuntime = loadGuardRuntimeConfig();
     this.watcher = new FSWatcher(
-      { watchDirs: parsed.dirs, quarantineDir: "/tmp/caitlyn-quarantine" },
+      {
+        watchDirs: parsed.dirs,
+        quarantineDir: path.join(os.homedir(), ".caitlyn", "quarantine"),
+        on_error: guardRuntime.onError,
+        onEvent: createGuardAuditLogger(guardRuntime.auditEnabled, guardRuntime.auditDir),
+      },
       this.llmCall,
     );
     this.watcher.start();

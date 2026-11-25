@@ -177,6 +177,17 @@ export async function runSetupWizard(
     || await prompts.confirm("Review and customize every detection setting?", false);
   if (reviewAdvanced) document = await customizeDetection(prompts, document);
   else document = { ...document, guard: await choosePrivacy(prompts, document.guard) };
+  // Audit settings are operator-owned and not wizard inputs, so re-running
+  // setup must not silently reset them to defaults.
+  const existingGuard = loadGuardRuntimeConfig(configPath);
+  document = {
+    ...document,
+    guard: {
+      ...document.guard,
+      auditEnabled: existingGuard.auditEnabled,
+      auditDir: existingGuard.auditDir,
+    },
+  };
   await confirmDetectionAvailability(prompts, document.scanning, credential.available);
   if (document.guard.privacyEnabled && !document.guard.enabled) {
     prompts.warn(

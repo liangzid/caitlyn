@@ -33,8 +33,14 @@ import {
 } from "./guard/agent-hooks.js";
 import { appendStatsEvent } from "./evolution/stats-events.js";
 import type { VerdictPolicy } from "./guard/types.js";
-import { loadGuardRuntimeConfig, loadScanningConfig } from "./config.js";
+import {
+  GUARD_RUNTIME_DEFAULTS,
+  loadGuardRuntimeConfig,
+  loadScanningConfig,
+  type GuardRuntimeConfig,
+} from "./config.js";
 import { createCredentialedLlmCall } from "./llm-runtime.js";
+import { createGuardAuditLogger } from "./guard/audit.js";
 
 interface HookInput {
   tool: string;
@@ -79,6 +85,7 @@ export interface RenderedHookResponse {
 
 async function main(): Promise<void> {
   const invocation = parseHookArgv(process.argv.slice(2));
+  const runtime = loadRuntimeSafely();
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
@@ -86,19 +93,58 @@ async function main(): Promise<void> {
 
   const raw = Buffer.concat(chunks).toString("utf-8").trim();
   if (!raw) {
-    emit(invocation.host, { output: { action: "allow", reason: "empty input — allowing" }, exitCode: 0 });
+    emit(invocation.host, failureDecision(runtime, "empty hook input", invocation.post));
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    emit(invocation.host, { output: { action: "allow", reason: "invalid JSON input — allowing" }, exitCode: 0 });
+    emit(invocation.host, failureDecision(runtime, "invalid JSON hook input", invocation.post));
   }
 
   const input = normalizeHookInput(parsed, invocation.post);
   const decision = await decideHook(input);
   emit(invocation.host, decision);
+}
+
+function loadRuntimeSafely(): GuardRuntimeConfig {
+  try {
+    return loadGuardRuntimeConfig();
+  } catch {
+    return GUARD_RUNTIME_DEFAULTS;
+  }
+}
+
+/** Apply the operator-selected error policy to malformed or unscannable input. */
+export function failureDecision(
+  runtime: GuardRuntimeConfig,
+  reason: string,
+  post?: boolean,
+): HookDecision {
+  const action = runtime.enabled ? runtime.onError : "allow";
+  const decision = {
+    output: { action, reason },
+    exitCode: action === "block" ? 1 : 0,
+    post,
+  };
+  createGuardAuditLogger(runtime.auditEnabled, runtime.auditDir)?.({
+    mode: "agent-hooks",
+    content_snippet: "",
+    scan_result: {
+      verdict: "benign",
+      confidence: 0,
+      tier: 0,
+      script_results: [],
+      total_latency_us: 0,
+      total_tokens: 0,
+    },
+    action,
+    source: `${post ? "after" : "before"}:hook-input`,
+    timestamp: new Date().toISOString(),
+    metadata: { error: reason, inputError: true },
+  });
+  return decision;
 }
 
 /**
@@ -237,6 +283,7 @@ function emit(host: CommandHookHost, decision: HookDecision): never {
  * flagged because the tool has already executed.
  */
 export async function decideHook(input: HookInput): Promise<HookDecision> {
+  const runtime = loadRuntimeSafely();
   const content = buildContent(input);
   if (content) {
     appendStatsEvent("agent_behavior", "tool_payload_bytes", content.length, {
@@ -245,10 +292,9 @@ export async function decideHook(input: HookInput): Promise<HookDecision> {
     });
   }
   if (!content || content.trim().length === 0) {
-    return { output: { action: "allow", reason: "no scannable content" }, exitCode: 0 };
+    return failureDecision(runtime, "no scannable content", input.post);
   }
 
-  const runtime = loadGuardRuntimeConfig();
   const scanning = loadScanningConfig();
   const verdictPolicy: VerdictPolicy = input.post === true
     ? POST_VERDICT_POLICY
@@ -270,6 +316,7 @@ export async function decideHook(input: HookInput): Promise<HookDecision> {
       privacy_enabled: runtime.privacyEnabled,
       privacy_level: runtime.privacyLevel,
       verdict_policy: verdictPolicy,
+      onEvent: createGuardAuditLogger(runtime.auditEnabled, runtime.auditDir),
     } as AgentHooksConfig,
     createHookLlmCall(scanning.skipTier1),
   );
@@ -312,10 +359,9 @@ function buildContent(input: HookInput): string {
 }
 
 main().catch((err) => {
-  // Fail-open: a crash allows the tool call. Host adapters stay silent.
   const invocation = parseHookArgv(process.argv.slice(2));
-  emit(invocation.host, {
-    output: { action: "allow", reason: `hook error: ${String(err)}` },
-    exitCode: 0,
-  });
+  emit(
+    invocation.host,
+    failureDecision(loadRuntimeSafely(), `hook error: ${String(err)}`, invocation.post),
+  );
 });

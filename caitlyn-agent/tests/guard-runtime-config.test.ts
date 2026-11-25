@@ -48,6 +48,8 @@ describe("loadGuardRuntimeConfig", () => {
       maliciousAction: "flag",
       privacyEnabled: false,
       privacyLevel: "off",
+      auditEnabled: true,
+      auditDir: null,
     });
   });
 
@@ -65,6 +67,39 @@ describe("loadGuardRuntimeConfig", () => {
     expect(loadGuardRuntimeConfig(disabled)).toMatchObject({
       privacyEnabled: false,
       privacyLevel: "off",
+    });
+  });
+
+  it("loads audit settings", () => {
+    const file = writeGuardConfig([
+      "audit_enabled = false",
+      'audit_dir = "~/custom-audit"',
+    ]);
+    expect(loadGuardRuntimeConfig(file)).toMatchObject({
+      auditEnabled: false,
+      auditDir: "~/custom-audit",
+    });
+  });
+
+  it("ignores inline comments without stripping hashes inside strings", () => {
+    const file = writeGuardConfig([
+      "audit_enabled = false # operator opt-out",
+      'audit_dir = "~/custom#audit" # keep the hash in the path',
+    ]);
+    expect(loadGuardRuntimeConfig(file)).toMatchObject({
+      auditEnabled: false,
+      auditDir: "~/custom#audit",
+    });
+  });
+
+  it("does not discard later settings after an invalid unicode escape", () => {
+    const file = writeGuardConfig([
+      'audit_dir = "\\U00110000"',
+      'on_error = "block"',
+    ]);
+    expect(loadGuardRuntimeConfig(file)).toMatchObject({
+      auditDir: "\\U00110000",
+      onError: "block",
     });
   });
 

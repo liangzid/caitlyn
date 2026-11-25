@@ -19,7 +19,7 @@ new prompt-injection failures into verified, reusable defense skills.
 ![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22.19-18212b?style=flat-square)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.9-2675bf?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-%3E%3D3.10-3572A5?style=flat-square)
-![Tests](https://img.shields.io/badge/tests-530_TS_%7C_41_Python-20a387?style=flat-square)
+![Tests](https://img.shields.io/badge/tests-571_TS_%7C_41_Python-20a387?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-7253ed?style=flat-square)
 
 </div>
@@ -398,6 +398,9 @@ The most important settings are:
 | `llm` | `small_model` | `deepseek/deepseek-v4-pro` | Reviewer model |
 | `scanning` | `escalation_policy` | `safe` | `safe`, `aggressive`, or `off` |
 | `scanning` | `source_trust` | `medium` | Default trust assigned to content sources |
+| `guard` | `on_error` | `allow` | Scanner/input errors fail open (`allow`) or fail closed (`block`) |
+| `guard` | `audit_enabled` | `true` | Write structured privacy-safe guard decisions as JSONL |
+| `guard` | `audit_dir` | `~/.caitlyn/audit` | Audit directory; `CAITLYN_AUDIT_DIR` overrides it |
 | `evolution` | `autonomy` | `auto` | Sample-backed action: `record`, `candidate`, or `auto` |
 | `evolution` | `unknown_threat_action` | `candidate` | Action when no raw sample is available |
 | `evolution` | `max_rounds` | `5` | Maximum synthesis rounds |
@@ -547,7 +550,7 @@ uv sync --extra dev
 uv run pytest -q
 ```
 
-The current local suites contain 533 TypeScript tests across 59 files and 41
+The current local suites contain 571 TypeScript tests across 64 files and 41
 Python tests. Continuous integration runs the build and both suites on pushes
 and pull requests.
 

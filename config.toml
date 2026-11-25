@@ -72,6 +72,13 @@ cooldown_minutes = 60
 daily_evolution_limit = 10
 # evolution_dir = "./.caitlyn-evolution"
 
+[guard]
+# Scanner/input errors: allow preserves availability, block fails closed.
+on_error = "allow"
+# Structured guard decisions are JSONL and exclude raw tool content.
+audit_enabled = true
+# audit_dir = "~/.caitlyn/audit"
+
 [memory]
 fts5_enabled = true
 semantic_enabled = false

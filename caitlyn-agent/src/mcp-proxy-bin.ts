@@ -23,6 +23,7 @@ import { createMcpProxyServer } from "./guard/mcp-proxy.js";
 import { loadGuardRuntimeConfig, loadScanningConfig } from "./config.js";
 import { createCredentialedLlmCall } from "./llm-runtime.js";
 import { parseMcpProxyArgv } from "./mcp-proxy-args.js";
+import { createGuardAuditLogger } from "./guard/audit.js";
 
 /** Build the shared enforcement engine from the operator configuration. */
 export function createMcpProxyEngine(): AgentHooksEngine {
@@ -45,6 +46,7 @@ export function createMcpProxyEngine(): AgentHooksEngine {
         suspicious: runtime.suspiciousAction,
         malicious: runtime.maliciousAction,
       },
+      onEvent: createGuardAuditLogger(runtime.auditEnabled, runtime.auditDir),
     } as AgentHooksConfig,
     createCredentialedLlmCall(scanning.skipTier1, "mcp-proxy"),
   );
