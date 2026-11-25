@@ -39,19 +39,20 @@
     "postpack": "npm run clean:package",
     "prepublishOnly": "npm test && npm run audit:library",
     "test": "vitest run",
+    "test:canary": "node scripts/hook-canary.mjs",
     "test:package": "node scripts/test-package-install.mjs"
   },
   "dependencies": {
-    "@earendil-works/pi-agent-core": "^0.80.6",
-    "@earendil-works/pi-ai": "^0.80.6",
+    "@earendil-works/pi-agent-core": "^0.80.10",
+    "@earendil-works/pi-ai": "^0.80.10",
     "@earendil-works/pi-tui": "^0.80.10",
-    "@modelcontextprotocol/sdk": "^1.24.3"
+    "@modelcontextprotocol/sdk": "^1.32.2"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",
     "tsx": "^4.22.0",
     "typescript": "^5.9.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.12"
   },
   "engines": {
     "node": ">=22.19.0"

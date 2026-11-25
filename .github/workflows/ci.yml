@@ -23,6 +23,8 @@ jobs:
         run: npm run build
       - name: Run unit tests
         run: npm test
+      - name: Run hook protocol canary
+        run: npm run test:canary
       - name: Verify npm package installation
         run: npm run test:package
 

@@ -11,21 +11,33 @@
 import {
   registerBuiltInApiProviders,
   getProviders,
-  getModels,
+  getModels as getCatalogModels,
+  type BuiltinProvider,
 } from "@earendil-works/pi-ai/compat";
-import type { KnownProvider, Model } from "@earendil-works/pi-ai";
+import type { Model } from "@earendil-works/pi-ai";
 import type { CaitlynAgentConfig } from "./config.js";
 
 // Register all built-in providers once at module load so streamSimple
 // can resolve auth for any provider.
 registerBuiltInApiProviders();
 
-export { getProviders, getModels };
+export { getProviders };
+
+/** Return catalog models usable through ordinary request/response chat APIs. */
+export function getModels(provider: BuiltinProvider): Model<any>[] {
+  // KEYPOINT-REVIEW: pi-ai's static catalog includes OpenAI realtime-only
+  // models with api=openai-responses. Those ids cannot complete the normal
+  // Responses chat flow used by CAITLYN, so keep them out of selection and
+  // validation instead of offering a model that always fails at runtime.
+  return getCatalogModels(provider).filter((model) =>
+    !/(?:^|[-/])realtime(?:[-.]|$)/i.test(model.id)
+  );
+}
 
 export function resolveModel(config: CaitlynAgentConfig): Model<any> {
-  // Validate the user's provider string against the known provider list.
-  // `getProviders()` returns KnownProvider[]; matching against it proves
-  // that config.provider is a valid KnownProvider for getModels(…).
+  // Validate the user's provider string against the static catalog list.
+  // `getProviders()` returns BuiltinProvider[]; matching against it proves
+  // that config.provider is a valid BuiltinProvider for getModels(…).
   for (const p of getProviders()) {
     if (p === config.provider) {
       // KEYPOINT-REVIEW: Table 3 external backbones run through the
@@ -44,6 +56,12 @@ export function resolveModel(config: CaitlynAgentConfig): Model<any> {
       // OpenRouter accepts any slug, so clone a catalog template.
       if (p === "openrouter") {
         return makeOpenRouterPassthroughModel(config.model);
+      }
+      // KEYPOINT-REVIEW: xAI model ids can leave the bundled catalog before
+      // existing endpoint aliases disappear. Preserve saved configurations
+      // instead of disabling chat during startup.
+      if (p === "xai" && config.model in XAI_LEGACY_PASSTHROUGH_TEMPLATES) {
+        return makeXaiPassthroughModel(config.model);
       }
       break;
     }
@@ -68,6 +86,28 @@ function makeOpenRouterPassthroughModel(modelId: string): Model<any> {
   return { ...template, id: modelId, name: modelId };
 }
 
+// xAI ids present in the previous bundled catalog but removed by the current
+// catalog even though xAI still resolves them. Each maps to the current model
+// that serves the alias. Do not pass through arbitrary xAI ids: models such
+// as Grok multi-agent have account- and endpoint-specific capabilities that
+// CAITLYN cannot infer from a catalog template.
+const XAI_LEGACY_PASSTHROUGH_TEMPLATES: Record<string, string> = {
+  "grok-4.20-0309-non-reasoning": "grok-4.3",
+  "grok-4.20-0309-reasoning": "grok-4.3",
+  "grok-3": "grok-4.3",
+  "grok-code-fast-1": "grok-build-0.1",
+};
+
+/** Clone the serving xAI catalog shape for a removed legacy model id. */
+function makeXaiPassthroughModel(modelId: string): Model<any> {
+  const templateId = XAI_LEGACY_PASSTHROUGH_TEMPLATES[modelId];
+  const template = getModels("xai").find((model) => model.id === templateId);
+  if (!template) {
+    throw new Error(`xAI catalog is missing template "${templateId}"`);
+  }
+  return { ...template, id: modelId, name: modelId };
+}
+
 // AICodeMirror relay endpoints used by Table 3 (LLM API comparison).
 // The Anthropic endpoint is the Claude Code channel base (the SDK appends
 // /v1/messages), the OpenAI endpoint is the Codex Responses API v1 root,
@@ -88,7 +128,7 @@ const AICODEMIRROR_RELAY_MODELS = new Set([
 ]);
 
 function makeRelayPassthroughModel(
-  provider: KnownProvider,
+  provider: BuiltinProvider,
   modelId: string,
 ): Model<any> {
   // Clone a catalog template so context limits, reasoning flags, and

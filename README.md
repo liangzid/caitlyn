@@ -524,7 +524,7 @@ uv sync --extra dev
 uv run pytest -q
 ```
 
-The current local suites contain 434 TypeScript tests across 37 files and 41
+The current local suites contain 533 TypeScript tests across 59 files and 41
 Python tests. Continuous integration runs the build and both suites on pushes
 and pull requests.
 
