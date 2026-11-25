@@ -54,6 +54,9 @@ function replaceWithSanitizedText(result: CallToolResult, text: string): CallToo
   const replaced = {
     ...result,
     content: [{ type: "text" as const, text }],
+    // MCP clients skip output-schema validation for errors. This fallback is
+    // only for cross-boundary privacy matches that cannot be shape-restored.
+    isError: true,
   };
   delete replaced.structuredContent;
   return replaced;
