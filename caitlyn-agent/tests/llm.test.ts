@@ -17,6 +17,18 @@ describe("resolveModel", () => {
     expect(model.id).toBe("grok-4.20-0309-reasoning");
     expect(model.baseUrl).toBe("https://api.x.ai/v1");
   });
+
+  it("uses the Responses API for xAI multi-agent passthrough models", () => {
+    const model = resolveModel({
+      provider: "xai",
+      model: "grok-4.20-multi-agent",
+      smallModel: "grok-4.20-multi-agent",
+    });
+
+    expect(model.provider).toBe("xai");
+    expect(model.id).toBe("grok-4.20-multi-agent");
+    expect(model.api).toBe("openai-responses");
+  });
 });
 
 describe("getModels", () => {

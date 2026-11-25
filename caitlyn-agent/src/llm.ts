@@ -88,7 +88,13 @@ function makeOpenRouterPassthroughModel(modelId: string): Model<any> {
 
 /** Clone the current xAI catalog shape for a model id omitted from it. */
 function makeXaiPassthroughModel(modelId: string): Model<any> {
-  const template = getModels("xai")[0];
+  const catalog = getModels("xai");
+  // KEYPOINT-REVIEW: xAI multi-agent models are Responses-only; Chat
+  // Completions rejects them. Other omitted dated Grok ids keep the ordinary
+  // catalog template because their previous catalog entries used Completions.
+  const template = modelId.includes("multi-agent")
+    ? catalog.find((model) => model.api === "openai-responses") ?? catalog[0]
+    : catalog[0];
   if (!template) {
     throw new Error("xAI catalog is empty; cannot passthrough model id");
   }
