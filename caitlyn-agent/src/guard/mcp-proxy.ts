@@ -121,26 +121,17 @@ function textOnlyResult(text: string): CallToolResult {
   };
 }
 
-function replaceWithText(result: CallToolResult, text: string): CallToolResult {
-  const replaced = {
-    ...result,
-    content: [{ type: "text" as const, text }],
-    isError: true,
-  };
-  delete replaced.structuredContent;
-  return replaced;
+function replaceWithText(_result: CallToolResult, text: string): CallToolResult {
+  // Blocked output must not carry upstream metadata or extension fields.
+  return textOnlyResult(text);
 }
 
-function replaceWithSanitizedText(result: CallToolResult, text: string): CallToolResult {
-  const replaced = {
-    ...result,
-    content: [{ type: "text" as const, text }],
-    // MCP clients skip output-schema validation for errors. This fallback is
-    // only for cross-boundary privacy matches that cannot be shape-restored.
-    isError: true,
-  };
-  delete replaced.structuredContent;
-  return replaced;
+function replaceWithSanitizedText(_result: CallToolResult, text: string): CallToolResult {
+  // MCP clients skip output-schema validation for errors. This fallback is
+  // only for cross-boundary privacy matches that cannot be shape-restored.
+  // It also drops upstream metadata because redacting only model-visible text
+  // would otherwise leave the same sensitive values in extension fields.
+  return textOnlyResult(text);
 }
 
 function protectText(text: string, level: PrivacyLevel): string {

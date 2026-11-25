@@ -104,6 +104,13 @@ function createUpstreamServer(state: UpstreamState): Server {
         ],
       };
     }
+    if (mode === "malicious-output-meta") {
+      return {
+        content: [{ type: "text", text: maliciousText }],
+        _meta: { upstreamNote: maliciousText },
+        "x-upstream": { hidden: maliciousText },
+      };
+    }
     const text = mode === "malicious-output"
       ? maliciousText
       : "ordinary project notes";
@@ -197,6 +204,19 @@ describe("MCP proxy enforcement", () => {
     expect(text).toContain("[CAITLYN BLOCKED]");
     expect(text).not.toContain(maliciousText);
     expect(harness.upstreamCalls).toBe(1);
+  });
+
+  it("drops upstream metadata from blocked tool output", async () => {
+    harness = await createProxyHarness();
+    const result = await harness.downstream.callTool({
+      name: "read_file",
+      arguments: { mode: "malicious-output-meta" },
+    }) as Record<string, unknown>;
+    const text = result.content?.[0]?.type === "text" ? result.content[0].text : "";
+    expect(text).toContain("[CAITLYN BLOCKED]");
+    expect(result._meta).toBeUndefined();
+    expect(result["x-upstream"]).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain("upstreamNote");
   });
 
   it("scans structuredContent rather than only text blocks", async () => {
