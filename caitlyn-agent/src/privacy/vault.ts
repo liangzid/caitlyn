@@ -25,7 +25,6 @@ interface VaultFile {
  */
 export class PrivacyVault {
   private readonly memory = new Map<string, string>();
-  private loaded = false;
 
   /**
    * Create a vault. `rootDir` set means the key and map are persisted there.
@@ -85,7 +84,7 @@ export class PrivacyVault {
     const cached = this.memory.get(surrogate);
     if (cached !== undefined) return cached;
     if (!this.rootDir) return undefined;
-    this.ensureLoaded();
+    this.refreshFromDisk();
     return this.memory.get(surrogate);
   }
 
@@ -93,16 +92,16 @@ export class PrivacyVault {
    * List known surrogates, longest first, so a short token cannot eat a longer one.
    */
   surrogates(): string[] {
-    this.ensureLoaded();
+    this.refreshFromDisk();
     return [...this.memory.keys()].sort((a, b) => b.length - a.length);
   }
 
   /**
-   * Load sealed entries into memory once.
+   * Refresh sealed entries from disk. The map is shared by separate hook and
+   * proxy processes, so one process cannot treat its first load as immutable.
    */
-  private ensureLoaded(): void {
-    if (this.loaded || !this.rootDir) return;
-    this.loaded = true;
+  private refreshFromDisk(): void {
+    if (!this.rootDir) return;
     const file = this.readFile();
     for (const [surrogate, sealed] of Object.entries(file.entries)) {
       if (this.memory.has(surrogate)) continue;
