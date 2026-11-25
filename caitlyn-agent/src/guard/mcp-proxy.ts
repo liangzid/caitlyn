@@ -14,6 +14,7 @@ import {
   ListToolsRequestSchema,
   type CallToolRequest,
   type CallToolResult,
+  type Progress,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { AgentHooksEngine } from "./agent-hooks.js";
 import type { PrivacyLevel } from "../config.js";
@@ -320,6 +321,7 @@ export async function scanMcpToolCall(
   engine: AgentHooksEngine,
   params: CallToolRequest["params"],
   signal?: AbortSignal,
+  onProgress?: (progress: Progress) => void,
 ): Promise<CallToolResult> {
   const serializedArguments = JSON.stringify(params.arguments ?? {});
   const before = await engine.processHook({
@@ -343,7 +345,11 @@ export async function scanMcpToolCall(
   const upstreamResult = await upstreamClient.callTool(
     forwardParams,
     undefined,
-    { signal },
+    {
+      signal,
+      onprogress: onProgress,
+      resetTimeoutOnProgress: true,
+    },
   ) as CallToolResult;
 
   const privacy = engine.getPrivacySettings();
@@ -385,8 +391,19 @@ export function createMcpProxyServer(
   server.setRequestHandler(ListToolsRequestSchema, async (request) =>
     upstreamClient.listTools(request.params),
   );
-  server.setRequestHandler(CallToolRequestSchema, async (request, extra) =>
-    scanMcpToolCall(upstreamClient, engine, request.params, extra.signal),
-  );
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+    const progressToken = request.params._meta?.progressToken;
+    const onProgress = progressToken === undefined
+      ? undefined
+      : (progress: Progress) => {
+        void extra.sendNotification({
+          method: "notifications/progress",
+          params: { ...progress, progressToken },
+        }).catch(() => {
+          // Progress is best-effort; the tool result is the enforcement boundary.
+        });
+      };
+    return scanMcpToolCall(upstreamClient, engine, request.params, extra.signal, onProgress);
+  });
   return server;
 }

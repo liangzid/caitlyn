@@ -54,10 +54,20 @@ function createUpstreamServer(state: UpstreamState): Server {
       },
     ],
   }));
-  server.setRequestHandler(CallToolRequestSchema, (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     state.upstreamCalls++;
     state.lastArguments = request.params.arguments;
     const mode = request.params.arguments?.mode;
+    if (mode === "progress-output") {
+      const progressToken = request.params._meta?.progressToken;
+      if (progressToken !== undefined) {
+        await extra.sendNotification({
+          method: "notifications/progress",
+          params: { progressToken, progress: 1, total: 2, message: "halfway" },
+        });
+      }
+      return { content: [{ type: "text", text: "ordinary project notes" }] };
+    }
     if (mode === "structured-output") {
       return {
         content: [{ type: "text", text: "ordinary project notes" }],
@@ -215,6 +225,24 @@ describe("MCP proxy enforcement", () => {
     expect(text).toContain("[CAITLYN BLOCKED]");
     expect(text).not.toContain(maliciousText);
     expect(harness.upstreamCalls).toBe(1);
+  });
+
+  it("relays upstream progress notifications to the downstream client", async () => {
+    harness = await createProxyHarness();
+    const progress: Array<{ progress: number; total?: number; message?: string }> = [];
+    const result = await harness.downstream.callTool(
+      {
+        name: "read_file",
+        arguments: { mode: "progress-output" },
+      },
+      undefined,
+      {
+        onprogress: (update) => progress.push(update),
+        resetTimeoutOnProgress: true,
+      },
+    );
+    expect(progress).toEqual([{ progress: 1, total: 2, message: "halfway" }]);
+    expect(result.content).toEqual([{ type: "text", text: "ordinary project notes" }]);
   });
 
   it("scans resource link descriptions before the agent receives them", async () => {
