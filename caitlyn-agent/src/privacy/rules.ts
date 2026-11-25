@@ -134,7 +134,7 @@ export function builtinPrivacyRules(): PrivacyRule[] {
     },
     {
       name: "password",
-      pattern: /(?:password|passwd|pwd)\s*[=:]\s*([^\s]{4,})/gid,
+      pattern: /(?:password|passwd|pwd)["']?\s*[=:]\s*["']?([^\s"'}]{4,})/gid,
       priority: 1,
       klass: "secret",
       valueGroup: 1,
