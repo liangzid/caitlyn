@@ -241,7 +241,8 @@ describe("MCP proxy enforcement", () => {
         resetTimeoutOnProgress: true,
       },
     );
-    expect(progress).toEqual([{ progress: 1, total: 2, message: "halfway" }]);
+    expect(progress).toEqual([{ progress: 1, total: 2 }]);
+    expect(progress[0].message).toBeUndefined();
     expect(result.content).toEqual([{ type: "text", text: "ordinary project notes" }]);
   });
 

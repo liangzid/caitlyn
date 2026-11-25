@@ -396,9 +396,16 @@ export function createMcpProxyServer(
     const onProgress = progressToken === undefined
       ? undefined
       : (progress: Progress) => {
+        // Progress messages are arbitrary upstream text delivered before the
+        // final output scan. Relay only numeric progress so the proxy never
+        // exposes unscanned instructions or secrets it cannot retract later.
         void extra.sendNotification({
           method: "notifications/progress",
-          params: { ...progress, progressToken },
+          params: {
+            progress: progress.progress,
+            total: progress.total,
+            progressToken,
+          },
         }).catch(() => {
           // Progress is best-effort; the tool result is the enforcement boundary.
         });
