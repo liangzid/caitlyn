@@ -60,7 +60,7 @@ export function resolveModel(config: CaitlynAgentConfig): Model<any> {
       // KEYPOINT-REVIEW: xAI model ids can leave the bundled catalog before
       // existing endpoint aliases disappear. Preserve saved configurations
       // instead of disabling chat during startup.
-      if (p === "xai") {
+      if (p === "xai" && XAI_LEGACY_PASSTHROUGH_MODELS.has(config.model)) {
         return makeXaiPassthroughModel(config.model);
       }
       break;
@@ -86,15 +86,18 @@ function makeOpenRouterPassthroughModel(modelId: string): Model<any> {
   return { ...template, id: modelId, name: modelId };
 }
 
-/** Clone the current xAI catalog shape for a model id omitted from it. */
+// xAI ids present in the previous bundled catalog but removed by the current
+// catalog. Do not pass through arbitrary xAI ids: models such as Grok
+// multi-agent have account- and endpoint-specific capabilities that CAITLYN
+// cannot infer from a catalog template.
+const XAI_LEGACY_PASSTHROUGH_MODELS = new Set([
+  "grok-4.20-0309-non-reasoning",
+  "grok-4.20-0309-reasoning",
+]);
+
+/** Clone the current xAI catalog shape for a removed legacy model id. */
 function makeXaiPassthroughModel(modelId: string): Model<any> {
-  const catalog = getModels("xai");
-  // KEYPOINT-REVIEW: xAI multi-agent models are Responses-only; Chat
-  // Completions rejects them. Other omitted dated Grok ids keep the ordinary
-  // catalog template because their previous catalog entries used Completions.
-  const template = modelId.includes("multi-agent")
-    ? catalog.find((model) => model.api === "openai-responses") ?? catalog[0]
-    : catalog[0];
+  const template = getModels("xai")[0];
   if (!template) {
     throw new Error("xAI catalog is empty; cannot passthrough model id");
   }
