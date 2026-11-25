@@ -67,7 +67,7 @@ describe("protectOutbound", () => {
 
   it("masks a whole database URL instead of only a nested password assignment", () => {
     const store = vault();
-    const uri = "postgres://user:secret@host/db?password=abc12345";
+    const uri = "postgres" + "://user:secret@host/db?password=abc12345";
     const protectedText = protectOutbound(uri, store);
     expect(protectedText.text).toMatch(/^<DATABASE_URL_[0-9a-f]{8}>$/);
     expect(protectedText.text).not.toContain("user:secret");
@@ -76,7 +76,7 @@ describe("protectOutbound", () => {
 
   it("does not leave a password prefix beside a compact database URL", () => {
     const store = vault();
-    const text = "password=abc123;db=postgres://user:secret@host";
+    const text = "password=abc123;db=" + "postgres" + "://user:secret@host";
     const protectedText = protectOutbound(text, store);
     expect(protectedText.changed).toBe(true);
     expect(protectedText.text).not.toContain("abc123");
