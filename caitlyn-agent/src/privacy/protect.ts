@@ -160,7 +160,9 @@ function rulesForLevel(level: PrivacyLevel): PrivacyRule[] {
 }
 
 /**
- * Find non-overlapping sensitive spans in priority order.
+ * Find sensitive spans in priority order. `applySpans` resolves overlaps
+ * afterward so a broader overlapping secret cannot suppress a narrower one
+ * and leak the uncovered prefix.
  */
 function collectSpans(text: string, vault: PrivacyVault, level: PrivacyLevel): Span[] {
   const rules = rulesForLevel(level);
@@ -177,7 +179,6 @@ function collectSpans(text: string, vault: PrivacyVault, level: PrivacyLevel): S
       // impossible for structured adapters.
       if (vault.lookup(raw) !== undefined) continue;
       const candidate = { start: bounds.start, end: bounds.end };
-      if (spans.some((span) => span.start < candidate.end && candidate.start < span.end)) continue;
       const replacement = renderSpan(rule, raw, vault);
       if (replacement === raw) continue;
       spans.push({ ...candidate, replacement });

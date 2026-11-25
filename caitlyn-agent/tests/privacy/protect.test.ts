@@ -74,6 +74,16 @@ describe("protectOutbound", () => {
     expect(protectedText.text).not.toContain("abc12345");
   });
 
+  it("does not leave a password prefix beside a compact database URL", () => {
+    const store = vault();
+    const text = "password=abc123;db=postgres://user:secret@host";
+    const protectedText = protectOutbound(text, store);
+    expect(protectedText.changed).toBe(true);
+    expect(protectedText.text).not.toContain("abc123");
+    expect(protectedText.text).not.toContain("user:secret");
+    expect(protectedText.text).not.toContain("postgres://");
+  });
+
   it("leaves ordinary prose unchanged", () => {
     const store = vault();
     const text = "The temperature is 72 degrees.";
