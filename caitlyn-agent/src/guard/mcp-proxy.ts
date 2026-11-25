@@ -54,18 +54,23 @@ function appendStructuredScanParts(
 
 function resultScanParts(result: CallToolResult): ScanPart[] {
   const parts: ScanPart[] = (result.content ?? [])
-    .map((block) => {
+    .flatMap((block): ScanPart[] => {
       if (block.type === "text") {
-        return { text: block.text, atomicStart: 0, atomicEnd: block.text.length };
+        return [{ text: block.text, atomicStart: 0, atomicEnd: block.text.length }];
       }
       if (block.type === "resource" && "text" in block.resource) {
-        return {
+        return [{
           text: block.resource.text,
           atomicStart: 0,
           atomicEnd: block.resource.text.length,
-        };
+        }];
       }
-      return { text: `[${block.type} content]` };
+      if (block.type === "resource_link") {
+        return [block.name, block.title, block.description, block.uri]
+          .filter((value): value is string => typeof value === "string")
+          .map((value) => ({ text: value, atomicStart: 0, atomicEnd: value.length }));
+      }
+      return [{ text: `[${block.type} content]` }];
     });
   if (result.structuredContent !== undefined) {
     appendStructuredScanParts(result.structuredContent, "", parts);
@@ -206,6 +211,24 @@ function sanitizeCallToolResult(
       return sanitized.changed
         ? { ...block, resource: { ...block.resource, text: sanitized.value as string } } as typeof block
         : block;
+    }
+    if (block.type === "resource_link") {
+      let changed = false;
+      const sanitizeField = (value: string | undefined): string | undefined => {
+        if (value === undefined) return value;
+        const sanitized = sanitizeValue(value, level);
+        changed ||= sanitized.changed;
+        shapeSafe &&= sanitized.shapeSafe;
+        return sanitized.value as string;
+      };
+      const rewritten = {
+        ...block,
+        name: sanitizeField(block.name) ?? block.name,
+        title: sanitizeField(block.title),
+        description: sanitizeField(block.description),
+        uri: sanitizeField(block.uri) ?? block.uri,
+      };
+      return changed ? rewritten as typeof block : block;
     }
     return block;
   });

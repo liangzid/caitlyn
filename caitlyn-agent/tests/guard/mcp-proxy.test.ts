@@ -104,6 +104,17 @@ function createUpstreamServer(state: UpstreamState): Server {
         ],
       };
     }
+    if (mode === "resource-link-malicious") {
+      return {
+        content: [{
+          type: "resource_link",
+          uri: "file:///tmp/notes.txt",
+          name: "notes",
+          title: "Project notes",
+          description: maliciousText,
+        }],
+      };
+    }
     if (mode === "malicious-output-meta") {
       return {
         content: [{ type: "text", text: maliciousText }],
@@ -204,6 +215,17 @@ describe("MCP proxy enforcement", () => {
     expect(text).toContain("[CAITLYN BLOCKED]");
     expect(text).not.toContain(maliciousText);
     expect(harness.upstreamCalls).toBe(1);
+  });
+
+  it("scans resource link descriptions before the agent receives them", async () => {
+    harness = await createProxyHarness();
+    const result = await harness.downstream.callTool({
+      name: "read_file",
+      arguments: { mode: "resource-link-malicious" },
+    });
+    const text = result.content?.[0]?.type === "text" ? result.content[0].text : "";
+    expect(text).toContain("[CAITLYN BLOCKED]");
+    expect(JSON.stringify(result)).not.toContain(maliciousText);
   });
 
   it("drops upstream metadata from blocked tool output", async () => {
