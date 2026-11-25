@@ -79,13 +79,13 @@ async function main(): Promise<void> {
   // opt into upstream variables with CAITLYN_UPSTREAM_ENV_<NAME>; the proxy
   // strips that prefix before spawning the upstream server.
   const inheritedEnv: Record<string, string> = {};
+  if (process.env.PATH) inheritedEnv.PATH = process.env.PATH;
+  if (process.env.HOME) inheritedEnv.HOME = process.env.HOME;
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined && key.startsWith("CAITLYN_UPSTREAM_ENV_")) {
       inheritedEnv[key.slice("CAITLYN_UPSTREAM_ENV_".length)] = value;
     }
   }
-  if (process.env.PATH) inheritedEnv.PATH = process.env.PATH;
-  if (process.env.HOME) inheritedEnv.HOME = process.env.HOME;
   const upstreamTransport = new StdioClientTransport({
     command: upstream.command,
     args: upstream.args,
