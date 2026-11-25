@@ -48,6 +48,31 @@ function replaceWithText(result: CallToolResult, text: string): CallToolResult {
   return replaced;
 }
 
+function replaceWithSanitizedText(result: CallToolResult, text: string): CallToolResult {
+  const replaced = {
+    ...result,
+    content: [{ type: "text" as const, text }],
+  };
+  delete replaced.structuredContent;
+  return replaced;
+}
+
+function parseRestoredArguments(
+  restored: string | undefined,
+  original: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!restored) return original;
+  try {
+    const parsed = JSON.parse(restored) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Keep the model-produced arguments when the rewrite is not valid JSON.
+  }
+  return original;
+}
+
 function prependWarning(result: CallToolResult, reason: string): CallToolResult {
   return {
     ...result,
@@ -69,6 +94,7 @@ export async function scanMcpToolCall(
   upstreamClient: Client,
   engine: AgentHooksEngine,
   params: CallToolRequest["params"],
+  signal?: AbortSignal,
 ): Promise<CallToolResult> {
   const serializedArguments = JSON.stringify(params.arguments ?? {});
   const before = await engine.processHook({
@@ -81,23 +107,34 @@ export async function scanMcpToolCall(
     return textOnlyResult(`[CAITLYN BLOCKED] ${before.reason}`);
   }
 
-  const upstreamResult = await upstreamClient.callTool(params) as CallToolResult;
+  const forwardParams = {
+    ...params,
+    arguments: parseRestoredArguments(before.restoredContent, params.arguments),
+  };
+  const upstreamResult = await upstreamClient.callTool(
+    forwardParams,
+    undefined,
+    { signal },
+  ) as CallToolResult;
   const outputText = callToolResultScanText(upstreamResult);
   const after = await engine.processHook({
     hookPoint: "after",
     toolName: params.name,
     content: outputText,
-    toolArgs: params.arguments,
+    toolArgs: forwardParams.arguments,
     toolResult: upstreamResult,
   });
+  const visibleResult = after.sanitizedContent
+    ? replaceWithSanitizedText(upstreamResult, after.sanitizedContent)
+    : upstreamResult;
 
   if (after.action === "block") {
-    return replaceWithText(upstreamResult, `[CAITLYN BLOCKED] ${after.reason}`);
+    return replaceWithText(visibleResult, `[CAITLYN BLOCKED] ${after.reason}`);
   }
   if (after.action === "flag") {
-    return prependWarning(upstreamResult, after.reason);
+    return prependWarning(visibleResult, after.reason);
   }
-  return upstreamResult;
+  return visibleResult;
 }
 
 /**
@@ -116,8 +153,8 @@ export function createMcpProxyServer(
   server.setRequestHandler(ListToolsRequestSchema, async (request) =>
     upstreamClient.listTools(request.params),
   );
-  server.setRequestHandler(CallToolRequestSchema, async (request) =>
-    scanMcpToolCall(upstreamClient, engine, request.params),
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) =>
+    scanMcpToolCall(upstreamClient, engine, request.params, extra.signal),
   );
   return server;
 }
