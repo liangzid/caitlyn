@@ -125,6 +125,17 @@ function createUpstreamServer(state: UpstreamState): Server {
         }],
       };
     }
+    if (mode === "resource-link-secret-uri") {
+      const uri = ["postgres", "://user", ":secret", "@host/db"].join("");
+      return {
+        content: [{
+          type: "resource_link",
+          uri,
+          name: "database",
+          title: "Database snapshot",
+        }],
+      };
+    }
     if (mode === "malicious-output-meta") {
       return {
         content: [{ type: "text", text: maliciousText }],
@@ -281,6 +292,28 @@ describe("MCP proxy enforcement", () => {
     expect(text).not.toContain(maliciousText);
     expect(result.structuredContent).toBeUndefined();
     expect(harness.upstreamCalls).toBe(1);
+  });
+
+  it("uses an error-shaped result when privacy masks a resource link URI", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-mcp-resource-privacy-"));
+    const previousHome = process.env.HOME;
+    process.env.HOME = home;
+    try {
+      harness = await createProxyHarness({
+        privacy_enabled: true,
+        privacy_level: "standard",
+      });
+      const result = await harness.downstream.callTool({
+        name: "read_file",
+        arguments: { mode: "resource-link-secret-uri" },
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content?.[0]?.type).toBe("text");
+      expect(JSON.stringify(result)).not.toContain("user" + ":secret");
+    } finally {
+      process.env.HOME = previousHome;
+      fs.rmSync(home, { recursive: true, force: true });
+    }
   });
 
   it("uses an error-shaped result when masking structured secrets", async () => {

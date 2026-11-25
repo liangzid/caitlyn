@@ -198,8 +198,9 @@ function sanitizeValue(value: unknown, level: PrivacyLevel): SanitizedValue {
 function sanitizeCallToolResult(
   result: CallToolResult,
   level: PrivacyLevel,
-): { result: CallToolResult; structuredChanged: boolean; shapeSafe: boolean } {
+): { result: CallToolResult; structuredChanged: boolean; shapeSafe: boolean; referenceChanged: boolean } {
   let shapeSafe = true;
+  let referenceChanged = false;
   const content = (result.content ?? []).map((block) => {
     if (block.type === "text") {
       const sanitized = sanitizeValue(block.text, level);
@@ -229,6 +230,7 @@ function sanitizeCallToolResult(
         description: sanitizeField(block.description),
         uri: sanitizeField(block.uri) ?? block.uri,
       };
+      referenceChanged ||= rewritten.uri !== block.uri;
       return changed ? rewritten as typeof block : block;
     }
     return block;
@@ -242,7 +244,7 @@ function sanitizeCallToolResult(
     shapeSafe &&= sanitized.shapeSafe;
     structuredContent = sanitized.value as Record<string, unknown>;
   }
-  return { result: { ...result, content, structuredContent }, structuredChanged, shapeSafe };
+  return { result: { ...result, content, structuredContent }, structuredChanged, shapeSafe, referenceChanged };
 }
 
 /** Apply shape-aware output privacy and choose the exact text scanned downstream. */
@@ -264,7 +266,7 @@ function sanitizeResultForBoundary(
   // proxy does not validate redacted values against the upstream outputSchema,
   // and successful structuredContent would otherwise be rejected for format
   // constraints such as provider-key patterns.
-  if (!shaped.shapeSafe || !shapeExpressible || shaped.structuredChanged) {
+  if (!shaped.shapeSafe || !shapeExpressible || shaped.structuredChanged || shaped.referenceChanged) {
     const scanText = protectText(originalScanText, level);
     return {
       visibleResult: replaceWithSanitizedText(result, scanText),
