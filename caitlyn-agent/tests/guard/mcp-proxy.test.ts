@@ -211,7 +211,7 @@ describe("MCP proxy enforcement", () => {
     expect(harness.upstreamCalls).toBe(1);
   });
 
-  it("preserves structuredContent shape while masking secrets", async () => {
+  it("uses an error-shaped result when masking structured secrets", async () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-mcp-privacy-"));
     const previousHome = process.env.HOME;
     process.env.HOME = home;
@@ -224,13 +224,8 @@ describe("MCP proxy enforcement", () => {
         name: "read_file",
         arguments: { mode: "structured-secret" },
       });
-      expect(result.structuredContent).toBeDefined();
-      const credential = result.structuredContent?.credential;
-      expect(credential).toMatch(/^password=<PASSWORD_[0-9a-f]{8}>$/);
-      expect(credential).not.toContain("fixture-secret-value");
-      expect(result.content?.some((block) =>
-        block.type === "text" && block.text === "ordinary project notes"
-      )).toBe(true);
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toBeUndefined();
       expect(JSON.stringify(result)).not.toContain("fixture-secret-value");
     } finally {
       process.env.HOME = previousHome;
@@ -308,7 +303,7 @@ describe("MCP proxy enforcement", () => {
     }
   });
 
-  it("preserves structured output when a provider token covers a generic key match", async () => {
+  it("uses an error-shaped result when masking a structured provider token", async () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), "caitlyn-mcp-provider-key-"));
     const previousHome = process.env.HOME;
     process.env.HOME = home;
@@ -321,9 +316,8 @@ describe("MCP proxy enforcement", () => {
         name: "read_file",
         arguments: { mode: "structured-provider-key" },
       });
-      expect(result.isError).not.toBe(true);
-      expect(result.structuredContent).toBeDefined();
-      expect(result.structuredContent?.api_key).toMatch(/^<ANTHROPIC_KEY_[0-9a-f]{8}>$/);
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toBeUndefined();
       expect(JSON.stringify(result)).not.toContain("sk-ant-abcdefghijklmnopqrstuvwxyz");
     } finally {
       process.env.HOME = previousHome;

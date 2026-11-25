@@ -201,19 +201,16 @@ function sanitizeValue(value: unknown, level: PrivacyLevel): SanitizedValue {
 function sanitizeCallToolResult(
   result: CallToolResult,
   level: PrivacyLevel,
-): { result: CallToolResult; changed: boolean; shapeSafe: boolean } {
-  let changed = false;
+): { result: CallToolResult; structuredChanged: boolean; shapeSafe: boolean } {
   let shapeSafe = true;
   const content = (result.content ?? []).map((block) => {
     if (block.type === "text") {
       const sanitized = sanitizeValue(block.text, level);
-      changed ||= sanitized.changed;
       shapeSafe &&= sanitized.shapeSafe;
       return sanitized.changed ? { ...block, text: sanitized.value as string } : block;
     }
     if (block.type === "resource" && "text" in block.resource && typeof block.resource.text === "string") {
       const sanitized = sanitizeValue(block.resource.text, level);
-      changed ||= sanitized.changed;
       shapeSafe &&= sanitized.shapeSafe;
       return sanitized.changed
         ? { ...block, resource: { ...block.resource, text: sanitized.value as string } } as typeof block
@@ -223,13 +220,14 @@ function sanitizeCallToolResult(
   });
 
   let structuredContent = result.structuredContent;
+  let structuredChanged = false;
   if (structuredContent !== undefined) {
     const sanitized = sanitizeValue(structuredContent, level);
-    changed ||= sanitized.changed;
+    structuredChanged = sanitized.changed;
     shapeSafe &&= sanitized.shapeSafe;
     structuredContent = sanitized.value as Record<string, unknown>;
   }
-  return { result: { ...result, content, structuredContent }, changed, shapeSafe };
+  return { result: { ...result, content, structuredContent }, structuredChanged, shapeSafe };
 }
 
 /** Apply shape-aware output privacy and choose the exact text scanned downstream. */
@@ -246,9 +244,12 @@ function sanitizeResultForBoundary(
   // KEYPOINT-REVIEW: privacy is detected on the original boundary-aware
   // concatenation, not on masked output. Only a match contained entirely in
   // one independently rewritten value can preserve the MCP shape. Matches that
-  // cross content parts, structured scalar values, or object keys require the
-  // flat error-shaped fallback.
-  if (!shaped.shapeSafe || !shapeExpressible) {
+  // cross content parts or structured scalar values require the flat
+  // error-shaped fallback. Any structured rewrite uses that fallback too: the
+  // proxy does not validate redacted values against the upstream outputSchema,
+  // and successful structuredContent would otherwise be rejected for format
+  // constraints such as provider-key patterns.
+  if (!shaped.shapeSafe || !shapeExpressible || shaped.structuredChanged) {
     const scanText = protectText(originalScanText, level);
     return {
       visibleResult: replaceWithSanitizedText(result, scanText),
