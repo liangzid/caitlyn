@@ -1,0 +1,13 @@
+#+title: CAITLYN 0.8.0 Release
+#+date: 2026-11-25
+
+* Scope
+- MCP proxy enforcement MVP: scan tool arguments before upstream execution and scan tool output before model delivery.
+- Configurable fail-closed guard behavior for scanner, input, hook, and filesystem-watcher errors.
+- Privacy-safe structured guard audit events in local JSONL.
+- Dependency lockfile security refresh and hook protocol canary coverage.
+
+* Release boundary
+- Version: 0.8.0 (0.7.0 + 0.1 minor).
+- Git tag: v0.8.0.
+- Structured JSON-aware privacy restoration, richer System II candidate representation, pi 1.6 migration, and Python MCP 2.x migration remain follow-up work.
