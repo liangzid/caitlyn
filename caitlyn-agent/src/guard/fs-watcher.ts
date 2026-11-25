@@ -310,18 +310,38 @@ export class FSWatcher {
       ]);
       scanResult = result;
 
-      const decision = evaluatePolicy({
-        mode: "fs-watcher",
-        source: filePath,
-        content,
-        scanResult: result,
-        config: this.config,
-      });
+      const tier1Failure = result.script_results.find(
+        (script) => script.defense_skill_id === "llm-fallback" && script.error,
+      )?.error;
 
-      action = decision.action;
+      if (tier1Failure && this.config.on_error === "block") {
+        this.stats.scanErrors++;
+        action = "block";
+        if (this.config.onEvent) {
+          this.config.onEvent({
+            mode: "fs-watcher",
+            content_snippet: extractedText.slice(0, 256),
+            scan_result: result,
+            action,
+            source: filePath,
+            timestamp: new Date().toISOString(),
+            metadata: { filePath, fileType, error: tier1Failure },
+          });
+        }
+      } else {
+        const decision = evaluatePolicy({
+          mode: "fs-watcher",
+          source: filePath,
+          content,
+          scanResult: result,
+          config: this.config,
+        });
 
-      if (this.config.onEvent) {
-        this.config.onEvent({ ...decision.event, metadata: { filePath, fileType } });
+        action = decision.action;
+
+        if (this.config.onEvent) {
+          this.config.onEvent({ ...decision.event, metadata: { filePath, fileType } });
+        }
       }
     } catch (err) {
       this.stats.scanErrors++;
