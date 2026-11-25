@@ -12,8 +12,9 @@ import {
   registerBuiltInApiProviders,
   getProviders,
   getModels,
+  type BuiltinProvider,
 } from "@earendil-works/pi-ai/compat";
-import type { KnownProvider, Model } from "@earendil-works/pi-ai";
+import type { Model } from "@earendil-works/pi-ai";
 import type { CaitlynAgentConfig } from "./config.js";
 
 // Register all built-in providers once at module load so streamSimple
@@ -23,9 +24,9 @@ registerBuiltInApiProviders();
 export { getProviders, getModels };
 
 export function resolveModel(config: CaitlynAgentConfig): Model<any> {
-  // Validate the user's provider string against the known provider list.
-  // `getProviders()` returns KnownProvider[]; matching against it proves
-  // that config.provider is a valid KnownProvider for getModels(…).
+  // Validate the user's provider string against the static catalog list.
+  // `getProviders()` returns BuiltinProvider[]; matching against it proves
+  // that config.provider is a valid BuiltinProvider for getModels(…).
   for (const p of getProviders()) {
     if (p === config.provider) {
       // KEYPOINT-REVIEW: Table 3 external backbones run through the
@@ -88,7 +89,7 @@ const AICODEMIRROR_RELAY_MODELS = new Set([
 ]);
 
 function makeRelayPassthroughModel(
-  provider: KnownProvider,
+  provider: BuiltinProvider,
   modelId: string,
 ): Model<any> {
   // Clone a catalog template so context limits, reasoning flags, and
